@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, Users, AlertTriangle, Clock, LogOut, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { useUserRole } from "@/hooks/useUserRole";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { primaryRole, isAdminOrSupervisor, loading: roleLoading } = useUserRole(user?.id);
 
   useEffect(() => {
     // Check authentication
@@ -58,7 +60,7 @@ const Dashboard = () => {
     navigate("/auth");
   };
 
-  if (loading) {
+  if (loading || roleLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -68,8 +70,6 @@ const Dashboard = () => {
       </div>
     );
   }
-
-  const isAdmin = profile?.role === "admin" || profile?.role === "supervisor";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10">
@@ -88,7 +88,7 @@ const Dashboard = () => {
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="font-medium">{profile?.full_name || user?.email}</p>
-              <p className="text-sm text-muted-foreground capitalize">{profile?.role || "Officer"}</p>
+              <p className="text-sm text-muted-foreground capitalize">{primaryRole}</p>
             </div>
             <Button variant="ghost" size="icon" onClick={handleSignOut}>
               <LogOut className="h-5 w-5" />
@@ -128,7 +128,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {isAdmin && (
+          {isAdminOrSupervisor && (
             <>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

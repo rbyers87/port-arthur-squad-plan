@@ -59,7 +59,6 @@ export type Database = {
           phone: string | null
           pto_hours_accrued_yearly: number | null
           pto_hours_balance: number | null
-          role: string
           updated_at: string | null
         }
         Insert: {
@@ -71,7 +70,6 @@ export type Database = {
           phone?: string | null
           pto_hours_accrued_yearly?: number | null
           pto_hours_balance?: number | null
-          role?: string
           updated_at?: string | null
         }
         Update: {
@@ -83,7 +81,6 @@ export type Database = {
           phone?: string | null
           pto_hours_accrued_yearly?: number | null
           pto_hours_balance?: number | null
-          role?: string
           updated_at?: string | null
         }
         Relationships: []
@@ -332,6 +329,27 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       vacancy_alerts: {
         Row: {
           created_at: string | null
@@ -420,10 +438,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_admin_or_supervisor_role: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "supervisor" | "officer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -550,6 +578,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "supervisor", "officer"],
+    },
   },
 } as const
