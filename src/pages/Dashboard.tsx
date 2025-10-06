@@ -4,12 +4,15 @@ import { useNavigate } from "react-router-dom";
 import { User } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Users, AlertTriangle, Clock, LogOut, Shield } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar, Users, AlertTriangle, Clock, LogOut, Shield, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
 import { WeeklySchedule } from "@/components/schedule/WeeklySchedule";
 import { TimeOffRequests } from "@/components/time-off/TimeOffRequests";
 import { VacancyAlerts } from "@/components/vacancy/VacancyAlerts";
+import { VacancyManagement } from "@/components/admin/VacancyManagement";
+import { StaffManagement } from "@/components/admin/StaffManagement";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -158,14 +161,39 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Main Features */}
-        <div className="space-y-6">
-          <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-          
-          <VacancyAlerts userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-          
-          <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-        </div>
+        {/* Main Content */}
+        {isAdminOrSupervisor ? (
+          <Tabs defaultValue="schedule" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="schedule">Schedule</TabsTrigger>
+              <TabsTrigger value="vacancies">Manage Vacancies</TabsTrigger>
+              <TabsTrigger value="staff">Staff Directory</TabsTrigger>
+              <TabsTrigger value="requests">Time Off</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="schedule" className="space-y-6">
+              <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+            </TabsContent>
+
+            <TabsContent value="vacancies" className="space-y-6">
+              <VacancyManagement />
+            </TabsContent>
+
+            <TabsContent value="staff" className="space-y-6">
+              <StaffManagement />
+            </TabsContent>
+
+            <TabsContent value="requests" className="space-y-6">
+              <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <div className="space-y-6">
+            <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+            <VacancyAlerts userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+            <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+          </div>
+        )}
       </main>
     </div>
   );
