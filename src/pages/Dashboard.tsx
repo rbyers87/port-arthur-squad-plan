@@ -7,6 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, Users, AlertTriangle, Clock, LogOut, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
+import { WeeklySchedule } from "@/components/schedule/WeeklySchedule";
+import { TimeOffRequests } from "@/components/time-off/TimeOffRequests";
+import { VacancyAlerts } from "@/components/vacancy/VacancyAlerts";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -155,21 +158,14 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Coming Soon Notice */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Schedule Calendar</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-12">
-              <Calendar className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <p className="text-lg font-medium mb-2">Calendar View Coming Soon</p>
-              <p className="text-muted-foreground">
-                The schedule calendar with daily, weekly, and monthly views is being built.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Main Features */}
+        <div className="space-y-6">
+          <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+          
+          <VacancyAlerts userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+          
+          <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+        </div>
       </main>
     </div>
   );
