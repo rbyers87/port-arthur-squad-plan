@@ -24,8 +24,7 @@ export const PTOManagement = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, badge_number, sick_hours, comp_hours, vacation_hours, holiday_hours, hire_date, service_credit_override")
-        .order("full_name");
+        .select("id, full_name, badge_number, sick_hours, comp_hours, vacation_hours, holiday_hours, hire_date, service_credit_override");
 
       if (error) throw error;
 
@@ -42,7 +41,12 @@ export const PTOManagement = () => {
         })
       );
 
-      return officersWithCredit;
+      // Sort by last name
+      return officersWithCredit.sort((a, b) => {
+        const lastNameA = a.full_name.split(' ').pop()?.toLowerCase() || '';
+        const lastNameB = b.full_name.split(' ').pop()?.toLowerCase() || '';
+        return lastNameA.localeCompare(lastNameB);
+      });
     },
   });
 

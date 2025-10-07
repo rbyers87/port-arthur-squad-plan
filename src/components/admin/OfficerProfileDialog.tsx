@@ -192,11 +192,13 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
               value={serviceCreditOverride}
               onChange={(e) => setServiceCreditOverride(e.target.value)}
               step="0.1"
-              min="0"
             />
             <p className="text-sm text-muted-foreground">
               Current service credit: <strong>{calculatedCredit.toFixed(1)} years</strong>
               {serviceCreditOverride && ` (Override: ${Number(serviceCreditOverride).toFixed(1)} years)`}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Use negative values to deduct time from calculated service credit
             </p>
           </div>
 

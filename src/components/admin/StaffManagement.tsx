@@ -17,8 +17,7 @@ export const StaffManagement = () => {
     queryFn: async () => {
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
-        .select("*")
-        .order("full_name");
+        .select("*");
 
       if (profilesError) throw profilesError;
 
@@ -29,11 +28,16 @@ export const StaffManagement = () => {
 
       if (rolesError) throw rolesError;
 
-      // Combine the data
+      // Combine the data and sort by last name
       const officers = profilesData?.map(profile => ({
         ...profile,
         roles: rolesData?.filter(r => r.user_id === profile.id).map(r => r.role) || []
-      }));
+      })).sort((a, b) => {
+        // Extract last names (assumes last name is the last word)
+        const lastNameA = a.full_name.split(' ').pop()?.toLowerCase() || '';
+        const lastNameB = b.full_name.split(' ').pop()?.toLowerCase() || '';
+        return lastNameA.localeCompare(lastNameB);
+      });
 
       return officers;
     },
