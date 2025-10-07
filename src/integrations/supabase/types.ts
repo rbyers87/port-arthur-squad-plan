@@ -56,12 +56,14 @@ export type Database = {
           created_at: string | null
           email: string
           full_name: string
+          hire_date: string | null
           holiday_hours: number | null
           id: string
           last_sick_accrual_date: string | null
           phone: string | null
           pto_hours_accrued_yearly: number | null
           pto_hours_balance: number | null
+          service_credit_override: number | null
           sick_hours: number | null
           updated_at: string | null
           vacation_hours: number | null
@@ -72,12 +74,14 @@ export type Database = {
           created_at?: string | null
           email: string
           full_name: string
+          hire_date?: string | null
           holiday_hours?: number | null
           id: string
           last_sick_accrual_date?: string | null
           phone?: string | null
           pto_hours_accrued_yearly?: number | null
           pto_hours_balance?: number | null
+          service_credit_override?: number | null
           sick_hours?: number | null
           updated_at?: string | null
           vacation_hours?: number | null
@@ -88,12 +92,14 @@ export type Database = {
           created_at?: string | null
           email?: string
           full_name?: string
+          hire_date?: string | null
           holiday_hours?: number | null
           id?: string
           last_sick_accrual_date?: string | null
           phone?: string | null
           pto_hours_accrued_yearly?: number | null
           pto_hours_balance?: number | null
+          service_credit_override?: number | null
           sick_hours?: number | null
           updated_at?: string | null
           vacation_hours?: number | null
@@ -468,6 +474,10 @@ export type Database = {
       accrue_sick_time: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      get_service_credit: {
+        Args: { profile_id: string }
+        Returns: number
       }
       has_admin_or_supervisor_role: {
         Args: { _user_id: string }

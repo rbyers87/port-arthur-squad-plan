@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Clock, Plus, Minus } from "lucide-react";
+import { Clock, Plus, Minus, Award } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format } from "date-fns";
 
 export const PTOManagement = () => {
   const [selectedOfficer, setSelectedOfficer] = useState<string>("");
@@ -23,11 +24,25 @@ export const PTOManagement = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, badge_number, sick_hours, comp_hours, vacation_hours, holiday_hours")
+        .select("id, full_name, badge_number, sick_hours, comp_hours, vacation_hours, holiday_hours, hire_date, service_credit_override")
         .order("full_name");
 
       if (error) throw error;
-      return data;
+
+      // Calculate service credit for each officer
+      const officersWithCredit = await Promise.all(
+        data.map(async (officer) => {
+          const { data: creditData } = await supabase.rpc("get_service_credit", {
+            profile_id: officer.id,
+          });
+          return {
+            ...officer,
+            service_credit: creditData || 0,
+          };
+        })
+      );
+
+      return officersWithCredit;
     },
   });
 
@@ -117,7 +132,7 @@ export const PTOManagement = () => {
                   <p className="text-sm text-muted-foreground">Badge #{officer.badge_number}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Vacation</p>
                   <p className="text-lg font-semibold">{officer.vacation_hours || 0}h</p>
@@ -133,6 +148,25 @@ export const PTOManagement = () => {
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Holiday</p>
                   <p className="text-lg font-semibold">{officer.holiday_hours || 0}h</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Award className="h-3 w-3" />
+                    Service Credit
+                  </p>
+                  <div className="space-y-0.5">
+                    <p className="text-lg font-semibold">{officer.service_credit?.toFixed(1) || 0} yrs</p>
+                    {officer.hire_date && (
+                      <p className="text-xs text-muted-foreground">
+                        Since {format(new Date(officer.hire_date), "MMM yyyy")}
+                      </p>
+                    )}
+                    {officer.service_credit_override !== null && (
+                      <p className="text-xs text-amber-600 dark:text-amber-500">
+                        (Manually adjusted)
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
