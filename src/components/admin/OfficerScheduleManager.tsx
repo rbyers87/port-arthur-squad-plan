@@ -6,9 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Trash2, Plus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar as CalendarIcon, Trash2, Plus, StopCircle } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface OfficerScheduleManagerProps {
   officer: {
@@ -32,11 +36,10 @@ const daysOfWeek = [
 export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerScheduleManagerProps) => {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newSchedule, setNewSchedule] = useState({
-    day_of_week: "",
-    shift_type_id: "",
-    position_name: "",
-  });
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [startDate, setStartDate] = useState<Date>(new Date());
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [shiftTypeId, setShiftTypeId] = useState("");
 
   // Fetch officer's recurring schedules
   const { data: schedules, isLoading: schedulesLoading } = useQuery({
@@ -91,39 +94,86 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     },
   });
 
-  // Add schedule mutation
+  // Add schedule mutation (bulk insert multiple days)
   const addScheduleMutation = useMutation({
-    mutationFn: async (data: typeof newSchedule) => {
+    mutationFn: async (data: { days: number[]; shiftId: string; start: string; end?: string }) => {
+      const schedules = data.days.map(day => ({
+        officer_id: officer.id,
+        day_of_week: day,
+        shift_type_id: data.shiftId,
+        start_date: data.start,
+        end_date: data.end || null,
+      }));
+
       const { error } = await supabase
         .from("recurring_schedules")
-        .insert({
-          officer_id: officer.id,
-          day_of_week: parseInt(data.day_of_week),
-          shift_type_id: data.shift_type_id,
-          position_name: data.position_name || null,
-          start_date: format(new Date(), "yyyy-MM-dd"),
-        });
+        .insert(schedules);
 
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Schedule added");
+      toast.success("Schedule added successfully");
       queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
       queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
       setShowAddForm(false);
-      setNewSchedule({ day_of_week: "", shift_type_id: "", position_name: "" });
+      setSelectedDays([]);
+      setShiftTypeId("");
+      setStartDate(new Date());
+      setEndDate(undefined);
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to add schedule");
     },
   });
 
+  // End schedule mutation
+  const endScheduleMutation = useMutation({
+    mutationFn: async ({ scheduleId, endDate }: { scheduleId: string; endDate: string }) => {
+      const { error } = await supabase
+        .from("recurring_schedules")
+        .update({ end_date: endDate })
+        .eq("id", scheduleId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Schedule ended");
+      queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to end schedule");
+    },
+  });
+
   const handleAddSchedule = () => {
-    if (!newSchedule.day_of_week || !newSchedule.shift_type_id) {
-      toast.error("Please select day and shift");
+    if (selectedDays.length === 0) {
+      toast.error("Please select at least one day");
       return;
     }
-    addScheduleMutation.mutate(newSchedule);
+    if (!shiftTypeId) {
+      toast.error("Please select a shift");
+      return;
+    }
+    addScheduleMutation.mutate({
+      days: selectedDays,
+      shiftId: shiftTypeId,
+      start: format(startDate, "yyyy-MM-dd"),
+      end: endDate ? format(endDate, "yyyy-MM-dd") : undefined,
+    });
+  };
+
+  const handleEndSchedule = (scheduleId: string) => {
+    const today = format(addDays(new Date(), -1), "yyyy-MM-dd");
+    endScheduleMutation.mutate({ scheduleId, endDate: today });
+  };
+
+  const toggleDay = (day: number) => {
+    setSelectedDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
   };
 
   return (
@@ -140,8 +190,8 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
           {/* Current Schedules */}
           <div className="space-y-2">
             <h3 className="font-medium flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Current Schedule
+              <CalendarIcon className="h-4 w-4" />
+              Regular Schedules
             </h3>
             {schedulesLoading ? (
               <p className="text-sm text-muted-foreground">Loading schedules...</p>
@@ -149,37 +199,67 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
               <p className="text-sm text-muted-foreground italic">No regular schedule set</p>
             ) : (
               <div className="space-y-2">
-                {schedules.map((schedule) => (
-                  <div
-                    key={schedule.id}
-                    className="flex items-center justify-between p-3 border rounded-lg"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">
-                          {daysOfWeek.find((d) => d.value === schedule.day_of_week)?.label}
-                        </Badge>
-                        <span className="font-medium">{schedule.shift_types?.name}</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
-                      </p>
-                      {schedule.position_name && (
-                        <Badge variant="secondary" className="text-xs">
-                          {schedule.position_name}
-                        </Badge>
+                {schedules.map((schedule) => {
+                  const isActive = !schedule.end_date || new Date(schedule.end_date) >= new Date();
+                  return (
+                    <div
+                      key={schedule.id}
+                      className={cn(
+                        "flex items-center justify-between p-3 border rounded-lg",
+                        !isActive && "opacity-60 bg-muted/50"
                       )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => deleteScheduleMutation.mutate(schedule.id)}
-                      disabled={deleteScheduleMutation.isPending}
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant={isActive ? "outline" : "secondary"}>
+                            {daysOfWeek.find((d) => d.value === schedule.day_of_week)?.label}
+                          </Badge>
+                          <span className="font-medium">{schedule.shift_types?.name}</span>
+                          {!isActive && (
+                            <Badge variant="secondary" className="text-xs">
+                              Ended
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(schedule.start_date), "MMM d, yyyy")}
+                          {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
+                          {!schedule.end_date && " - Ongoing"}
+                        </p>
+                        {schedule.position_name && (
+                          <Badge variant="secondary" className="text-xs">
+                            {schedule.position_name}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        {isActive && !schedule.end_date && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEndSchedule(schedule.id)}
+                            disabled={endScheduleMutation.isPending}
+                            title="End this schedule"
+                          >
+                            <StopCircle className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteScheduleMutation.mutate(schedule.id)}
+                          disabled={deleteScheduleMutation.isPending}
+                          title="Delete this schedule"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -192,37 +272,36 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
               onClick={() => setShowAddForm(true)}
             >
               <Plus className="h-4 w-4 mr-2" />
-              Add Schedule Day
+              Add New Work Schedule
             </Button>
           ) : (
             <div className="border rounded-lg p-4 space-y-4">
-              <h3 className="font-medium">Add New Schedule Day</h3>
+              <h3 className="font-medium">Create Work Schedule</h3>
               
               <div className="space-y-2">
-                <Label>Day of Week</Label>
-                <Select
-                  value={newSchedule.day_of_week}
-                  onValueChange={(value) => setNewSchedule({ ...newSchedule, day_of_week: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select day" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {daysOfWeek.map((day) => (
-                      <SelectItem key={day.value} value={day.value.toString()}>
+                <Label>Work Days (Select Multiple)</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {daysOfWeek.map((day) => (
+                    <div key={day.value} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`day-${day.value}`}
+                        checked={selectedDays.includes(day.value)}
+                        onCheckedChange={() => toggleDay(day.value)}
+                      />
+                      <Label
+                        htmlFor={`day-${day.value}`}
+                        className="text-sm font-normal cursor-pointer"
+                      >
                         {day.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Shift</Label>
-                <Select
-                  value={newSchedule.shift_type_id}
-                  onValueChange={(value) => setNewSchedule({ ...newSchedule, shift_type_id: value })}
-                >
+                <Select value={shiftTypeId} onValueChange={setShiftTypeId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select shift" />
                   </SelectTrigger>
@@ -236,12 +315,86 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                 </Select>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Start Date *</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !startDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {startDate ? format(startDate, "PPP") : "Select date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={startDate}
+                        onSelect={(date) => date && setStartDate(date)}
+                        initialFocus
+                        className="pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>End Date (Optional)</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !endDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {endDate ? format(endDate, "PPP") : "Ongoing"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={endDate}
+                        onSelect={setEndDate}
+                        initialFocus
+                        disabled={(date) => date < startDate}
+                        className="pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {endDate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEndDate(undefined)}
+                      className="w-full"
+                    >
+                      Clear End Date
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                * Leave end date empty for ongoing schedules
+              </p>
+
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setShowAddForm(false);
-                    setNewSchedule({ day_of_week: "", shift_type_id: "", position_name: "" });
+                    setSelectedDays([]);
+                    setShiftTypeId("");
+                    setStartDate(new Date());
+                    setEndDate(undefined);
                   }}
                 >
                   Cancel
@@ -250,7 +403,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                   onClick={handleAddSchedule}
                   disabled={addScheduleMutation.isPending}
                 >
-                  {addScheduleMutation.isPending ? "Adding..." : "Add Schedule"}
+                  {addScheduleMutation.isPending ? "Creating..." : "Create Schedule"}
                 </Button>
               </div>
             </div>
