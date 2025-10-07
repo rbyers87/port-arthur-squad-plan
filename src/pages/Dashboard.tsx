@@ -10,6 +10,7 @@ import { Calendar, Users, AlertTriangle, Clock, LogOut, Shield, Settings } from 
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
 import { WeeklySchedule } from "@/components/schedule/WeeklySchedule";
+import { DailyScheduleManagement } from "@/components/schedule/DailyScheduleManagement";
 import { TimeOffRequests } from "@/components/time-off/TimeOffRequests";
 import { VacancyAlerts } from "@/components/vacancy/VacancyAlerts";
 import { VacancyManagement } from "@/components/admin/VacancyManagement";
@@ -186,13 +187,18 @@ const Dashboard = () => {
 
         {/* Main Content */}
         {isAdminOrSupervisor ? (
-          <Tabs defaultValue="schedule" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="schedule">Schedule</TabsTrigger>
-              <TabsTrigger value="vacancies">Manage Vacancies</TabsTrigger>
-              <TabsTrigger value="staff">Staff Directory</TabsTrigger>
+          <Tabs defaultValue="daily" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
+              <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
+              <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
+              <TabsTrigger value="staff">Staff</TabsTrigger>
               <TabsTrigger value="requests">Time Off</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="daily" className="space-y-6">
+              <DailyScheduleManagement />
+            </TabsContent>
 
             <TabsContent value="schedule" className="space-y-6">
               <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
