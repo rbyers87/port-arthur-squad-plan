@@ -52,36 +52,51 @@ export type Database = {
       profiles: {
         Row: {
           badge_number: string | null
+          comp_hours: number | null
           created_at: string | null
           email: string
           full_name: string
+          holiday_hours: number | null
           id: string
+          last_sick_accrual_date: string | null
           phone: string | null
           pto_hours_accrued_yearly: number | null
           pto_hours_balance: number | null
+          sick_hours: number | null
           updated_at: string | null
+          vacation_hours: number | null
         }
         Insert: {
           badge_number?: string | null
+          comp_hours?: number | null
           created_at?: string | null
           email: string
           full_name: string
+          holiday_hours?: number | null
           id: string
+          last_sick_accrual_date?: string | null
           phone?: string | null
           pto_hours_accrued_yearly?: number | null
           pto_hours_balance?: number | null
+          sick_hours?: number | null
           updated_at?: string | null
+          vacation_hours?: number | null
         }
         Update: {
           badge_number?: string | null
+          comp_hours?: number | null
           created_at?: string | null
           email?: string
           full_name?: string
+          holiday_hours?: number | null
           id?: string
+          last_sick_accrual_date?: string | null
           phone?: string | null
           pto_hours_accrued_yearly?: number | null
           pto_hours_balance?: number | null
+          sick_hours?: number | null
           updated_at?: string | null
+          vacation_hours?: number | null
         }
         Relationships: []
       }
@@ -282,8 +297,10 @@ export type Database = {
         Row: {
           created_at: string | null
           end_date: string
+          hours_used: number | null
           id: string
           officer_id: string
+          pto_type: string | null
           reason: string | null
           review_notes: string | null
           reviewed_at: string | null
@@ -295,8 +312,10 @@ export type Database = {
         Insert: {
           created_at?: string | null
           end_date: string
+          hours_used?: number | null
           id?: string
           officer_id: string
+          pto_type?: string | null
           reason?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
@@ -308,8 +327,10 @@ export type Database = {
         Update: {
           created_at?: string | null
           end_date?: string
+          hours_used?: number | null
           id?: string
           officer_id?: string
+          pto_type?: string | null
           reason?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
@@ -444,6 +465,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accrue_sick_time: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       has_admin_or_supervisor_role: {
         Args: { _user_id: string }
         Returns: boolean

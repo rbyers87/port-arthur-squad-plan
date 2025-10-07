@@ -15,6 +15,7 @@ import { TimeOffRequests } from "@/components/time-off/TimeOffRequests";
 import { VacancyAlerts } from "@/components/vacancy/VacancyAlerts";
 import { VacancyManagement } from "@/components/admin/VacancyManagement";
 import { StaffManagement } from "@/components/admin/StaffManagement";
+import { PTOManagement } from "@/components/admin/PTOManagement";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -153,8 +154,24 @@ const Dashboard = () => {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{profile?.pto_hours_balance || 0}h</div>
-              <p className="text-xs text-muted-foreground">Hours available</p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Vacation:</span>
+                  <span className="font-semibold">{profile?.vacation_hours || 0}h</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Sick:</span>
+                  <span className="font-semibold">{profile?.sick_hours || 0}h</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Comp:</span>
+                  <span className="font-semibold">{profile?.comp_hours || 0}h</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Holiday:</span>
+                  <span className="font-semibold">{profile?.holiday_hours || 0}h</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -188,12 +205,13 @@ const Dashboard = () => {
         {/* Main Content */}
         {isAdminOrSupervisor ? (
           <Tabs defaultValue="daily" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
               <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
               <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
               <TabsTrigger value="staff">Staff</TabsTrigger>
               <TabsTrigger value="requests">Time Off</TabsTrigger>
+              <TabsTrigger value="pto">PTO</TabsTrigger>
             </TabsList>
 
             <TabsContent value="daily" className="space-y-6">
@@ -214,6 +232,10 @@ const Dashboard = () => {
 
             <TabsContent value="requests" className="space-y-6">
               <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+            </TabsContent>
+
+            <TabsContent value="pto" className="space-y-6">
+              <PTOManagement />
             </TabsContent>
           </Tabs>
         ) : (

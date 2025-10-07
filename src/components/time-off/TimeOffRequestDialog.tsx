@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ export const TimeOffRequestDialog = ({ open, onOpenChange, userId }: TimeOffRequ
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [reason, setReason] = useState("");
+  const [ptoType, setPtoType] = useState<string>("vacation");
   const queryClient = useQueryClient();
 
   const createRequestMutation = useMutation({
@@ -36,6 +38,7 @@ export const TimeOffRequestDialog = ({ open, onOpenChange, userId }: TimeOffRequ
         end_date: format(endDate, "yyyy-MM-dd"),
         reason: reason || null,
         status: "pending",
+        pto_type: ptoType,
       });
 
       if (error) throw error;
@@ -47,6 +50,7 @@ export const TimeOffRequestDialog = ({ open, onOpenChange, userId }: TimeOffRequ
       setStartDate(undefined);
       setEndDate(undefined);
       setReason("");
+      setPtoType("vacation");
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -64,6 +68,21 @@ export const TimeOffRequestDialog = ({ open, onOpenChange, userId }: TimeOffRequ
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>PTO Type</Label>
+            <Select value={ptoType} onValueChange={setPtoType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select PTO type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="vacation">Vacation</SelectItem>
+                <SelectItem value="sick">Sick</SelectItem>
+                <SelectItem value="comp">Comp Time</SelectItem>
+                <SelectItem value="holiday">Holiday</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-2">
             <Label>Start Date</Label>
             <Popover>

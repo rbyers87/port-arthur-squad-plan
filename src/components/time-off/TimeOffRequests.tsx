@@ -114,6 +114,10 @@ export const TimeOffRequests = ({ userId, isAdminOrSupervisor }: TimeOffRequests
                       {format(new Date(request.start_date), "MMM d, yyyy")} -{" "}
                       {format(new Date(request.end_date), "MMM d, yyyy")}
                     </p>
+                     <p className="text-xs text-muted-foreground">
+                      <span className="font-medium capitalize">{request.pto_type || 'vacation'}</span>
+                      {request.hours_used > 0 && ` • ${request.hours_used} hours`}
+                    </p>
                     {request.reason && (
                       <p className="text-sm mt-2">{request.reason}</p>
                     )}
