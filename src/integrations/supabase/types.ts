@@ -93,6 +93,7 @@ export type Database = {
           id: string
           officer_id: string
           position_id: string | null
+          position_name: string | null
           shift_type_id: string
           start_date: string
           updated_at: string | null
@@ -104,6 +105,7 @@ export type Database = {
           id?: string
           officer_id: string
           position_id?: string | null
+          position_name?: string | null
           shift_type_id: string
           start_date: string
           updated_at?: string | null
@@ -115,6 +117,7 @@ export type Database = {
           id?: string
           officer_id?: string
           position_id?: string | null
+          position_name?: string | null
           shift_type_id?: string
           start_date?: string
           updated_at?: string | null
@@ -153,6 +156,7 @@ export type Database = {
           is_off: boolean | null
           officer_id: string
           position_id: string | null
+          position_name: string | null
           reason: string | null
           shift_type_id: string | null
           updated_at: string | null
@@ -166,6 +170,7 @@ export type Database = {
           is_off?: boolean | null
           officer_id: string
           position_id?: string | null
+          position_name?: string | null
           reason?: string | null
           shift_type_id?: string | null
           updated_at?: string | null
@@ -179,6 +184,7 @@ export type Database = {
           is_off?: boolean | null
           officer_id?: string
           position_id?: string | null
+          position_name?: string | null
           reason?: string | null
           shift_type_id?: string | null
           updated_at?: string | null

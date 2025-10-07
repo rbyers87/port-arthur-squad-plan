@@ -99,7 +99,7 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
             officerId: r.officer_id,
             name: r.profiles?.full_name || "Unknown",
             badge: r.profiles?.badge_number,
-            position: r.position_id,
+            position: r.position_name,
             type: "recurring" as const,
           })),
           ...exceptionOfficers.map(e => ({
@@ -107,7 +107,7 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
             officerId: e.officer_id,
             name: e.profiles?.full_name || "Unknown",
             badge: e.profiles?.badge_number,
-            position: e.position_id,
+            position: e.position_name,
             type: "exception" as const,
           }))
         ];
@@ -130,14 +130,12 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
       type: "recurring" | "exception";
       positionName: string;
     }) => {
-      // For now, we'll store the position name in a custom field
-      // In a production system, you might want to create position records first
       const table = type === "recurring" ? "recurring_schedules" : "schedule_exceptions";
       
       const { error } = await supabase
         .from(table)
         .update({ 
-          position_id: positionName // Storing position name temporarily
+          position_name: positionName
         })
         .eq("id", scheduleId);
         
