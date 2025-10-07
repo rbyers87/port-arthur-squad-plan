@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { User } from "@supabase/supabase-js";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,6 +21,28 @@ const Dashboard = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { primaryRole, isAdminOrSupervisor, loading: roleLoading } = useUserRole(user?.id);
+
+  const { data: stats } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: async () => {
+      const today = new Date().toISOString().split("T")[0];
+      
+      // Count active officers (those with schedules today)
+      const { count: activeOfficers } = await supabase
+        .from("recurring_schedules")
+        .select("*", { count: "exact", head: true })
+        .eq("day_of_week", new Date().getDay());
+
+      // Count open vacancies
+      const { count: openVacancies } = await supabase
+        .from("vacancy_alerts")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "open");
+
+      return { activeOfficers: activeOfficers || 0, openVacancies: openVacancies || 0 };
+    },
+    enabled: isAdminOrSupervisor,
+  });
 
   useEffect(() => {
     // Check authentication
@@ -142,7 +165,7 @@ const Dashboard = () => {
                   <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">--</div>
+                  <div className="text-2xl font-bold">{stats?.activeOfficers ?? "--"}</div>
                   <p className="text-xs text-muted-foreground">On duty today</p>
                 </CardContent>
               </Card>
@@ -153,7 +176,7 @@ const Dashboard = () => {
                   <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">--</div>
+                  <div className="text-2xl font-bold">{stats?.openVacancies ?? "--"}</div>
                   <p className="text-xs text-muted-foreground">Open positions</p>
                 </CardContent>
               </Card>

@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { format, startOfWeek, addDays } from "date-fns";
-import { Calendar } from "lucide-react";
+import { Calendar, Plus } from "lucide-react";
+import { ScheduleManagementDialog } from "./ScheduleManagementDialog";
 
 interface WeeklyScheduleProps {
   userId: string;
@@ -11,6 +14,7 @@ interface WeeklyScheduleProps {
 }
 
 export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklyScheduleProps) => {
+  const [dialogOpen, setDialogOpen] = useState(false);
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 0 });
 
   const { data: schedules, isLoading } = useQuery({
@@ -76,13 +80,22 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5" />
-          Weekly Schedule - {format(weekStart, "MMM d")} - {format(addDays(weekStart, 6), "MMM d, yyyy")}
-        </CardTitle>
-      </CardHeader>
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Weekly Schedule - {format(weekStart, "MMM d")} - {format(addDays(weekStart, 6), "MMM d, yyyy")}
+            </CardTitle>
+            {isAdminOrSupervisor && (
+              <Button onClick={() => setDialogOpen(true)} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Schedule
+              </Button>
+            )}
+          </div>
+        </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {schedules?.weekDates.map((date, idx) => {
@@ -134,6 +147,10 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
           })}
         </div>
       </CardContent>
-    </Card>
+      </Card>
+      {isAdminOrSupervisor && (
+        <ScheduleManagementDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      )}
+    </>
   );
 };
