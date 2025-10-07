@@ -1,10 +1,17 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, Clock, Edit2, Calendar } from "lucide-react";
+import { OfficerProfileDialog } from "./OfficerProfileDialog";
+import { OfficerScheduleManager } from "./OfficerScheduleManager";
 
 export const StaffManagement = () => {
+  const [editingOfficer, setEditingOfficer] = useState<any>(null);
+  const [managingSchedule, setManagingSchedule] = useState<any>(null);
+
   const { data: officers, isLoading } = useQuery({
     queryKey: ["all-officers"],
     queryFn: async () => {
@@ -65,16 +72,36 @@ export const StaffManagement = () => {
                       <span className="text-sm">PTO: {officer.pto_hours_balance || 0} hours</span>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    {officer.roles && officer.roles.length > 0 ? (
-                      officer.roles.map((role: string, idx: number) => (
-                        <Badge key={idx} variant="outline" className="capitalize">
-                          {role}
-                        </Badge>
-                      ))
-                    ) : (
-                      <Badge variant="outline">Officer</Badge>
-                    )}
+                   <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-1">
+                      {officer.roles && officer.roles.length > 0 ? (
+                        officer.roles.map((role: string, idx: number) => (
+                          <Badge key={idx} variant="outline" className="capitalize">
+                            {role}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge variant="outline">Officer</Badge>
+                      )}
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingOfficer(officer)}
+                      >
+                        <Edit2 className="h-3 w-3 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setManagingSchedule(officer)}
+                      >
+                        <Calendar className="h-3 w-3 mr-1" />
+                        Schedule
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -82,6 +109,22 @@ export const StaffManagement = () => {
           </div>
         )}
       </CardContent>
+
+      {editingOfficer && (
+        <OfficerProfileDialog
+          officer={editingOfficer}
+          open={!!editingOfficer}
+          onOpenChange={(open) => !open && setEditingOfficer(null)}
+        />
+      )}
+
+      {managingSchedule && (
+        <OfficerScheduleManager
+          officer={managingSchedule}
+          open={!!managingSchedule}
+          onOpenChange={(open) => !open && setManagingSchedule(null)}
+        />
+      )}
     </Card>
   );
 };
