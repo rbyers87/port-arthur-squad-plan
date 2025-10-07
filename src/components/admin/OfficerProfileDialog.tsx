@@ -21,6 +21,10 @@ interface OfficerProfileDialogProps {
     badge_number?: string | null;
     hire_date?: string | null;
     service_credit_override?: number | null;
+    vacation_hours?: number | null;
+    sick_hours?: number | null;
+    comp_hours?: number | null;
+    holiday_hours?: number | null;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -40,6 +44,10 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     email: officer.email,
     phone: officer.phone || "",
     badge_number: officer.badge_number || "",
+    vacation_hours: officer.vacation_hours?.toString() || "0",
+    sick_hours: officer.sick_hours?.toString() || "0",
+    comp_hours: officer.comp_hours?.toString() || "0",
+    holiday_hours: officer.holiday_hours?.toString() || "0",
   });
 
   useEffect(() => {
@@ -65,6 +73,10 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
           badge_number: data.badge_number || null,
           hire_date: hireDate ? format(hireDate, "yyyy-MM-dd") : null,
           service_credit_override: serviceCreditOverride ? Number(serviceCreditOverride) : null,
+          vacation_hours: Number(data.vacation_hours) || 0,
+          sick_hours: Number(data.sick_hours) || 0,
+          comp_hours: Number(data.comp_hours) || 0,
+          holiday_hours: Number(data.holiday_hours) || 0,
         })
         .eq("id", officer.id);
 
@@ -206,6 +218,56 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
             <p className="text-xs text-muted-foreground">
               Enter positive values to add credit, negative to deduct (e.g., -2 to subtract 2 years)
             </p>
+          </div>
+
+          <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+            <h3 className="font-semibold text-sm">PTO Balances</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="vacation_hours">Vacation Hours</Label>
+                <Input
+                  id="vacation_hours"
+                  type="number"
+                  value={formData.vacation_hours}
+                  onChange={(e) => setFormData({ ...formData, vacation_hours: e.target.value })}
+                  step="0.5"
+                  min="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sick_hours">Sick Hours</Label>
+                <Input
+                  id="sick_hours"
+                  type="number"
+                  value={formData.sick_hours}
+                  onChange={(e) => setFormData({ ...formData, sick_hours: e.target.value })}
+                  step="0.5"
+                  min="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="comp_hours">Comp Hours</Label>
+                <Input
+                  id="comp_hours"
+                  type="number"
+                  value={formData.comp_hours}
+                  onChange={(e) => setFormData({ ...formData, comp_hours: e.target.value })}
+                  step="0.5"
+                  min="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="holiday_hours">Holiday Hours</Label>
+                <Input
+                  id="holiday_hours"
+                  type="number"
+                  value={formData.holiday_hours}
+                  onChange={(e) => setFormData({ ...formData, holiday_hours: e.target.value })}
+                  step="0.5"
+                  min="0"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2">

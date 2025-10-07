@@ -71,9 +71,27 @@ export const StaffManagement = () => {
                     {officer.phone && (
                       <p className="text-sm text-muted-foreground">Phone: {officer.phone}</p>
                     )}
-                    <div className="flex items-center gap-2 mt-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">PTO: {officer.pto_hours_balance || 0} hours</span>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Vacation:</span>
+                        <span className="font-medium">{officer.vacation_hours || 0}h</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Sick:</span>
+                        <span className="font-medium">{officer.sick_hours || 0}h</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Comp:</span>
+                        <span className="font-medium">{officer.comp_hours || 0}h</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Holiday:</span>
+                        <span className="font-medium">{officer.holiday_hours || 0}h</span>
+                      </div>
                     </div>
                   </div>
                    <div className="flex flex-col gap-2">
