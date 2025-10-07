@@ -146,7 +146,13 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
                 value={hireDate ? format(hireDate, "yyyy-MM-dd") : ""}
                 onChange={(e) => {
                   const value = e.target.value;
-                  setHireDate(value ? new Date(value) : undefined);
+                  if (value) {
+                    // Parse date as local time to avoid timezone issues
+                    const [year, month, day] = value.split('-').map(Number);
+                    setHireDate(new Date(year, month - 1, day));
+                  } else {
+                    setHireDate(undefined);
+                  }
                 }}
                 max={format(new Date(), "yyyy-MM-dd")}
                 className="flex-1"
