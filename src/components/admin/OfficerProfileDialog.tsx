@@ -183,22 +183,28 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
           <div className="space-y-2">
             <Label htmlFor="service_credit_override" className="flex items-center gap-2">
               <Award className="h-4 w-4" />
-              Service Credit Override (Years)
+              Service Credit Adjustment (Years)
             </Label>
             <Input
               id="service_credit_override"
               type="number"
-              placeholder="Leave blank for auto-calculation"
+              placeholder="0 (no adjustment)"
               value={serviceCreditOverride}
               onChange={(e) => setServiceCreditOverride(e.target.value)}
               step="0.1"
             />
             <p className="text-sm text-muted-foreground">
-              Current service credit: <strong>{calculatedCredit.toFixed(1)} years</strong>
-              {serviceCreditOverride && ` (Override: ${Number(serviceCreditOverride).toFixed(1)} years)`}
+              {hireDate ? (
+                <>
+                  Calculated from hire date: <strong>{(calculatedCredit - (Number(serviceCreditOverride) || 0)).toFixed(1)} years</strong>
+                  {serviceCreditOverride && ` + adjustment (${Number(serviceCreditOverride).toFixed(1)}) = ${calculatedCredit.toFixed(1)} years total`}
+                </>
+              ) : (
+                <>Current service credit: <strong>{calculatedCredit.toFixed(1)} years</strong></>
+              )}
             </p>
             <p className="text-xs text-muted-foreground">
-              Use negative values to deduct time from calculated service credit
+              Enter positive values to add credit, negative to deduct (e.g., -2 to subtract 2 years)
             </p>
           </div>
 

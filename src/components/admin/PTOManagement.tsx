@@ -167,7 +167,7 @@ export const PTOManagement = () => {
                     )}
                     {officer.service_credit_override !== null && (
                       <p className="text-xs text-amber-600 dark:text-amber-500">
-                        (Manually adjusted)
+                        (Adjusted {officer.service_credit_override > 0 ? '+' : ''}{officer.service_credit_override.toFixed(1)} yrs)
                       </p>
                     )}
                   </div>
