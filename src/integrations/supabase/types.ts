@@ -106,6 +106,36 @@ export type Database = {
         }
         Relationships: []
       }
+      pto_accrual_rules: {
+        Row: {
+          created_at: string | null
+          hours_to_accrue: number
+          id: string
+          rule_type: string
+          service_credit_max: number | null
+          service_credit_min: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          hours_to_accrue?: number
+          id?: string
+          rule_type: string
+          service_credit_max?: number | null
+          service_credit_min?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          hours_to_accrue?: number
+          id?: string
+          rule_type?: string
+          service_credit_max?: number | null
+          service_credit_min?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       recurring_schedules: {
         Row: {
           created_at: string | null
@@ -471,6 +501,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accrue_annual_pto: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       accrue_sick_time: {
         Args: Record<PropertyKey, never>
         Returns: undefined

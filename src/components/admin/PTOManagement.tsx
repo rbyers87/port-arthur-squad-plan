@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Clock, Plus, Minus, Award } from "lucide-react";
+import { Clock, Plus, Minus, Award, CalendarClock, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const PTOManagement = () => {
   const [selectedOfficer, setSelectedOfficer] = useState<string>("");
@@ -17,6 +18,8 @@ export const PTOManagement = () => {
   const [hours, setHours] = useState<string>("");
   const [operation, setOperation] = useState<"add" | "subtract">("add");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [rulesDialogOpen, setRulesDialogOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<{ id: string; hours: string } | null>(null);
   const queryClient = useQueryClient();
 
   const { data: officers } = useQuery({
@@ -90,6 +93,20 @@ export const PTOManagement = () => {
     },
   });
 
+  const { data: accrualRules } = useQuery({
+    queryKey: ["pto-accrual-rules"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pto_accrual_rules")
+        .select("*")
+        .order("rule_type", { ascending: true })
+        .order("service_credit_min", { ascending: true });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const accrueAllSickTimeMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.rpc("accrue_sick_time");
@@ -104,6 +121,42 @@ export const PTOManagement = () => {
     },
   });
 
+  const accrueAnnualPTOMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc("accrue_annual_pto");
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["officers-pto"] });
+      toast.success("Annual PTO accrued for all officers");
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to accrue annual PTO: " + error.message);
+    },
+  });
+
+  const updateAccrualRuleMutation = useMutation({
+    mutationFn: async ({ id, hours }: { id: string; hours: number }) => {
+      const { error } = await supabase
+        .from("pto_accrual_rules")
+        .update({ hours_to_accrue: hours, updated_at: new Date().toISOString() })
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pto-accrual-rules"] });
+      toast.success("Accrual rule updated successfully");
+      setEditingRule(null);
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to update rule: " + error.message);
+    },
+  });
+
+  const holidayRule = accrualRules?.find(r => r.rule_type === "holiday");
+  const vacationRules = accrualRules?.filter(r => r.rule_type === "vacation") || [];
+
   return (
     <Card>
       <CardHeader>
@@ -113,9 +166,13 @@ export const PTOManagement = () => {
               <Clock className="h-5 w-5" />
               PTO Management
             </CardTitle>
-            <CardDescription>Manage officer PTO balances</CardDescription>
+            <CardDescription>Manage officer PTO balances and accrual rules</CardDescription>
           </div>
           <div className="flex gap-2">
+            <Button onClick={() => setRulesDialogOpen(true)} variant="outline" size="sm">
+              <Settings className="h-4 w-4 mr-2" />
+              Accrual Rules
+            </Button>
             <Button onClick={() => accrueAllSickTimeMutation.mutate()} variant="outline" size="sm">
               Accrue Sick Time (All)
             </Button>
@@ -258,6 +315,109 @@ export const PTOManagement = () => {
             >
               {updatePTOMutation.isPending ? "Updating..." : "Update PTO Balance"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rulesDialogOpen} onOpenChange={setRulesDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarClock className="h-5 w-5" />
+              Annual PTO Accrual Rules
+            </DialogTitle>
+            <DialogDescription>
+              Configure automatic PTO accrual at the beginning of each year
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold mb-2">Holiday Hours</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Same amount for all officers regardless of service credit
+                </p>
+                {holidayRule && (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={editingRule?.id === holidayRule.id ? editingRule.hours : holidayRule.hours_to_accrue}
+                      onChange={(e) => setEditingRule({ id: holidayRule.id, hours: e.target.value })}
+                      className="w-32"
+                      step="1"
+                    />
+                    <span className="text-sm">hours/year</span>
+                    {editingRule?.id === holidayRule.id && (
+                      <Button
+                        size="sm"
+                        onClick={() => updateAccrualRuleMutation.mutate({ 
+                          id: holidayRule.id, 
+                          hours: Number(editingRule.hours) 
+                        })}
+                        disabled={updateAccrualRuleMutation.isPending}
+                      >
+                        Save
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">Vacation Hours by Service Credit</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Based on years of service credit
+                </p>
+                <div className="space-y-3">
+                  {vacationRules.map((rule) => {
+                    const tierLabel = rule.service_credit_max 
+                      ? `${rule.service_credit_min}-${Math.floor(rule.service_credit_max)} years`
+                      : `${rule.service_credit_min}+ years`;
+                    
+                    return (
+                      <div key={rule.id} className="flex items-center gap-2 p-3 border rounded-lg">
+                        <span className="text-sm font-medium w-32">{tierLabel}</span>
+                        <Input
+                          type="number"
+                          value={editingRule?.id === rule.id ? editingRule.hours : rule.hours_to_accrue}
+                          onChange={(e) => setEditingRule({ id: rule.id, hours: e.target.value })}
+                          className="w-32"
+                          step="1"
+                        />
+                        <span className="text-sm">hours/year</span>
+                        {editingRule?.id === rule.id && (
+                          <Button
+                            size="sm"
+                            onClick={() => updateAccrualRuleMutation.mutate({ 
+                              id: rule.id, 
+                              hours: Number(editingRule.hours) 
+                            })}
+                            disabled={updateAccrualRuleMutation.isPending}
+                          >
+                            Save
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t">
+              <Button
+                className="w-full"
+                onClick={() => accrueAnnualPTOMutation.mutate()}
+                disabled={accrueAnnualPTOMutation.isPending}
+              >
+                <CalendarClock className="h-4 w-4 mr-2" />
+                {accrueAnnualPTOMutation.isPending ? "Processing..." : "Run Annual PTO Accrual Now"}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                This will add PTO to all officers based on the rules above
+              </p>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
