@@ -20,6 +20,7 @@ export type Database = {
           day_of_week: number
           id: string
           minimum_officers: number
+          minimum_supervisors: number
           shift_type_id: string
           updated_at: string | null
         }
@@ -28,6 +29,7 @@ export type Database = {
           day_of_week: number
           id?: string
           minimum_officers: number
+          minimum_supervisors?: number
           shift_type_id: string
           updated_at?: string | null
         }
@@ -36,6 +38,7 @@ export type Database = {
           day_of_week?: number
           id?: string
           minimum_officers?: number
+          minimum_supervisors?: number
           shift_type_id?: string
           updated_at?: string | null
         }

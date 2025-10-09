@@ -50,7 +50,7 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
       // Get minimum staffing requirements
       const { data: minimumStaffing, error: minError } = await supabase
         .from("minimum_staffing")
-        .select("*")
+        .select("minimum_officers, minimum_supervisors, shift_type_id")
         .eq("day_of_week", dayOfWeek);
       if (minError) throw minError;
 
@@ -110,15 +110,17 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
             position: e.position_name,
             type: "exception" as const,
           }))
-        ].sort((a, b) => {
-          // Sort supervisors first, then by numerical order for districts
-          const aIsSupervisor = a.position?.toLowerCase().includes('supervisor');
-          const bIsSupervisor = b.position?.toLowerCase().includes('supervisor');
-          
-          if (aIsSupervisor && !bIsSupervisor) return -1;
-          if (!aIsSupervisor && bIsSupervisor) return 1;
-          
-          // Extract district numbers for sorting
+        ];
+
+        // Separate supervisors and officers based on position
+        const supervisors = officers.filter(o => 
+          o.position?.toLowerCase().includes('supervisor')
+        ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        const regularOfficers = officers.filter(o => 
+          !o.position?.toLowerCase().includes('supervisor')
+        ).sort((a, b) => {
+          // Sort by district number if applicable
           const aMatch = a.position?.match(/district\s*(\d+)/i);
           const bMatch = b.position?.match(/district\s*(\d+)/i);
           
@@ -132,9 +134,12 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
 
         return {
           shift,
-          minStaffing: minStaff?.minimum_officers || 0,
-          currentStaffing: officers.length,
-          officers,
+          minSupervisors: minStaff?.minimum_supervisors || 1,
+          minOfficers: minStaff?.minimum_officers || 0,
+          currentSupervisors: supervisors.length,
+          currentOfficers: regularOfficers.length,
+          supervisors,
+          officers: regularOfficers,
         };
       });
 
@@ -206,8 +211,10 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
       </CardHeader>
       <CardContent className="space-y-6">
         {scheduleData?.map((shiftData) => {
-          const isUnderstaffed = shiftData.currentStaffing < shiftData.minStaffing;
-          const isFullyStaffed = shiftData.currentStaffing >= shiftData.minStaffing;
+          const supervisorsUnderstaffed = shiftData.currentSupervisors < shiftData.minSupervisors;
+          const officersUnderstaffed = shiftData.currentOfficers < shiftData.minOfficers;
+          const isAnyUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
+          const isFullyStaffed = !isAnyUnderstaffed;
 
           return (
             <div key={shiftData.shift.id} className="border rounded-lg p-4 space-y-4">
@@ -219,7 +226,7 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {isUnderstaffed && (
+                  {isAnyUnderstaffed && (
                     <Badge variant="destructive" className="gap-1">
                       <AlertTriangle className="h-3 w-3" />
                       Understaffed
@@ -231,13 +238,106 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
                       Fully Staffed
                     </Badge>
                   )}
-                  <Badge variant="outline">
-                    {shiftData.currentStaffing} / {shiftData.minStaffing} officers
-                  </Badge>
                 </div>
               </div>
 
+              {/* Supervisors Section */}
               <div className="space-y-2">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h4 className="font-semibold text-sm">Supervisors</h4>
+                  <Badge variant={supervisorsUnderstaffed ? "destructive" : "outline"}>
+                    {shiftData.currentSupervisors} / {shiftData.minSupervisors}
+                  </Badge>
+                </div>
+                {shiftData.supervisors.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No supervisors scheduled</p>
+                ) : (
+                  shiftData.supervisors.map((officer) => (
+                    <div
+                      key={`${officer.scheduleId}-${officer.type}`}
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium">{officer.name}</p>
+                        <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
+                      </div>
+
+                      {editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
+                        <div className="flex items-center gap-2">
+                          <div className="space-y-2">
+                            <Select value={editPosition} onValueChange={setEditPosition}>
+                              <SelectTrigger className="w-48">
+                                <SelectValue placeholder="Select position" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {predefinedPositions.map((pos) => (
+                                  <SelectItem key={pos} value={pos}>
+                                    {pos}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="Other">Other (Custom)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {editPosition === "Other" && (
+                              <Input
+                                placeholder="Enter custom position"
+                                value={customPosition}
+                                onChange={(e) => setCustomPosition(e.target.value)}
+                                className="w-48"
+                              />
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleSavePosition(officer.scheduleId, officer.type)}
+                            disabled={updatePositionMutation.isPending}
+                          >
+                            <Save className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingSchedule(null);
+                              setEditPosition("");
+                              setCustomPosition("");
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="text-right min-w-32">
+                            <Badge variant="secondary">
+                              {officer.position || "No Position"}
+                            </Badge>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingSchedule(`${officer.scheduleId}-${officer.type}`);
+                              setEditPosition(officer.position || "");
+                            }}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Officers Section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h4 className="font-semibold text-sm">Officers</h4>
+                  <Badge variant={officersUnderstaffed ? "destructive" : "outline"}>
+                    {shiftData.currentOfficers} / {shiftData.minOfficers}
+                  </Badge>
+                </div>
                 {shiftData.officers.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">No officers scheduled</p>
                 ) : (
