@@ -71,3 +71,6 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+10/9/2025 next step:
+Need ability to add an officer to another shift.  To add someone to a shift on the Daily Schedule that is not part of their recurring schedule.  Also need ability to change the time type for the Officers and Supervisors list as: Regular or Overtime, with default being Regular.
