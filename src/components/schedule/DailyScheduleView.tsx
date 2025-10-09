@@ -8,19 +8,34 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X } from "lucide-react";
+import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 
 interface DailyScheduleViewProps {
   selectedDate: Date;
+  filterShiftId?: string;
 }
 
-export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
+export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: DailyScheduleViewProps) => {
   const queryClient = useQueryClient();
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
   const [editPosition, setEditPosition] = useState("");
   const [customPosition, setCustomPosition] = useState("");
+  const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
+  const [selectedOfficer, setSelectedOfficer] = useState<{
+    officerId: string;
+    name: string;
+    scheduleId: string;
+    type: "recurring" | "exception";
+  } | null>(null);
+  const [selectedShift, setSelectedShift] = useState<{
+    id: string;
+    name: string;
+    start_time: string;
+    end_time: string;
+  } | null>(null);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const dayOfWeek = selectedDate.getDay();
@@ -78,38 +93,77 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
         .eq("date", dateStr);
       if (exceptionsError) throw exceptionsError;
 
+      // Separate PTO exceptions from regular exceptions
+      const ptoExceptions = exceptions?.filter(e => e.is_off) || [];
+      const regularExceptions = exceptions?.filter(e => !e.is_off) || [];
+
       // Build schedule by shift
       const scheduleByShift = shiftTypes?.map((shift) => {
         // Get minimum staffing for this shift
         const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
 
         // Get officers scheduled for this shift (recurring + exceptions)
-        const recurringOfficers = recurring?.filter(r => 
-          r.shift_types?.id === shift.id && 
-          !exceptions?.some(e => e.officer_id === r.officer_id && e.is_off)
+        // For recurring, exclude only if they have a FULL shift PTO (no working exception)
+        const recurringOfficers = recurring?.filter(r => {
+          if (r.shift_types?.id !== shift.id) return false;
+          
+          const hasPTO = ptoExceptions?.some(e => e.officer_id === r.officer_id);
+          const hasWorkingTime = regularExceptions?.some(e => 
+            e.officer_id === r.officer_id && e.shift_types?.id === shift.id
+          );
+          
+          // Include if no PTO, or if PTO but also has working time (partial shift)
+          return !hasPTO || hasWorkingTime;
+        }) || [];
+
+        const exceptionOfficers = regularExceptions?.filter(e => 
+          e.shift_types?.id === shift.id
         ) || [];
 
-        const exceptionOfficers = exceptions?.filter(e => 
-          e.shift_types?.id === shift.id && !e.is_off
-        ) || [];
+        // Get PTO records for this shift
+        const shiftPTORecords = ptoExceptions?.filter(e => 
+          e.shift_types?.id === shift.id
+        ).map(e => ({
+          officerId: e.officer_id,
+          name: e.profiles?.full_name || "Unknown",
+          badge: e.profiles?.badge_number,
+          ptoType: e.reason || "PTO",
+          startTime: e.custom_start_time || shift.start_time,
+          endTime: e.custom_end_time || shift.end_time,
+        })) || [];
 
         const officers = [
-          ...recurringOfficers.map(r => ({
-            scheduleId: r.id,
-            officerId: r.officer_id,
-            name: r.profiles?.full_name || "Unknown",
-            badge: r.profiles?.badge_number,
-            position: r.position_name,
-            type: "recurring" as const,
-          })),
-          ...exceptionOfficers.map(e => ({
-            scheduleId: e.id,
-            officerId: e.officer_id,
-            name: e.profiles?.full_name || "Unknown",
-            badge: e.profiles?.badge_number,
-            position: e.position_name,
-            type: "exception" as const,
-          }))
+          ...recurringOfficers.map(r => {
+            // Check if they have a working exception (partial shift)
+            const workingException = regularExceptions?.find(
+              e => e.officer_id === r.officer_id && e.shift_types?.id === shift.id
+            );
+            
+            return {
+              scheduleId: r.id,
+              officerId: r.officer_id,
+              name: r.profiles?.full_name || "Unknown",
+              badge: r.profiles?.badge_number,
+              position: r.position_name,
+              type: "recurring" as const,
+              customTime: workingException 
+                ? `${workingException.custom_start_time} - ${workingException.custom_end_time}`
+                : undefined,
+            };
+          }),
+          ...exceptionOfficers
+            .filter(e => !recurringOfficers.some(r => r.officer_id === e.officer_id))
+            .map(e => ({
+              scheduleId: e.id,
+              officerId: e.officer_id,
+              name: e.profiles?.full_name || "Unknown",
+              badge: e.profiles?.badge_number,
+              position: e.position_name,
+              type: "exception" as const,
+              customTime: e.custom_start_time && e.custom_end_time
+                ? `${e.custom_start_time} - ${e.custom_end_time}`
+                : undefined,
+            }))
         ];
 
         // Separate supervisors and officers based on position
@@ -140,10 +194,16 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
           currentOfficers: regularOfficers.length,
           supervisors,
           officers: regularOfficers,
+          ptoRecords: shiftPTORecords,
         };
       });
 
-      return scheduleByShift;
+      // Filter by shift if needed
+      const filteredSchedule = filterShiftId === "all" 
+        ? scheduleByShift 
+        : scheduleByShift?.filter(s => s.shift.id === filterShiftId);
+
+      return filteredSchedule;
     },
   });
 
@@ -259,7 +319,14 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
                     >
                       <div className="flex-1">
                         <p className="font-medium">{officer.name}</p>
-                        <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
+                          {officer.customTime && (
+                            <Badge variant="outline" className="text-xs">
+                              {officer.customTime}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       {editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
@@ -322,6 +389,23 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
                             }}
                           >
                             <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedOfficer({
+                                officerId: officer.officerId,
+                                name: officer.name,
+                                scheduleId: officer.scheduleId,
+                                type: officer.type,
+                              });
+                              setSelectedShift(shiftData.shift);
+                              setPtoDialogOpen(true);
+                            }}
+                            title="Assign PTO"
+                          >
+                            <Clock className="h-4 w-4" />
                           </Button>
                         </div>
                       )}
@@ -348,7 +432,14 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
                     >
                       <div className="flex-1">
                         <p className="font-medium">{officer.name}</p>
-                        <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
+                          {officer.customTime && (
+                            <Badge variant="outline" className="text-xs">
+                              {officer.customTime}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       {editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
@@ -412,15 +503,71 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedOfficer({
+                                officerId: officer.officerId,
+                                name: officer.name,
+                                scheduleId: officer.scheduleId,
+                                type: officer.type,
+                              });
+                              setSelectedShift(shiftData.shift);
+                              setPtoDialogOpen(true);
+                            }}
+                            title="Assign PTO"
+                          >
+                            <Clock className="h-4 w-4" />
+                          </Button>
                         </div>
                       )}
                     </div>
                   ))
                 )}
               </div>
+
+              {/* Other (PTO) Section */}
+              {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h4 className="font-semibold text-sm">Other (PTO)</h4>
+                    <Badge variant="outline">{shiftData.ptoRecords.length}</Badge>
+                  </div>
+                  {shiftData.ptoRecords.map((record, idx) => (
+                    <div
+                      key={`${record.officerId}-${idx}`}
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium">{record.name}</p>
+                        <p className="text-sm text-muted-foreground">Badge #{record.badge}</p>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="destructive" className="mb-1">
+                          {record.ptoType}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
+                          {record.startTime} - {record.endTime}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
+
+        {selectedOfficer && selectedShift && (
+          <PTOAssignmentDialog
+            open={ptoDialogOpen}
+            onOpenChange={setPtoDialogOpen}
+            officer={selectedOfficer}
+            shift={selectedShift}
+            date={dateStr}
+          />
+        )}
       </CardContent>
     </Card>
   );
