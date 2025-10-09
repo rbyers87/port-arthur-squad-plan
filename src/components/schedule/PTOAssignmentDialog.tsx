@@ -98,20 +98,25 @@ export const PTOAssignmentDialog = ({
 
       if (ptoError) throw ptoError;
 
-      // If partial shift, create working time exception
+      // If partial shift, create working time exception for the remaining time
       if (!isFullShift) {
-        const workStartTime = shift.start_time;
-        const workEndTime = ptoStartTime;
+        // Calculate the working portion (the part that's NOT PTO)
+        // This is the time from PTO end to shift end
+        const workStartTime = ptoEndTime;
+        const workEndTime = shift.end_time;
 
         if (workStartTime !== workEndTime) {
+          // Get the current position name
+          const positionName = officer.type === "recurring" 
+            ? (await supabase.from("recurring_schedules").select("position_name").eq("id", officer.scheduleId).single()).data?.position_name
+            : (await supabase.from("schedule_exceptions").select("position_name").eq("id", officer.scheduleId).single()).data?.position_name;
+
           const { error: workError } = await supabase.from("schedule_exceptions").insert({
             officer_id: officer.officerId,
             date: date,
             shift_type_id: shift.id,
             is_off: false,
-            position_name: officer.type === "recurring" 
-              ? (await supabase.from("recurring_schedules").select("position_name").eq("id", officer.scheduleId).single()).data?.position_name
-              : (await supabase.from("schedule_exceptions").select("position_name").eq("id", officer.scheduleId).single()).data?.position_name,
+            position_name: positionName,
             custom_start_time: workStartTime,
             custom_end_time: workEndTime,
           });
