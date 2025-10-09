@@ -71,6 +71,9 @@ export const StaffManagement = () => {
                     {officer.phone && (
                       <p className="text-sm text-muted-foreground">Phone: {officer.phone}</p>
                     )}
+                    {officer.rank && (
+                      <p className="text-sm font-medium text-primary">Rank: {officer.rank}</p>
+                    )}
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
                       <div className="flex items-center gap-1">
                         <Clock className="h-3 w-3 text-muted-foreground" />

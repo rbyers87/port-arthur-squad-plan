@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -25,6 +26,7 @@ interface OfficerProfileDialogProps {
     sick_hours?: number | null;
     comp_hours?: number | null;
     holiday_hours?: number | null;
+    rank?: string | null;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -44,6 +46,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     email: officer.email,
     phone: officer.phone || "",
     badge_number: officer.badge_number || "",
+    rank: officer.rank || "Officer",
     vacation_hours: officer.vacation_hours?.toString() || "0",
     sick_hours: officer.sick_hours?.toString() || "0",
     comp_hours: officer.comp_hours?.toString() || "0",
@@ -71,6 +74,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
           email: data.email,
           phone: data.phone || null,
           badge_number: data.badge_number || null,
+          rank: data.rank as "Officer" | "Sergeant" | "Lieutenant" | "Deputy Chief" | "Chief",
           hire_date: hireDate ? format(hireDate, "yyyy-MM-dd") : null,
           service_credit_override: serviceCreditOverride ? Number(serviceCreditOverride) : null,
           vacation_hours: Number(data.vacation_hours) || 0,
@@ -148,6 +152,25 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="rank">Rank</Label>
+            <Select
+              value={formData.rank}
+              onValueChange={(value) => setFormData({ ...formData, rank: value })}
+            >
+              <SelectTrigger id="rank">
+                <SelectValue placeholder="Select rank" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Officer">Officer</SelectItem>
+                <SelectItem value="Sergeant">Sergeant</SelectItem>
+                <SelectItem value="Lieutenant">Lieutenant</SelectItem>
+                <SelectItem value="Deputy Chief">Deputy Chief</SelectItem>
+                <SelectItem value="Chief">Chief</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

@@ -63,6 +63,7 @@ export type Database = {
           phone: string | null
           pto_hours_accrued_yearly: number | null
           pto_hours_balance: number | null
+          rank: Database["public"]["Enums"]["officer_rank"] | null
           service_credit_override: number | null
           sick_hours: number | null
           updated_at: string | null
@@ -81,6 +82,7 @@ export type Database = {
           phone?: string | null
           pto_hours_accrued_yearly?: number | null
           pto_hours_balance?: number | null
+          rank?: Database["public"]["Enums"]["officer_rank"] | null
           service_credit_override?: number | null
           sick_hours?: number | null
           updated_at?: string | null
@@ -99,6 +101,7 @@ export type Database = {
           phone?: string | null
           pto_hours_accrued_yearly?: number | null
           pto_hours_balance?: number | null
+          rank?: Database["public"]["Enums"]["officer_rank"] | null
           service_credit_override?: number | null
           sick_hours?: number | null
           updated_at?: string | null
@@ -527,6 +530,12 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "supervisor" | "officer"
+      officer_rank:
+        | "Officer"
+        | "Sergeant"
+        | "Lieutenant"
+        | "Deputy Chief"
+        | "Chief"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -655,6 +664,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "supervisor", "officer"],
+      officer_rank: [
+        "Officer",
+        "Sergeant",
+        "Lieutenant",
+        "Deputy Chief",
+        "Chief",
+      ],
     },
   },
 } as const

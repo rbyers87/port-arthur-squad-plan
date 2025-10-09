@@ -110,7 +110,25 @@ export const DailyScheduleView = ({ selectedDate }: DailyScheduleViewProps) => {
             position: e.position_name,
             type: "exception" as const,
           }))
-        ];
+        ].sort((a, b) => {
+          // Sort supervisors first, then by numerical order for districts
+          const aIsSupervisor = a.position?.toLowerCase().includes('supervisor');
+          const bIsSupervisor = b.position?.toLowerCase().includes('supervisor');
+          
+          if (aIsSupervisor && !bIsSupervisor) return -1;
+          if (!aIsSupervisor && bIsSupervisor) return 1;
+          
+          // Extract district numbers for sorting
+          const aMatch = a.position?.match(/district\s*(\d+)/i);
+          const bMatch = b.position?.match(/district\s*(\d+)/i);
+          
+          if (aMatch && bMatch) {
+            return parseInt(aMatch[1]) - parseInt(bMatch[1]);
+          }
+          
+          // Fallback to alphabetical
+          return (a.position || '').localeCompare(b.position || '');
+        });
 
         return {
           shift,
