@@ -74,3 +74,7 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/c
 
 10/9/2025 next step:
 Need ability to add an officer to another shift.  To add someone to a shift on the Daily Schedule that is not part of their recurring schedule.  Also need ability to change the time type for the Officers and Supervisors list as: Regular or Overtime, with default being Regular.
+
+For Staff Profiles, I want Service Credit listed.
+
+Need a way to view an individuals upcoming scheduled shifts.  When request PTO and approved, need to remove from scheduled shift and place at bottom of daily view for those shifts to reflect the PTO used.  The bottom of the daily view needs to load all schedueld PTO for that day for that shift.
