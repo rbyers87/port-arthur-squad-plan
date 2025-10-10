@@ -79,7 +79,7 @@ For Staff Profiles, I want Service Credit listed.
 
 Need a way to view an individuals upcoming scheduled shifts.  When request PTO and approved, need to remove from scheduled shift and place at bottom of daily view for those shifts to reflect the PTO used.  The bottom of the daily view needs to load all schedueld PTO for that day for that shift.
 
-For Daily Views: Assigned position "other" want excluded from minimum staff count.  This will be used for training/schools.  Maybe separate "other" from the rest of the list at the bottom?
+For Daily Views: Assigned position "other" want excluded from minimum staff count.  This will be used for training/schools, light duty, etc.  Maybe separate "other" from the rest of the list at the bottom? Currently have "Other (PTO), make a section before this that is "Special Assignment" and change Other (PTO) to just PTO.  
 
 Add export function from daily view to be used as a riding list.  Export as pdf to print.
 
