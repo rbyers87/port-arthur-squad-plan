@@ -8,10 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2 } from "lucide-react";
+import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2, UserPlus } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface DailyScheduleViewProps {
   selectedDate: Date;
@@ -20,7 +21,7 @@ interface DailyScheduleViewProps {
   userId?: string;
 }
 
-export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: DailyScheduleViewProps) => {
+export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdminOrSupervisor = false }: DailyScheduleViewProps) => {
   const queryClient = useQueryClient();
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
   const [editPosition, setEditPosition] = useState("");
@@ -45,6 +46,8 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
     start_time: string;
     end_time: string;
   } | null>(null);
+  const [addOfficerDialogOpen, setAddOfficerDialogOpen] = useState(false);
+  const [selectedShiftForAdd, setSelectedShiftForAdd] = useState<any>(null);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const dayOfWeek = selectedDate.getDay();
@@ -80,7 +83,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
       if (minError) throw minError;
 
       // Get recurring schedules for this day of week
-      const { data: recurring, error: recurringError } = await supabase
+      const { data: recurringData, error: recurringError } = await supabase
         .from("recurring_schedules")
         .select(`
           *,
@@ -88,12 +91,12 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
           shift_types(id, name, start_time, end_time)
         `)
         .eq("day_of_week", dayOfWeek)
-        .lte("start_date", dateStr)
-        .or(`end_date.is.null,end_date.gte.${dateStr}`);
+        .is("end_date", null); // Only get ongoing schedules
+
       if (recurringError) throw recurringError;
 
       // Get schedule exceptions for this specific date
-      const { data: exceptions, error: exceptionsError } = await supabase
+      const { data: exceptionsData, error: exceptionsError } = await supabase
         .from("schedule_exceptions")
         .select(`
           *,
@@ -101,36 +104,80 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
           shift_types(id, name, start_time, end_time)
         `)
         .eq("date", dateStr);
+
       if (exceptionsError) throw exceptionsError;
 
       // Separate PTO exceptions from regular exceptions
-      const ptoExceptions = exceptions?.filter(e => e.is_off) || [];
-      const regularExceptions = exceptions?.filter(e => !e.is_off) || [];
+      const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
+      const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
 
       // Build schedule by shift
       const scheduleByShift = shiftTypes?.map((shift) => {
         // Get minimum staffing for this shift
         const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
 
-        // Get officers scheduled for this shift (recurring + exceptions)
-        // For recurring, exclude only if they have a FULL shift PTO (no working exception)
-        const recurringOfficers = recurring?.filter(r => {
-          if (r.shift_types?.id !== shift.id) return false;
-          
-          const hasPTO = ptoExceptions?.some(e => e.officer_id === r.officer_id);
-          const hasWorkingTime = regularExceptions?.some(e => 
-            e.officer_id === r.officer_id && e.shift_types?.id === shift.id
-          );
-          
-          // Include if no PTO, or if PTO but also has working time (partial shift)
-          return !hasPTO || hasWorkingTime;
-        }) || [];
+        // Get recurring officers for this shift
+        const recurringOfficers = recurringData
+          ?.filter(r => r.shift_types?.id === shift.id)
+          .map(r => {
+            // Check if this officer has an exception for today
+            const workingException = workingExceptions?.find(e => 
+              e.officer_id === r.officer_id && e.shift_types?.id === shift.id
+            );
 
-        const exceptionOfficers = regularExceptions?.filter(e => 
-          e.shift_types?.id === shift.id
-        ) || [];
+            const ptoException = ptoExceptions?.find(e => 
+              e.officer_id === r.officer_id && e.shift_types?.id === shift.id
+            );
 
-        // Get PTO records for this shift
+            return {
+              scheduleId: workingException ? workingException.id : r.id,
+              officerId: r.officer_id,
+              name: r.profiles?.full_name || "Unknown",
+              badge: r.profiles?.badge_number,
+              position: workingException ? workingException.position_name : r.position_name,
+              type: workingException ? "exception" as const : "recurring" as const,
+              originalScheduleId: r.id,
+              customTime: workingException?.custom_start_time && workingException?.custom_end_time
+                ? `${workingException.custom_start_time} - ${workingException.custom_end_time}`
+                : undefined,
+              hasPTO: !!ptoException,
+              ptoData: ptoException ? {
+                id: ptoException.id,
+                ptoType: ptoException.reason,
+                startTime: ptoException.custom_start_time || shift.start_time,
+                endTime: ptoException.custom_end_time || shift.end_time,
+                isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+              } : undefined,
+              shift: shift
+            };
+          }) || [];
+
+        // Get additional officers from working exceptions (not in recurring schedule)
+        const additionalOfficers = workingExceptions
+          ?.filter(e => 
+            e.shift_types?.id === shift.id &&
+            !recurringData?.some(r => r.officer_id === e.officer_id)
+          )
+          .map(e => ({
+            scheduleId: e.id,
+            officerId: e.officer_id,
+            name: e.profiles?.full_name || "Unknown",
+            badge: e.profiles?.badge_number,
+            position: e.position_name,
+            type: "exception" as const,
+            originalScheduleId: null,
+            customTime: e.custom_start_time && e.custom_end_time
+              ? `${e.custom_start_time} - ${e.custom_end_time}`
+              : undefined,
+            hasPTO: false,
+            ptoData: undefined,
+            shift: shift
+          })) || [];
+
+        // Combine all officers
+        const allOfficers = [...recurringOfficers, ...additionalOfficers];
+
+        // Get PTO records for this shift (officers who are completely off)
         const shiftPTORecords = ptoExceptions?.filter(e => 
           e.shift_types?.id === shift.id
         ).map(e => ({
@@ -145,54 +192,20 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
           shiftTypeId: shift.id
         })) || [];
 
-        const officers = [
-          ...recurringOfficers.map(r => {
-            // Check if they have a working exception (partial shift)
-            const workingException = regularExceptions?.find(
-              e => e.officer_id === r.officer_id && e.shift_types?.id === shift.id
-            );
-            
-            return {
-              scheduleId: r.id,
-              officerId: r.officer_id,
-              name: r.profiles?.full_name || "Unknown",
-              badge: r.profiles?.badge_number,
-              position: r.position_name,
-              type: "recurring" as const,
-              customTime: workingException 
-                ? `${workingException.custom_start_time} - ${workingException.custom_end_time}`
-                : undefined,
-            };
-          }),
-          ...exceptionOfficers
-            .filter(e => !recurringOfficers.some(r => r.officer_id === e.officer_id))
-            .map(e => ({
-              scheduleId: e.id,
-              officerId: e.officer_id,
-              name: e.profiles?.full_name || "Unknown",
-              badge: e.profiles?.badge_number,
-              position: e.position_name,
-              type: "exception" as const,
-              customTime: e.custom_start_time && e.custom_end_time
-                ? `${e.custom_start_time} - ${e.custom_end_time}`
-                : undefined,
-            }))
-        ];
-
         // Separate supervisors and officers based on position
-        const supervisors = officers.filter(o => 
+        const supervisors = allOfficers.filter(o => 
           o.position?.toLowerCase().includes('supervisor')
         ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
         // Special assignment officers (those with "Other (Custom)" positions or custom text)
-        const specialAssignmentOfficers = officers.filter(o => {
+        const specialAssignmentOfficers = allOfficers.filter(o => {
           const position = o.position?.toLowerCase() || '';
           return position.includes('other') || 
                  (o.position && !predefinedPositions.includes(o.position));
         }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
         // Regular officers (exclude supervisors and special assignments)
-        const regularOfficers = officers.filter(o => 
+        const regularOfficers = allOfficers.filter(o => 
           !o.position?.toLowerCase().includes('supervisor') && 
           !specialAssignmentOfficers.includes(o)
         ).sort((a, b) => {
@@ -231,21 +244,42 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
   });
 
   const updatePositionMutation = useMutation({
-    mutationFn: async ({ scheduleId, type, positionName }: { 
+    mutationFn: async ({ scheduleId, type, positionName, date, officerId, shiftTypeId }: { 
       scheduleId: string; 
       type: "recurring" | "exception";
       positionName: string;
+      date?: string;
+      officerId?: string;
+      shiftTypeId?: string;
     }) => {
-      const table = type === "recurring" ? "recurring_schedules" : "schedule_exceptions";
-      
-      const { error } = await supabase
-        .from(table)
-        .update({ 
-          position_name: positionName
-        })
-        .eq("id", scheduleId);
+      // If it's a recurring schedule and we're making a daily adjustment, create an exception
+      if (type === "recurring") {
+        const { error } = await supabase
+          .from("schedule_exceptions")
+          .upsert({
+            officer_id: officerId,
+            date: dateStr,
+            shift_type_id: shiftTypeId,
+            is_off: false,
+            position_name: positionName,
+            custom_start_time: null,
+            custom_end_time: null
+          }, {
+            onConflict: 'officer_id,date,shift_type_id'
+          });
         
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        // If it's already an exception, just update it
+        const { error } = await supabase
+          .from("schedule_exceptions")
+          .update({ 
+            position_name: positionName
+          })
+          .eq("id", scheduleId);
+          
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       toast.success("Position updated");
@@ -256,6 +290,58 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to update position");
+    },
+  });
+
+  // Add mutation for removing an officer from the daily schedule
+  const removeOfficerMutation = useMutation({
+    mutationFn: async (officer: any) => {
+      if (officer.type === "exception") {
+        // Delete the exception
+        const { error } = await supabase
+          .from("schedule_exceptions")
+          .delete()
+          .eq("id", officer.scheduleId);
+
+        if (error) throw error;
+      }
+      // If it's a recurring schedule, we don't delete it - it will still show as base schedule
+    },
+    onSuccess: () => {
+      toast.success("Officer removed from daily schedule");
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to remove officer");
+    },
+  });
+
+  // Add mutation for adding an officer to the daily schedule
+  const addOfficerMutation = useMutation({
+    mutationFn: async ({ officerId, shiftId, position }: { officerId: string; shiftId: string; position: string }) => {
+      const { error } = await supabase
+        .from("schedule_exceptions")
+        .upsert({
+          officer_id: officerId,
+          date: dateStr,
+          shift_type_id: shiftId,
+          is_off: false,
+          position_name: position,
+          custom_start_time: null,
+          custom_end_time: null
+        }, {
+          onConflict: 'officer_id,date,shift_type_id'
+        });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Officer added to schedule");
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      setAddOfficerDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to add officer");
     },
   });
 
@@ -330,13 +416,21 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
     },
   });
 
-  const handleSavePosition = (scheduleId: string, type: "recurring" | "exception") => {
+  const handleSavePosition = (officer: any) => {
     const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
     if (!finalPosition) {
       toast.error("Please select or enter a position");
       return;
     }
-    updatePositionMutation.mutate({ scheduleId, type, positionName: finalPosition });
+
+    updatePositionMutation.mutate({ 
+      scheduleId: officer.scheduleId, 
+      type: officer.type,
+      positionName: finalPosition,
+      date: dateStr,
+      officerId: officer.officerId,
+      shiftTypeId: officer.shift.id
+    });
   };
 
   const handleEditClick = (officer: any) => {
@@ -360,7 +454,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
     setSelectedOfficer({
       officerId: ptoRecord.officerId,
       name: ptoRecord.name,
-      scheduleId: ptoRecord.id, // Use the PTO exception ID as scheduleId
+      scheduleId: ptoRecord.id,
       type: "exception" as const,
       existingPTO: {
         id: ptoRecord.id,
@@ -372,12 +466,153 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
     });
     setSelectedShift({
       id: ptoRecord.shiftTypeId,
-      name: "Unknown Shift", // We'll get this from the schedule data
+      name: "Unknown Shift",
       start_time: ptoRecord.startTime,
       end_time: ptoRecord.endTime
     });
     setPtoDialogOpen(true);
   };
+
+  const handleAddOfficer = (shift: any) => {
+    setSelectedShiftForAdd(shift);
+    setAddOfficerDialogOpen(true);
+  };
+
+  // In the DailyScheduleView.tsx, update the officer rendering to remove PTO buttons from regular officers
+// and ensure they only show on PTO records in the "Other (PTO)" section
+
+const renderOfficerSection = (title: string, officers: any[], minCount: number, currentCount: number, isUnderstaffed: boolean) => (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between border-b pb-2">
+      <h4 className="font-semibold text-sm">{title}</h4>
+      <Badge variant={isUnderstaffed ? "destructive" : "outline"}>
+        {currentCount} / {minCount}
+      </Badge>
+    </div>
+    {officers.length === 0 ? (
+      <p className="text-sm text-muted-foreground italic">No {title.toLowerCase()} scheduled</p>
+    ) : (
+      officers.map((officer) => (
+        <div
+          key={`${officer.scheduleId}-${officer.type}`}
+          className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+        >
+          <div className="flex-1">
+            <p className="font-medium">{officer.name}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
+              {officer.customTime && (
+                <Badge variant="outline" className="text-xs">
+                  {officer.customTime}
+                </Badge>
+              )}
+              {officer.type === "recurring" && (
+                <Badge variant="secondary" className="text-xs">
+                  Recurring
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
+            <div className="flex items-center gap-2">
+              <div className="space-y-2">
+                <Select value={editPosition} onValueChange={setEditPosition}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {predefinedPositions.map((pos) => (
+                      <SelectItem key={pos} value={pos}>
+                        {pos}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {editPosition === "Other (Custom)" && (
+                  <Input
+                    placeholder="Enter special assignment"
+                    value={customPosition}
+                    onChange={(e) => setCustomPosition(e.target.value)}
+                    className="w-48"
+                  />
+                )}
+              </div>
+              <Button
+                size="sm"
+                onClick={() => handleSavePosition(officer)}
+                disabled={updatePositionMutation.isPending}
+              >
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setEditingSchedule(null);
+                  setEditPosition("");
+                  setCustomPosition("");
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+  <div className="text-right min-w-32">
+    <Badge variant="secondary">
+      {officer.position || "No Position"}
+    </Badge>
+  </div>
+  
+  {/* EDIT POSITION BUTTON - Show for all officers */}
+  <Button
+    size="sm"
+    variant="ghost"
+    onClick={() => handleEditClick(officer)}
+    title="Edit Position"
+  >
+    <Edit2 className="h-4 w-4" />
+  </Button>
+  
+  {/* REMOVE BUTTON - Only show for daily exceptions (not base recurring) AND when no PTO */}
+  {officer.type === "exception" && !officer.hasPTO && (
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => removeOfficerMutation.mutate(officer)}
+      disabled={removeOfficerMutation.isPending}
+      title="Remove from Daily Schedule"
+    >
+      <Trash2 className="h-4 w-4 text-destructive" />
+    </Button>
+  )}
+  
+  {/* ASSIGN PTO BUTTON - Show for all regularly scheduled officers */}
+  <Button
+    size="sm"
+    variant="ghost"
+    onClick={() => {
+      setSelectedOfficer({
+        officerId: officer.officerId,
+        name: officer.name,
+        scheduleId: officer.scheduleId,
+        type: officer.type,
+      });
+      setSelectedShift(officer.shift);
+      setPtoDialogOpen(true);
+    }}
+    title="Assign PTO"
+  >
+    <Clock className="h-4 w-4" />
+  </Button>
+</div>
+          )}
+        </div>
+      ))
+    )}
+  </div>
+);
 
   if (isLoading) {
     return (
@@ -432,226 +667,22 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                       Fully Staffed
                     </Badge>
                   )}
-                </div>
-              </div>
-
-              {/* Supervisors Section */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h4 className="font-semibold text-sm">Supervisors</h4>
-                  <Badge variant={supervisorsUnderstaffed ? "destructive" : "outline"}>
-                    {shiftData.currentSupervisors} / {shiftData.minSupervisors}
-                  </Badge>
-                </div>
-                {shiftData.supervisors.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic">No supervisors scheduled</p>
-                ) : (
-                  shiftData.supervisors.map((officer) => (
-                    <div
-                      key={`${officer.scheduleId}-${officer.type}`}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+                  {isAdminOrSupervisor && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAddOfficer(shiftData.shift)}
+                      title="Add Officer"
                     >
-                      <div className="flex-1">
-                        <p className="font-medium">{officer.name}</p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
-                          {officer.customTime && (
-                            <Badge variant="outline" className="text-xs">
-                              {officer.customTime}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      {editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
-                        <div className="flex items-center gap-2">
-                          <div className="space-y-2">
-                            <Select value={editPosition} onValueChange={setEditPosition}>
-                              <SelectTrigger className="w-48">
-                                <SelectValue placeholder="Select position" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {predefinedPositions.map((pos) => (
-                                  <SelectItem key={pos} value={pos}>
-                                    {pos}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {editPosition === "Other (Custom)" && (
-                              <Input
-                                placeholder="Enter special assignment"
-                                value={customPosition}
-                                onChange={(e) => setCustomPosition(e.target.value)}
-                                className="w-48"
-                              />
-                            )}
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleSavePosition(officer.scheduleId, officer.type)}
-                            disabled={updatePositionMutation.isPending}
-                          >
-                            <Save className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingSchedule(null);
-                              setEditPosition("");
-                              setCustomPosition("");
-                            }}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <div className="text-right min-w-32">
-                            <Badge variant="secondary">
-                              {officer.position || "No Position"}
-                            </Badge>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleEditClick(officer)}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedOfficer({
-                                officerId: officer.officerId,
-                                name: officer.name,
-                                scheduleId: officer.scheduleId,
-                                type: officer.type,
-                              });
-                              setSelectedShift(shiftData.shift);
-                              setPtoDialogOpen(true);
-                            }}
-                            title="Assign PTO"
-                          >
-                            <Clock className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Officers Section */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h4 className="font-semibold text-sm">Officers</h4>
-                  <Badge variant={officersUnderstaffed ? "destructive" : "outline"}>
-                    {shiftData.currentOfficers} / {shiftData.minOfficers}
-                  </Badge>
+                      <UserPlus className="h-4 w-4 mr-1" />
+                      Add Officer
+                    </Button>
+                  )}
                 </div>
-                {shiftData.officers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic">No officers scheduled</p>
-                ) : (
-                  shiftData.officers.map((officer) => (
-                    <div
-                      key={`${officer.scheduleId}-${officer.type}`}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
-                    >
-                      <div className="flex-1">
-                        <p className="font-medium">{officer.name}</p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
-                          {officer.customTime && (
-                            <Badge variant="outline" className="text-xs">
-                              {officer.customTime}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      {editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
-                        <div className="flex items-center gap-2">
-                          <div className="space-y-2">
-                            <Select value={editPosition} onValueChange={setEditPosition}>
-                              <SelectTrigger className="w-48">
-                                <SelectValue placeholder="Select position" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {predefinedPositions.map((pos) => (
-                                  <SelectItem key={pos} value={pos}>
-                                    {pos}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {editPosition === "Other (Custom)" && (
-                              <Input
-                                placeholder="Enter special assignment"
-                                value={customPosition}
-                                onChange={(e) => setCustomPosition(e.target.value)}
-                                className="w-48"
-                              />
-                            )}
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleSavePosition(officer.scheduleId, officer.type)}
-                            disabled={updatePositionMutation.isPending}
-                          >
-                            <Save className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingSchedule(null);
-                              setEditPosition("");
-                              setCustomPosition("");
-                            }}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <div className="text-right min-w-32">
-                            <Badge variant="secondary">
-                              {officer.position || "No Position"}
-                            </Badge>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleEditClick(officer)}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedOfficer({
-                                officerId: officer.officerId,
-                                name: officer.name,
-                                scheduleId: officer.scheduleId,
-                                type: officer.type,
-                              });
-                              setSelectedShift(shiftData.shift);
-                              setPtoDialogOpen(true);
-                            }}
-                            title="Assign PTO"
-                          >
-                            <Clock className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
               </div>
+
+              {renderOfficerSection("Supervisors", shiftData.supervisors, shiftData.minSupervisors, shiftData.currentSupervisors, supervisorsUnderstaffed)}
+              {renderOfficerSection("Officers", shiftData.officers, shiftData.minOfficers, shiftData.currentOfficers, officersUnderstaffed)}
 
               {/* Special Assignment Section */}
               {shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
@@ -674,6 +705,11 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                               {officer.customTime}
                             </Badge>
                           )}
+                          {officer.type === "recurring" && (
+                            <Badge variant="secondary" className="text-xs">
+                              Recurring
+                            </Badge>
+                          )}
                         </div>
                       </div>
 
@@ -703,7 +739,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                           </div>
                           <Button
                             size="sm"
-                            onClick={() => handleSavePosition(officer.scheduleId, officer.type)}
+                            onClick={() => handleSavePosition(officer)}
                             disabled={updatePositionMutation.isPending}
                           >
                             <Save className="h-4 w-4" />
@@ -730,30 +766,48 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                               {officer.position}
                             </p>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleEditClick(officer)}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedOfficer({
-                                officerId: officer.officerId,
-                                name: officer.name,
-                                scheduleId: officer.scheduleId,
-                                type: officer.type,
-                              });
-                              setSelectedShift(shiftData.shift);
-                              setPtoDialogOpen(true);
-                            }}
-                            title="Assign PTO"
-                          >
-                            <Clock className="h-4 w-4" />
-                          </Button>
+                          {isAdminOrSupervisor && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditClick(officer)}
+                                title="Edit Position"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              {officer.type === "exception" && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => removeOfficerMutation.mutate(officer)}
+                                  disabled={removeOfficerMutation.isPending}
+                                  title="Remove from Daily Schedule"
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant={officer.hasPTO ? "default" : "ghost"}
+                                onClick={() => {
+                                  setSelectedOfficer({
+                                    officerId: officer.officerId,
+                                    name: officer.name,
+                                    scheduleId: officer.scheduleId,
+                                    type: officer.type,
+                                    ...(officer.hasPTO && officer.ptoData ? { existingPTO: officer.ptoData } : {})
+                                  });
+                                  setSelectedShift(officer.shift);
+                                  setPtoDialogOpen(true);
+                                }}
+                                title={officer.hasPTO ? "Edit PTO" : "Assign PTO"}
+                              >
+                                <Clock className="h-4 w-4" />
+                                {officer.hasPTO && <Badge variant="secondary" className="ml-1 h-4 w-4 p-0">!</Badge>}
+                              </Button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -786,14 +840,16 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                             {record.startTime} - {record.endTime}
                           </p>
                         </div>
+                        {/* EDIT PTO BUTTON - For existing PTO records */}
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="default"
                           onClick={() => handleEditPTO(record)}
                           title="Edit PTO"
                         >
                           <Edit2 className="h-4 w-4" />
                         </Button>
+                        {/* REMOVE PTO BUTTON - For existing PTO records */}
                         <Button
                           size="sm"
                           variant="ghost"
@@ -809,8 +865,8 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                 </div>
               )}
             </div>
-          );
-        })}
+          );  // <-- ADD THIS CLOSING PARENTHESIS AND SEMICOLON
+        })} 
 
         {selectedOfficer && selectedShift && (
           <PTOAssignmentDialog
@@ -821,7 +877,106 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
             date={dateStr}
           />
         )}
+
+        {/* Add Officer Dialog */}
+        {isAdminOrSupervisor && selectedShiftForAdd && (
+          <AddOfficerDialog
+            open={addOfficerDialogOpen}
+            onOpenChange={setAddOfficerDialogOpen}
+            shift={selectedShiftForAdd}
+            date={dateStr}
+            onAddOfficer={addOfficerMutation.mutate}
+            isAdding={addOfficerMutation.isPending}
+          />
+        )}
       </CardContent>
     </Card>
+  );
+};
+
+// Simple Add Officer Dialog component
+const AddOfficerDialog = ({ open, onOpenChange, shift, date, onAddOfficer, isAdding }: any) => {
+  const [selectedOfficer, setSelectedOfficer] = useState("");
+  const [position, setPosition] = useState("");
+
+  const { data: officers } = useQuery({
+    queryKey: ["available-officers", date, shift.id],
+    queryFn: async () => {
+      // Get all officers
+      const { data: allOfficers, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, badge_number")
+        .order("full_name");
+
+      if (error) throw error;
+
+      // Get officers already scheduled for this shift and date
+      const { data: scheduledOfficers } = await supabase
+        .from("schedule_exceptions")
+        .select("officer_id")
+        .eq("date", date)
+        .eq("shift_type_id", shift.id)
+        .eq("is_off", false);
+
+      const scheduledOfficerIds = scheduledOfficers?.map(s => s.officer_id) || [];
+
+      // Filter out already scheduled officers
+      return allOfficers.filter(officer => !scheduledOfficerIds.includes(officer.id));
+    },
+    enabled: open,
+  });
+
+  const handleAdd = () => {
+    if (!selectedOfficer || !position) {
+      toast.error("Please select an officer and position");
+      return;
+    }
+
+    onAddOfficer({
+      officerId: selectedOfficer,
+      shiftId: shift.id,
+      position: position
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Officer to {shift.name}</DialogTitle>
+          <DialogDescription>
+            Add an officer to the schedule for {date}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Officer</Label>
+            <Select value={selectedOfficer} onValueChange={setSelectedOfficer}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select officer" />
+              </SelectTrigger>
+              <SelectContent>
+                {officers?.map((officer) => (
+                  <SelectItem key={officer.id} value={officer.id}>
+                    {officer.full_name} (Badge: {officer.badge_number})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Position</Label>
+            <Input
+              placeholder="Enter position"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+            />
+          </div>
+          <Button onClick={handleAdd} disabled={isAdding}>
+            {isAdding ? "Adding..." : "Add Officer"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };

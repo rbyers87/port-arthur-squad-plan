@@ -6,8 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { format, startOfWeek, addDays } from "date-fns";
-import { Calendar, Plus, Edit2, Clock } from "lucide-react";
+import { format, startOfWeek, addDays, addWeeks, subWeeks, isWithinInterval } from "date-fns";
+import { Calendar, Plus, Edit2, Clock, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { ScheduleManagementDialog } from "./ScheduleManagementDialog";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { PositionEditor } from "./PositionEditor";
@@ -28,10 +28,30 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     type: "recurring" | "exception";
     date: string;
     shift: any;
+    existingPTO?: {
+      id: string;
+      ptoType: string;
+      startTime: string;
+      endTime: string;
+      isFullShift: boolean;
+    };
   } | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
-  const weekStart = startOfWeek(new Date(), { weekStartsOn: 0 });
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
   const queryClient = useQueryClient();
+
+  // Week navigation functions
+  const goToPreviousWeek = () => {
+    setCurrentWeekStart(subWeeks(currentWeekStart, 1));
+  };
+
+  const goToNextWeek = () => {
+    setCurrentWeekStart(addWeeks(currentWeekStart, 1));
+  };
+
+  const goToCurrentWeek = () => {
+    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
+  };
 
   // Function to extract last name from full name
   const getLastName = (fullName: string) => {
@@ -60,28 +80,31 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   });
 
   const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
-    queryKey: ["weekly-schedule", selectedOfficerId, weekStart.toISOString()],
+    queryKey: ["weekly-schedule", selectedOfficerId, currentWeekStart.toISOString()],
     queryFn: async () => {
       const targetUserId = isAdminOrSupervisor ? selectedOfficerId : userId;
       const weekDates = Array.from({ length: 7 }, (_, i) => 
-        format(addDays(weekStart, i), "yyyy-MM-dd")
+        format(addDays(currentWeekStart, i), "yyyy-MM-dd")
       );
 
-      // Get recurring schedules
+      // Get recurring schedules - filter by active schedules for the current week
       const { data: recurringData, error: recurringError } = await supabase
         .from("recurring_schedules")
         .select(`
           *,
           shift_types(name, start_time, end_time)
         `)
-        .eq("officer_id", targetUserId);
+        .eq("officer_id", targetUserId)
+        // Filter recurring schedules that are active during the current week
+        .lte("start_date", format(addDays(currentWeekStart, 6), "yyyy-MM-dd")) // Start date before end of week
+        .or(`end_date.is.null,end_date.gte.${format(currentWeekStart, "yyyy-MM-dd")}`); // End date after start of week or null
 
       if (recurringError) {
         console.error("Recurring error:", recurringError);
         throw recurringError;
       }
 
-      // Get exceptions
+      // Get exceptions for the specific week
       const { data: exceptionsData, error: exceptionsError } = await supabase
         .from("schedule_exceptions")
         .select(`
@@ -100,7 +123,24 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
       const dailySchedules = weekDates.map((date, idx) => {
         const dayOfWeek = idx; // 0 = Sunday, 1 = Monday, etc.
         const exception = exceptionsData?.find(e => e.date === date);
-        const recurring = recurringData?.find(r => r.day_of_week === dayOfWeek);
+        
+        // Find recurring schedule for this day of week that's active on this date
+        const recurring = recurringData?.find(r => {
+          if (r.day_of_week !== dayOfWeek) return false;
+          
+          // Check if the recurring schedule is active on this specific date
+          const scheduleStartDate = new Date(r.start_date);
+          const scheduleEndDate = r.end_date ? new Date(r.end_date) : null;
+          const currentDate = new Date(date);
+          
+          // Schedule is active if:
+          // 1. Current date is on or after start date
+          // 2. AND current date is on or before end date (if end date exists)
+          const isAfterStart = currentDate >= scheduleStartDate;
+          const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
+          
+          return isAfterStart && isBeforeEnd;
+        });
 
         let shiftInfo = null;
         
@@ -117,9 +157,25 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
             scheduleType: "exception" as const,
             shift: exception.shift_types,
             isOff: exception.is_off,
-            reason: exception.reason
+            reason: exception.reason,
+            // Add PTO detection
+            hasPTO: exception.is_off,
+            ptoData: exception.is_off ? {
+              id: exception.id,
+              ptoType: exception.reason,
+              startTime: exception.custom_start_time || exception.shift_types?.start_time,
+              endTime: exception.custom_end_time || exception.shift_types?.end_time,
+              isFullShift: !exception.custom_start_time && !exception.custom_end_time
+            } : undefined
           };
         } else if (recurring) {
+          // For recurring schedules, check if there's a PTO exception for this date
+          const ptoException = exceptionsData?.find(e => 
+            e.officer_id === targetUserId && 
+            e.date === date && 
+            e.is_off
+          );
+          
           shiftInfo = {
             type: recurring.shift_types?.name,
             time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
@@ -127,7 +183,16 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
             scheduleId: recurring.id,
             scheduleType: "recurring" as const,
             shift: recurring.shift_types,
-            isOff: false
+            isOff: false,
+            // Add PTO detection
+            hasPTO: !!ptoException,
+            ptoData: ptoException ? {
+              id: ptoException.id,
+              ptoType: ptoException.reason,
+              startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
+              endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
+              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+            } : undefined
           };
         }
 
@@ -150,6 +215,77 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
 
   const updatePositionMutation = usePositionMutation();
 
+  // Add mutation for removing PTO
+  const removePTOMutation = useMutation({
+    mutationFn: async (ptoData: { id: string; officerId: string; date: string; shiftTypeId: string; ptoType: string; startTime: string; endTime: string }) => {
+      // Calculate hours to restore
+      const calculateHours = (start: string, end: string) => {
+        const [startHour, startMin] = start.split(":").map(Number);
+        const [endHour, endMin] = end.split(":").map(Number);
+        const startMinutes = startHour * 60 + startMin;
+        const endMinutes = endHour * 60 + endMin;
+        return (endMinutes - startMinutes) / 60;
+      };
+
+      const hoursUsed = calculateHours(ptoData.startTime, ptoData.endTime);
+
+      // Restore PTO balance
+      const PTO_TYPES = [
+        { value: "vacation", label: "Vacation", column: "vacation_hours" },
+        { value: "holiday", label: "Holiday", column: "holiday_hours" },
+        { value: "sick", label: "Sick", column: "sick_hours" },
+        { value: "comp", label: "Comp", column: "comp_hours" },
+      ];
+
+      const ptoColumn = PTO_TYPES.find((t) => t.value === ptoData.ptoType)?.column;
+      if (ptoColumn) {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", ptoData.officerId)
+          .single();
+
+        if (profileError) throw profileError;
+
+        const currentBalance = profile[ptoColumn as keyof typeof profile] as number;
+        
+        const { error: restoreError } = await supabase
+          .from("profiles")
+          .update({
+            [ptoColumn]: currentBalance + hoursUsed,
+          })
+          .eq("id", ptoData.officerId);
+
+        if (restoreError) throw restoreError;
+      }
+
+      // Delete the PTO exception
+      const { error: deleteError } = await supabase
+        .from("schedule_exceptions")
+        .delete()
+        .eq("id", ptoData.id);
+
+      if (deleteError) throw deleteError;
+
+      // Also delete any associated working time exception
+      await supabase
+        .from("schedule_exceptions")
+        .delete()
+        .eq("officer_id", ptoData.officerId)
+        .eq("date", ptoData.date)
+        .eq("shift_type_id", ptoData.shiftTypeId)
+        .eq("is_off", false);
+    },
+    onSuccess: () => {
+      toast.success("PTO removed and balance restored");
+      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to remove PTO");
+    },
+  });
+
   const handleSavePosition = (scheduleId: string, type: "recurring" | "exception", positionName: string) => {
     updatePositionMutation.mutate(
       { scheduleId, type, positionName },
@@ -157,7 +293,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
         onSuccess: () => {
           // Force refresh the weekly schedule data
           queryClient.invalidateQueries({ 
-            queryKey: ["weekly-schedule", selectedOfficerId, weekStart.toISOString()] 
+            queryKey: ["weekly-schedule", selectedOfficerId, currentWeekStart.toISOString()] 
           });
           setEditingSchedule(null);
         }
@@ -175,15 +311,33 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
       scheduleId: schedule.scheduleId,
       type: schedule.scheduleType,
       date: date,
-      shift: schedule.shift
+      shift: schedule.shift,
+      // Pass existing PTO data if available
+      ...(schedule.hasPTO && schedule.ptoData ? { existingPTO: schedule.ptoData } : {})
     });
     setPtoDialogOpen(true);
+  };
+
+  const handleRemovePTO = (schedule: any, date: string) => {
+    if (!schedule.hasPTO || !schedule.ptoData) return;
+
+    const ptoData = {
+      id: schedule.ptoData.id,
+      officerId: selectedOfficerId,
+      date: date,
+      shiftTypeId: schedule.shift.id,
+      ptoType: schedule.ptoData.ptoType,
+      startTime: schedule.ptoData.startTime,
+      endTime: schedule.ptoData.endTime
+    };
+
+    removePTOMutation.mutate(ptoData);
   };
 
   // Function to refresh the weekly schedule data
   const refreshWeeklySchedule = () => {
     queryClient.invalidateQueries({ 
-      queryKey: ["weekly-schedule", selectedOfficerId, weekStart.toISOString()] 
+      queryKey: ["weekly-schedule", selectedOfficerId, currentWeekStart.toISOString()] 
     });
   };
 
@@ -225,6 +379,8 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   }
 
   const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const weekEnd = addDays(currentWeekStart, 6);
+  const isCurrentWeek = startOfWeek(new Date(), { weekStartsOn: 0 }).getTime() === currentWeekStart.getTime();
 
   return (
     <>
@@ -233,7 +389,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Weekly Schedule - {format(weekStart, "MMM d")} - {format(addDays(weekStart, 6), "MMM d, yyyy")}
+              Weekly Schedule
             </CardTitle>
             {isAdminOrSupervisor && (
               <div className="flex items-center gap-3">
@@ -256,6 +412,48 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
               </div>
             )}
           </div>
+          
+          {/* Week Navigation */}
+          <div className="flex items-center justify-between mt-4">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToPreviousWeek}
+                title="Previous Week"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="text-center">
+                <h3 className="text-lg font-semibold">
+                  {format(currentWeekStart, "MMM d")} - {format(weekEnd, "MMM d, yyyy")}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Week of {format(currentWeekStart, "MMMM d, yyyy")}
+                </p>
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToNextWeek}
+                title="Next Week"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <Button
+              variant={isCurrentWeek ? "outline" : "default"}
+              size="sm"
+              onClick={goToCurrentWeek}
+              disabled={isCurrentWeek}
+            >
+              Today
+            </Button>
+          </div>
+
           {isAdminOrSupervisor && selectedOfficerId && (
             <p className="text-sm text-muted-foreground mt-2">
               Viewing schedule for: {profiles?.find(p => p.id === selectedOfficerId)?.full_name}
@@ -300,24 +498,48 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
                           )}
                         </div>
                         
-                        {isAdminOrSupervisor && !shiftInfo.isOff && (
+                        {isAdminOrSupervisor && (
                           <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleEditClick(shiftInfo)}
-                              title="Edit Position"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleAssignPTO(shiftInfo, date)}
-                              title="Assign PTO"
-                            >
-                              <Clock className="h-4 w-4" />
-                            </Button>
+                            {!shiftInfo.isOff && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditClick(shiftInfo)}
+                                title="Edit Position"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {shiftInfo.hasPTO ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => handleAssignPTO(shiftInfo, date)}
+                                  title="Edit PTO"
+                                >
+                                  <Clock className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRemovePTO(shiftInfo, date)}
+                                  disabled={removePTOMutation.isPending}
+                                  title="Remove PTO"
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleAssignPTO(shiftInfo, date)}
+                                title="Assign PTO"
+                              >
+                                <Clock className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         )}
                       </>
@@ -360,7 +582,8 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
                 officerId: selectedOfficerId,
                 name: profiles?.find(p => p.id === selectedOfficerId)?.full_name || "Unknown",
                 scheduleId: selectedSchedule.scheduleId,
-                type: selectedSchedule.type
+                type: selectedSchedule.type,
+                ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
               }}
               shift={selectedSchedule.shift}
               date={selectedSchedule.date}
