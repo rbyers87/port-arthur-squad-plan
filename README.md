@@ -78,3 +78,5 @@ Need ability to add an officer to another shift.  To add someone to a shift on t
 For Staff Profiles, I want Service Credit listed.
 
 Need a way to view an individuals upcoming scheduled shifts.  When request PTO and approved, need to remove from scheduled shift and place at bottom of daily view for those shifts to reflect the PTO used.  The bottom of the daily view needs to load all schedueld PTO for that day for that shift.
+
+For Daily Views: Assigned position "other" want excluded from minimum staff count.  This will be used for training/schools.  Maybe separate "other" from the rest of the list at the bottom?
