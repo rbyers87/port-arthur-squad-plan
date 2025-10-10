@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, Clock, Edit2, Calendar } from "lucide-react";
+import { Users, Clock, Edit2, Calendar, Award } from "lucide-react";
 import { OfficerProfileDialog } from "./OfficerProfileDialog";
 import { OfficerScheduleManager } from "./OfficerScheduleManager";
+import { format } from "date-fns";
 
 export const StaffManagement = () => {
   const [editingOfficer, setEditingOfficer] = useState<any>(null);
@@ -29,10 +30,22 @@ export const StaffManagement = () => {
       if (rolesError) throw rolesError;
 
       // Combine the data and sort by last name
-      const officers = profilesData?.map(profile => ({
-        ...profile,
-        roles: rolesData?.filter(r => r.user_id === profile.id).map(r => r.role) || []
-      })).sort((a, b) => {
+      const officersWithCredit = await Promise.all(
+        profilesData.map(async (profile) => {
+          const { data: creditData } = await supabase.rpc("get_service_credit", {
+            profile_id: profile.id,
+          });
+
+          return {
+            ...profile,
+            service_credit: creditData || 0,
+            roles: rolesData?.filter(r => r.user_id === profile.id).map(r => r.role) || []
+          };
+        })
+      );
+
+      // Sort by last name
+      const officers = officersWithCredit.sort((a, b) => {
         // Extract last names (assumes last name is the last word)
         const lastNameA = a.full_name.split(' ').pop()?.toLowerCase() || '';
         const lastNameB = b.full_name.split(' ').pop()?.toLowerCase() || '';
@@ -94,6 +107,23 @@ export const StaffManagement = () => {
                         <Clock className="h-3 w-3 text-muted-foreground" />
                         <span className="text-muted-foreground">Holiday:</span>
                         <span className="font-medium">{officer.holiday_hours || 0}h</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Award className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Service Credit:</span>
+                        <div className="space-y-0.5">
+                          <span className="font-medium">{officer.service_credit?.toFixed(1) || 0} yrs</span>
+                          {officer.hire_date && (
+                            <p className="text-xs text-muted-foreground">
+                              Since {format(new Date(officer.hire_date), "MMM yyyy")}
+                            </p>
+                          )}
+                          {officer.service_credit_override !== null && (
+                            <p className="text-xs text-amber-600 dark:text-amber-500">
+                              (Adjusted {officer.service_credit_override > 0 ? '+' : ''}{officer.service_credit_override.toFixed(1)} yrs)
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

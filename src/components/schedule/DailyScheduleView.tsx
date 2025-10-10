@@ -50,6 +50,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
     "District 6",
     "District 7/8",
     "District 9",
+    "Other (Custom)",
   ];
 
   const { data: scheduleData, isLoading } = useQuery({
@@ -171,8 +172,17 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
           o.position?.toLowerCase().includes('supervisor')
         ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
+        // Special assignment officers (those with "Other (Custom)" positions or custom text)
+        const specialAssignmentOfficers = officers.filter(o => {
+          const position = o.position?.toLowerCase() || '';
+          return position.includes('other') || 
+                 (o.position && !predefinedPositions.includes(o.position));
+        }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        // Regular officers (exclude supervisors and special assignments)
         const regularOfficers = officers.filter(o => 
-          !o.position?.toLowerCase().includes('supervisor')
+          !o.position?.toLowerCase().includes('supervisor') && 
+          !specialAssignmentOfficers.includes(o)
         ).sort((a, b) => {
           // Sort by district number if applicable
           const aMatch = a.position?.match(/district\s*(\d+)/i);
@@ -194,6 +204,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
           currentOfficers: regularOfficers.length,
           supervisors,
           officers: regularOfficers,
+          specialAssignmentOfficers,
           ptoRecords: shiftPTORecords,
         };
       });
@@ -237,12 +248,29 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
   });
 
   const handleSavePosition = (scheduleId: string, type: "recurring" | "exception") => {
-    const finalPosition = editPosition === "Other" ? customPosition : editPosition;
+    const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
     if (!finalPosition) {
       toast.error("Please select or enter a position");
       return;
     }
     updatePositionMutation.mutate({ scheduleId, type, positionName: finalPosition });
+  };
+
+  const handleEditClick = (officer: any) => {
+    setEditingSchedule(`${officer.scheduleId}-${officer.type}`);
+    
+    // Check if the officer's current position is a custom position
+    const isCustomPosition = officer.position && !predefinedPositions.includes(officer.position);
+    
+    if (isCustomPosition) {
+      // If it's a custom position, set to "Other (Custom)" and populate the custom field
+      setEditPosition("Other (Custom)");
+      setCustomPosition(officer.position);
+    } else {
+      // If it's a predefined position, use it directly
+      setEditPosition(officer.position || "");
+      setCustomPosition("");
+    }
   };
 
   if (isLoading) {
@@ -342,12 +370,11 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                                     {pos}
                                   </SelectItem>
                                 ))}
-                                <SelectItem value="Other">Other (Custom)</SelectItem>
                               </SelectContent>
                             </Select>
-                            {editPosition === "Other" && (
+                            {editPosition === "Other (Custom)" && (
                               <Input
-                                placeholder="Enter custom position"
+                                placeholder="Enter special assignment"
                                 value={customPosition}
                                 onChange={(e) => setCustomPosition(e.target.value)}
                                 className="w-48"
@@ -383,10 +410,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                              setEditingSchedule(`${officer.scheduleId}-${officer.type}`);
-                              setEditPosition(officer.position || "");
-                            }}
+                            onClick={() => handleEditClick(officer)}
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
@@ -455,12 +479,11 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                                     {pos}
                                   </SelectItem>
                                 ))}
-                                <SelectItem value="Other">Other (Custom)</SelectItem>
                               </SelectContent>
                             </Select>
-                            {editPosition === "Other" && (
+                            {editPosition === "Other (Custom)" && (
                               <Input
-                                placeholder="Enter custom position"
+                                placeholder="Enter special assignment"
                                 value={customPosition}
                                 onChange={(e) => setCustomPosition(e.target.value)}
                                 className="w-48"
@@ -496,10 +519,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                              setEditingSchedule(`${officer.scheduleId}-${officer.type}`);
-                              setEditPosition(officer.position || "");
-                            }}
+                            onClick={() => handleEditClick(officer)}
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
@@ -526,6 +546,114 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                   ))
                 )}
               </div>
+
+              {/* Special Assignment Section */}
+              {shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h4 className="font-semibold text-sm">Special Assignment</h4>
+                    <Badge variant="outline">{shiftData.specialAssignmentOfficers.length}</Badge>
+                  </div>
+                  {shiftData.specialAssignmentOfficers.map((officer) => (
+                    <div
+                      key={`${officer.scheduleId}-${officer.type}`}
+                      className="flex items-center justify-between p-3 bg-blue-50 rounded-md border border-blue-200"
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium">{officer.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
+                          {officer.customTime && (
+                            <Badge variant="outline" className="text-xs">
+                              {officer.customTime}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
+                        <div className="flex items-center gap-2">
+                          <div className="space-y-2">
+                            <Select value={editPosition} onValueChange={setEditPosition}>
+                              <SelectTrigger className="w-48">
+                                <SelectValue placeholder="Select position" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {predefinedPositions.map((pos) => (
+                                  <SelectItem key={pos} value={pos}>
+                                    {pos}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {editPosition === "Other (Custom)" && (
+                              <Input
+                                placeholder="Enter special assignment"
+                                value={customPosition}
+                                onChange={(e) => setCustomPosition(e.target.value)}
+                                className="w-48"
+                              />
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleSavePosition(officer.scheduleId, officer.type)}
+                            disabled={updatePositionMutation.isPending}
+                          >
+                            <Save className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingSchedule(null);
+                              setEditPosition("");
+                              setCustomPosition("");
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <Badge variant="default" className="bg-blue-600 mb-1">
+                              Special Assignment
+                            </Badge>
+                            <p className="text-xs text-muted-foreground max-w-32 truncate">
+                              {officer.position}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditClick(officer)}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedOfficer({
+                                officerId: officer.officerId,
+                                name: officer.name,
+                                scheduleId: officer.scheduleId,
+                                type: officer.type,
+                              });
+                              setSelectedShift(shiftData.shift);
+                              setPtoDialogOpen(true);
+                            }}
+                            title="Assign PTO"
+                          >
+                            <Clock className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Other (PTO) Section */}
               {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
