@@ -82,3 +82,5 @@ Need a way to view an individuals upcoming scheduled shifts.  When request PTO a
 For Daily Views: Assigned position "other" want excluded from minimum staff count.  This will be used for training/schools.  Maybe separate "other" from the rest of the list at the bottom?
 
 Add export function from daily view to be used as a riding list.  Export as pdf to print.
+
+Add ability to add notes when assigning officer on daily view.  "court at 11:30" "working trade for Ofc Jones" "10-6 for training at 14:30"
