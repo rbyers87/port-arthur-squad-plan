@@ -86,3 +86,5 @@ Add export function from daily view to be used as a riding list.  Export as pdf 
 Add ability to add notes when assigning officer on daily view.  "court at 11:30" "working trade for Ofc Jones" "10-6 for training at 14:30" Make both PTO and Special Assigment have count but no minimum, *Other (PTO) already does this.
 
 "Work Schedule" is recurring schedule.  Add new work schedule refers to creating a new recurring schedule.  Still need ability to add officer to daily view from accepting a vacancy alert and manually from a supvervisor profile on the daily view schedule.
+
+Daily View shift selector is not loading until you change the date.  Need shift selector to reload page after it is changed.
