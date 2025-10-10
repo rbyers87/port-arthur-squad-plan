@@ -73,7 +73,11 @@ export const DailyScheduleManagement = () => {
         </CardContent>
       </Card>
 
-      <DailyScheduleView selectedDate={selectedDate} filterShiftId={selectedShiftId} />
+      <DailyScheduleView 
+        selectedDate={selectedDate} 
+        filterShiftId={selectedShiftId} 
+        key={`${selectedDate.toISOString()}-${selectedShiftId}`}
+      />
     </div>
   );
 };
