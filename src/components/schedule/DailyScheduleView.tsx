@@ -16,6 +16,8 @@ import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 interface DailyScheduleViewProps {
   selectedDate: Date;
   filterShiftId?: string;
+  isAdminOrSupervisor?: boolean;
+  userId?: string;
 }
 
 export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: DailyScheduleViewProps) => {

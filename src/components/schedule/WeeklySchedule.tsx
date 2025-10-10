@@ -10,6 +10,8 @@ import { format, startOfWeek, addDays } from "date-fns";
 import { Calendar, Plus, Edit2, Clock } from "lucide-react";
 import { ScheduleManagementDialog } from "./ScheduleManagementDialog";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
+import { PositionEditor } from "./PositionEditor";
+import { usePositionMutation } from "@/hooks/usePositionMutation";
 import { toast } from "sonner";
 
 interface WeeklyScheduleProps {
@@ -27,7 +29,9 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     date: string;
     shift: any;
   } | null>(null);
+  const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 0 });
+  const queryClient = useQueryClient();
 
   // Function to extract last name from full name
   const getLastName = (fullName: string) => {
@@ -55,7 +59,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     enabled: isAdminOrSupervisor,
   });
 
-  const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
+  const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
     queryKey: ["weekly-schedule", selectedOfficerId, weekStart.toISOString()],
     queryFn: async () => {
       const targetUserId = isAdminOrSupervisor ? selectedOfficerId : userId;
@@ -63,10 +67,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
         format(addDays(weekStart, i), "yyyy-MM-dd")
       );
 
-      console.log("Fetching for user:", targetUserId);
-      console.log("Week dates:", weekDates);
-
-      // Get recurring schedules - SIMPLIFIED
+      // Get recurring schedules
       const { data: recurringData, error: recurringError } = await supabase
         .from("recurring_schedules")
         .select(`
@@ -80,7 +81,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
         throw recurringError;
       }
 
-      // Get exceptions - SIMPLIFIED
+      // Get exceptions
       const { data: exceptionsData, error: exceptionsError } = await supabase
         .from("schedule_exceptions")
         .select(`
@@ -94,9 +95,6 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
         console.error("Exceptions error:", exceptionsError);
         throw exceptionsError;
       }
-
-      console.log("Found recurring:", recurringData);
-      console.log("Found exceptions:", exceptionsData);
 
       // Build schedule for each day
       const dailySchedules = weekDates.map((date, idx) => {
@@ -150,7 +148,27 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     },
   });
 
-  const queryClient = useQueryClient();
+  const updatePositionMutation = usePositionMutation();
+
+  const handleSavePosition = (scheduleId: string, type: "recurring" | "exception", positionName: string) => {
+    updatePositionMutation.mutate(
+      { scheduleId, type, positionName },
+      {
+        onSuccess: () => {
+          // Force refresh the weekly schedule data
+          queryClient.invalidateQueries({ 
+            queryKey: ["weekly-schedule", selectedOfficerId, weekStart.toISOString()] 
+          });
+          setEditingSchedule(null);
+        }
+      }
+    );
+  };
+
+  const handleEditClick = (shiftInfo: any) => {
+    const scheduleKey = `${shiftInfo.scheduleId}-${shiftInfo.scheduleType}`;
+    setEditingSchedule(scheduleKey);
+  };
 
   const handleAssignPTO = (schedule: any, date: string) => {
     setSelectedSchedule({
@@ -160,6 +178,13 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
       shift: schedule.shift
     });
     setPtoDialogOpen(true);
+  };
+
+  // Function to refresh the weekly schedule data
+  const refreshWeeklySchedule = () => {
+    queryClient.invalidateQueries({ 
+      queryKey: ["weekly-schedule", selectedOfficerId, weekStart.toISOString()] 
+    });
   };
 
   const isLoading = schedulesLoading || (isAdminOrSupervisor && profilesLoading);
@@ -251,42 +276,51 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
                 
                 {shiftInfo ? (
                   <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="font-medium">{shiftInfo.type}</p>
-                      {shiftInfo.time && <p className="text-sm text-muted-foreground">{shiftInfo.time}</p>}
-                      {shiftInfo.position && (
-                        <Badge variant="secondary" className="mt-1">
-                          {shiftInfo.position}
-                        </Badge>
-                      )}
-                      {shiftInfo.isOff && (
-                        <Badge variant="destructive" className="mt-1">
-                          {shiftInfo.reason || "Time Off"}
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    {isAdminOrSupervisor && (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => toast.info("Edit position feature coming soon")}
-                          title="Edit Position"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        {!shiftInfo.isOff && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleAssignPTO(shiftInfo, date)}
-                            title="Assign PTO"
-                          >
-                            <Clock className="h-4 w-4" />
-                          </Button>
+                    {editingSchedule === `${shiftInfo.scheduleId}-${shiftInfo.scheduleType}` ? (
+                      <PositionEditor
+                        currentPosition={shiftInfo.position || ""}
+                        onSave={(positionName) => handleSavePosition(shiftInfo.scheduleId, shiftInfo.scheduleType, positionName)}
+                        onCancel={() => setEditingSchedule(null)}
+                        isSaving={updatePositionMutation.isPending}
+                      />
+                    ) : (
+                      <>
+                        <div className="text-right">
+                          <p className="font-medium">{shiftInfo.type}</p>
+                          {shiftInfo.time && <p className="text-sm text-muted-foreground">{shiftInfo.time}</p>}
+                          {shiftInfo.position && (
+                            <Badge variant="secondary" className="mt-1">
+                              {shiftInfo.position}
+                            </Badge>
+                          )}
+                          {shiftInfo.isOff && (
+                            <Badge variant="destructive" className="mt-1">
+                              {shiftInfo.reason || "Time Off"}
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {isAdminOrSupervisor && !shiftInfo.isOff && (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEditClick(shiftInfo)}
+                              title="Edit Position"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleAssignPTO(shiftInfo, date)}
+                              title="Assign PTO"
+                            >
+                              <Clock className="h-4 w-4" />
+                            </Button>
+                          </div>
                         )}
-                      </div>
+                      </>
                     )}
                   </div>
                 ) : (
@@ -315,7 +349,13 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
           {selectedSchedule && (
             <PTOAssignmentDialog
               open={ptoDialogOpen}
-              onOpenChange={setPtoDialogOpen}
+              onOpenChange={(open) => {
+                setPtoDialogOpen(open);
+                // Refresh the weekly schedule when the PTO dialog closes
+                if (!open) {
+                  refreshWeeklySchedule();
+                }
+              }}
               officer={{
                 officerId: selectedOfficerId,
                 name: profiles?.find(p => p.id === selectedOfficerId)?.full_name || "Unknown",
