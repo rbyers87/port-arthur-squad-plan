@@ -10,7 +10,12 @@ import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { DailyScheduleView } from "./DailyScheduleView";
 
-export const DailyScheduleManagement = () => {
+interface DailyScheduleManagementProps {
+  isAdminOrSupervisor: boolean;
+  userId: string;
+}
+
+export const DailyScheduleManagement = ({ isAdminOrSupervisor, userId }: DailyScheduleManagementProps) => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
 
@@ -77,6 +82,8 @@ export const DailyScheduleManagement = () => {
         selectedDate={selectedDate} 
         filterShiftId={selectedShiftId} 
         key={`${selectedDate.toISOString()}-${selectedShiftId}`}
+        isAdminOrSupervisor={isAdminOrSupervisor}
+        userId={userId}
       />
     </div>
   );
