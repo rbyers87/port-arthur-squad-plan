@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock } from "lucide-react";
+import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
@@ -31,6 +31,13 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
     name: string;
     scheduleId: string;
     type: "recurring" | "exception";
+    existingPTO?: {
+      id: string;
+      ptoType: string;
+      startTime: string;
+      endTime: string;
+      isFullShift: boolean;
+    };
   } | null>(null);
   const [selectedShift, setSelectedShift] = useState<{
     id: string;
@@ -127,12 +134,15 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
         const shiftPTORecords = ptoExceptions?.filter(e => 
           e.shift_types?.id === shift.id
         ).map(e => ({
+          id: e.id,
           officerId: e.officer_id,
           name: e.profiles?.full_name || "Unknown",
           badge: e.profiles?.badge_number,
           ptoType: e.reason || "PTO",
           startTime: e.custom_start_time || shift.start_time,
           endTime: e.custom_end_time || shift.end_time,
+          isFullShift: !e.custom_start_time && !e.custom_end_time,
+          shiftTypeId: shift.id
         })) || [];
 
         const officers = [
@@ -249,6 +259,77 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
     },
   });
 
+  // Add mutation for removing PTO
+  const removePTOMutation = useMutation({
+    mutationFn: async (ptoRecord: any) => {
+      // Calculate hours to restore
+      const calculateHours = (start: string, end: string) => {
+        const [startHour, startMin] = start.split(":").map(Number);
+        const [endHour, endMin] = end.split(":").map(Number);
+        const startMinutes = startHour * 60 + startMin;
+        const endMinutes = endHour * 60 + endMin;
+        return (endMinutes - startMinutes) / 60;
+      };
+
+      const hoursUsed = calculateHours(ptoRecord.startTime, ptoRecord.endTime);
+
+      // Restore PTO balance
+      const PTO_TYPES = [
+        { value: "vacation", label: "Vacation", column: "vacation_hours" },
+        { value: "holiday", label: "Holiday", column: "holiday_hours" },
+        { value: "sick", label: "Sick", column: "sick_hours" },
+        { value: "comp", label: "Comp", column: "comp_hours" },
+      ];
+
+      const ptoColumn = PTO_TYPES.find((t) => t.value === ptoRecord.ptoType)?.column;
+      if (ptoColumn) {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", ptoRecord.officerId)
+          .single();
+
+        if (profileError) throw profileError;
+
+        const currentBalance = profile[ptoColumn as keyof typeof profile] as number;
+        
+        const { error: restoreError } = await supabase
+          .from("profiles")
+          .update({
+            [ptoColumn]: currentBalance + hoursUsed,
+          })
+          .eq("id", ptoRecord.officerId);
+
+        if (restoreError) throw restoreError;
+      }
+
+      // Delete the PTO exception
+      const { error: deleteError } = await supabase
+        .from("schedule_exceptions")
+        .delete()
+        .eq("id", ptoRecord.id);
+
+      if (deleteError) throw deleteError;
+
+      // Also delete any associated working time exception
+      await supabase
+        .from("schedule_exceptions")
+        .delete()
+        .eq("officer_id", ptoRecord.officerId)
+        .eq("date", dateStr)
+        .eq("shift_type_id", ptoRecord.shiftTypeId)
+        .eq("is_off", false);
+    },
+    onSuccess: () => {
+      toast.success("PTO removed and balance restored");
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to remove PTO");
+    },
+  });
+
   const handleSavePosition = (scheduleId: string, type: "recurring" | "exception") => {
     const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
     if (!finalPosition) {
@@ -273,6 +354,29 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
       setEditPosition(officer.position || "");
       setCustomPosition("");
     }
+  };
+
+  const handleEditPTO = (ptoRecord: any) => {
+    setSelectedOfficer({
+      officerId: ptoRecord.officerId,
+      name: ptoRecord.name,
+      scheduleId: ptoRecord.id, // Use the PTO exception ID as scheduleId
+      type: "exception" as const,
+      existingPTO: {
+        id: ptoRecord.id,
+        ptoType: ptoRecord.ptoType,
+        startTime: ptoRecord.startTime,
+        endTime: ptoRecord.endTime,
+        isFullShift: ptoRecord.isFullShift
+      }
+    });
+    setSelectedShift({
+      id: ptoRecord.shiftTypeId,
+      name: "Unknown Shift", // We'll get this from the schedule data
+      start_time: ptoRecord.startTime,
+      end_time: ptoRecord.endTime
+    });
+    setPtoDialogOpen(true);
   };
 
   if (isLoading) {
@@ -666,20 +770,39 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all" }: Daily
                   </div>
                   {shiftData.ptoRecords.map((record, idx) => (
                     <div
-                      key={`${record.officerId}-${idx}`}
+                      key={`${record.id}-${idx}`}
                       className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
                     >
                       <div className="flex-1">
                         <p className="font-medium">{record.name}</p>
                         <p className="text-sm text-muted-foreground">Badge #{record.badge}</p>
                       </div>
-                      <div className="text-right">
-                        <Badge variant="destructive" className="mb-1">
-                          {record.ptoType}
-                        </Badge>
-                        <p className="text-xs text-muted-foreground">
-                          {record.startTime} - {record.endTime}
-                        </p>
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <Badge variant="destructive" className="mb-1">
+                            {record.ptoType}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground">
+                            {record.startTime} - {record.endTime}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleEditPTO(record)}
+                          title="Edit PTO"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removePTOMutation.mutate(record)}
+                          disabled={removePTOMutation.isPending}
+                          title="Remove PTO"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </div>
                     </div>
                   ))}

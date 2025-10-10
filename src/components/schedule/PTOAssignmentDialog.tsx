@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -24,6 +24,13 @@ interface PTOAssignmentDialogProps {
     name: string;
     scheduleId: string;
     type: "recurring" | "exception";
+    existingPTO?: {
+      id: string;
+      ptoType: string;
+      startTime: string;
+      endTime: string;
+      isFullShift: boolean;
+    };
   };
   shift: {
     id: string;
@@ -49,10 +56,20 @@ export const PTOAssignmentDialog = ({
   date,
 }: PTOAssignmentDialogProps) => {
   const queryClient = useQueryClient();
-  const [ptoType, setPtoType] = useState("");
-  const [isFullShift, setIsFullShift] = useState(true);
-  const [startTime, setStartTime] = useState(shift.start_time);
-  const [endTime, setEndTime] = useState(shift.end_time);
+  const [ptoType, setPtoType] = useState(officer.existingPTO?.ptoType || "");
+  const [isFullShift, setIsFullShift] = useState(officer.existingPTO?.isFullShift ?? true);
+  const [startTime, setStartTime] = useState(officer.existingPTO?.startTime || shift.start_time);
+  const [endTime, setEndTime] = useState(officer.existingPTO?.endTime || shift.end_time);
+
+  // Reset form when dialog opens/closes or existingPTO changes
+  useEffect(() => {
+    if (open) {
+      setPtoType(officer.existingPTO?.ptoType || "");
+      setIsFullShift(officer.existingPTO?.isFullShift ?? true);
+      setStartTime(officer.existingPTO?.startTime || shift.start_time);
+      setEndTime(officer.existingPTO?.endTime || shift.end_time);
+    }
+  }, [open, officer.existingPTO, shift]);
 
   const calculateHours = (start: string, end: string) => {
     const [startHour, startMin] = start.split(":").map(Number);
@@ -62,13 +79,66 @@ export const PTOAssignmentDialog = ({
     return (endMinutes - startMinutes) / 60;
   };
 
+  // Helper function to restore PTO credit
+  const restorePTOCredit = async (existingPTO: any) => {
+    const ptoType = existingPTO.ptoType;
+    const startTime = existingPTO.startTime;
+    const endTime = existingPTO.endTime;
+    const hoursUsed = calculateHours(startTime, endTime);
+
+    // Restore PTO balance
+    const ptoColumn = PTO_TYPES.find((t) => t.value === ptoType)?.column;
+    if (ptoColumn) {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", officer.officerId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      const currentBalance = profile[ptoColumn as keyof typeof profile] as number;
+      
+      const { error: restoreError } = await supabase
+        .from("profiles")
+        .update({
+          [ptoColumn]: currentBalance + hoursUsed,
+        })
+        .eq("id", officer.officerId);
+
+      if (restoreError) throw restoreError;
+    }
+  };
+
   const assignPTOMutation = useMutation({
     mutationFn: async () => {
       const ptoStartTime = isFullShift ? shift.start_time : startTime;
       const ptoEndTime = isFullShift ? shift.end_time : endTime;
       const hoursUsed = calculateHours(ptoStartTime, ptoEndTime);
 
-      // Get current PTO balance
+      // If editing existing PTO, first restore the previous PTO balance
+      if (officer.existingPTO) {
+        await restorePTOCredit(officer.existingPTO);
+        
+        // Delete the existing PTO exception
+        const { error: deleteError } = await supabase
+          .from("schedule_exceptions")
+          .delete()
+          .eq("id", officer.existingPTO.id);
+
+        if (deleteError) throw deleteError;
+
+        // Also delete any associated working time exception for partial shifts
+        await supabase
+          .from("schedule_exceptions")
+          .delete()
+          .eq("officer_id", officer.officerId)
+          .eq("date", date)
+          .eq("shift_type_id", shift.id)
+          .eq("is_off", false);
+      }
+
+      // Get current PTO balance for the new PTO type
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("*")
@@ -92,8 +162,8 @@ export const PTOAssignmentDialog = ({
         shift_type_id: shift.id,
         is_off: true,
         reason: ptoType,
-        custom_start_time: ptoStartTime,
-        custom_end_time: ptoEndTime,
+        custom_start_time: isFullShift ? null : ptoStartTime,
+        custom_end_time: isFullShift ? null : ptoEndTime,
       });
 
       if (ptoError) throw ptoError;
@@ -101,15 +171,28 @@ export const PTOAssignmentDialog = ({
       // If partial shift, create working time exception for the remaining time
       if (!isFullShift) {
         // Calculate the working portion (the part that's NOT PTO)
-        // This is the time from PTO end to shift end
         const workStartTime = ptoEndTime;
         const workEndTime = shift.end_time;
 
         if (workStartTime !== workEndTime) {
-          // Get the current position name
-          const positionName = officer.type === "recurring" 
-            ? (await supabase.from("recurring_schedules").select("position_name").eq("id", officer.scheduleId).single()).data?.position_name
-            : (await supabase.from("schedule_exceptions").select("position_name").eq("id", officer.scheduleId).single()).data?.position_name;
+          // Get the current position name from the original schedule
+          let positionName = "";
+          
+          if (officer.type === "recurring") {
+            const { data: recurringData } = await supabase
+              .from("recurring_schedules")
+              .select("position_name")
+              .eq("id", officer.scheduleId)
+              .single();
+            positionName = recurringData?.position_name || "";
+          } else {
+            const { data: exceptionData } = await supabase
+              .from("schedule_exceptions")
+              .select("position_name")
+              .eq("id", officer.scheduleId)
+              .single();
+            positionName = exceptionData?.position_name || "";
+          }
 
           const { error: workError } = await supabase.from("schedule_exceptions").insert({
             officer_id: officer.officerId,
@@ -136,16 +219,55 @@ export const PTOAssignmentDialog = ({
       if (updateError) throw updateError;
     },
     onSuccess: () => {
-      toast.success("PTO assigned successfully");
+      toast.success(officer.existingPTO ? "PTO updated successfully" : "PTO assigned successfully");
       queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
       onOpenChange(false);
-      setPtoType("");
-      setIsFullShift(true);
-      setStartTime(shift.start_time);
-      setEndTime(shift.end_time);
+      resetForm();
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to assign PTO");
+    },
+  });
+
+  const resetForm = () => {
+    setPtoType("");
+    setIsFullShift(true);
+    setStartTime(shift.start_time);
+    setEndTime(shift.end_time);
+  };
+
+  const removePTOMutation = useMutation({
+    mutationFn: async () => {
+      if (!officer.existingPTO) return;
+
+      await restorePTOCredit(officer.existingPTO);
+
+      // Delete the PTO exception
+      const { error: deleteError } = await supabase
+        .from("schedule_exceptions")
+        .delete()
+        .eq("id", officer.existingPTO.id);
+
+      if (deleteError) throw deleteError;
+
+      // Also delete any associated working time exception
+      await supabase
+        .from("schedule_exceptions")
+        .delete()
+        .eq("officer_id", officer.officerId)
+        .eq("date", date)
+        .eq("shift_type_id", shift.id)
+        .eq("is_off", false);
+    },
+    onSuccess: () => {
+      toast.success("PTO removed and balance restored");
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+      onOpenChange(false);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to remove PTO");
     },
   });
 
@@ -153,9 +275,14 @@ export const PTOAssignmentDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Assign PTO</DialogTitle>
+          <DialogTitle>
+            {officer.existingPTO ? "Edit PTO" : "Assign PTO"}
+          </DialogTitle>
           <DialogDescription>
-            Assign PTO for {officer.name} on {shift.name}
+            {officer.existingPTO 
+              ? `Edit PTO for ${officer.name} on ${shift.name}`
+              : `Assign PTO for ${officer.name} on ${shift.name}`
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -216,7 +343,7 @@ export const PTOAssignmentDialog = ({
 
           {ptoType && (
             <div className="text-sm text-muted-foreground">
-              Hours to deduct: {calculateHours(
+              Hours to {officer.existingPTO ? 'update' : 'deduct'}: {calculateHours(
                 isFullShift ? shift.start_time : startTime,
                 isFullShift ? shift.end_time : endTime
               ).toFixed(2)}
@@ -224,16 +351,32 @@ export const PTOAssignmentDialog = ({
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => assignPTOMutation.mutate()}
-            disabled={!ptoType || assignPTOMutation.isPending}
-          >
-            {assignPTOMutation.isPending ? "Assigning..." : "Assign PTO"}
-          </Button>
+        <DialogFooter className="flex justify-between">
+          <div>
+            {officer.existingPTO && (
+              <Button
+                variant="destructive"
+                onClick={() => removePTOMutation.mutate()}
+                disabled={removePTOMutation.isPending}
+              >
+                {removePTOMutation.isPending ? "Removing..." : "Remove PTO"}
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => assignPTOMutation.mutate()}
+              disabled={!ptoType || assignPTOMutation.isPending}
+            >
+              {assignPTOMutation.isPending 
+                ? (officer.existingPTO ? "Updating..." : "Assigning...")
+                : (officer.existingPTO ? "Update PTO" : "Assign PTO")
+              }
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
