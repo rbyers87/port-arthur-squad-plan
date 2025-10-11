@@ -595,7 +595,8 @@ const renderOfficerSection = (title: string, officers: any[], minCount: number, 
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            {/* Regular Officers Section - NO TRASHCAN */}
+<div className="flex items-center gap-2">
   <div className="text-right min-w-32">
     <Badge variant="secondary">
       {officer.position || "No Position"}
@@ -611,19 +612,6 @@ const renderOfficerSection = (title: string, officers: any[], minCount: number, 
   >
     <Edit2 className="h-4 w-4" />
   </Button>
-  
-  {/* REMOVE BUTTON - Only show when officer has PTO */}
-  {officer.hasPTO && (
-    <Button
-      size="sm"
-      variant="ghost"
-      onClick={() => removePTOMutation.mutate(officer.ptoData)}
-      disabled={removePTOMutation.isPending}
-      title="Remove PTO"
-    >
-      <Trash2 className="h-4 w-4 text-destructive" />
-    </Button>
-  )}
   
   {/* ASSIGN PTO BUTTON - Show for all regularly scheduled officers */}
   <Button
