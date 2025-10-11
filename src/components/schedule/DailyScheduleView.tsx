@@ -243,55 +243,54 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
     },
   });
 
-  const updatePositionMutation = useMutation({
-    mutationFn: async ({ scheduleId, type, positionName, date, officerId, shiftTypeId }: { 
-      scheduleId: string; 
-      type: "recurring" | "exception";
-      positionName: string;
-      date?: string;
-      officerId?: string;
-      shiftTypeId?: string;
-    }) => {
-      // If it's a recurring schedule and we're making a daily adjustment, create an exception
-      if (type === "recurring") {
-        const { error } = await supabase
-          .from("schedule_exceptions")
-          .upsert({
-            officer_id: officerId,
-            date: dateStr,
-            shift_type_id: shiftTypeId,
-            is_off: false,
-            position_name: positionName,
-            custom_start_time: null,
-            custom_end_time: null
-          }, {
-            onConflict: 'officer_id,date,shift_type_id'
-          });
+const updatePositionMutation = useMutation({
+  mutationFn: async ({ scheduleId, type, positionName, date, officerId, shiftTypeId }: { 
+    scheduleId: string; 
+    type: "recurring" | "exception";
+    positionName: string;
+    date?: string;
+    officerId?: string;
+    shiftTypeId?: string;
+  }) => {
+    // If it's a recurring schedule and we're making a daily adjustment, create/update an exception
+    if (type === "recurring") {
+      // Simply create a new exception - allow multiple officers in same position
+      const { error } = await supabase
+        .from("schedule_exceptions")
+        .insert({
+          officer_id: officerId,
+          date: dateStr,
+          shift_type_id: shiftTypeId,
+          is_off: false,
+          position_name: positionName,
+          custom_start_time: null,
+          custom_end_time: null
+        });
+      
+      if (error) throw error;
+    } else {
+      // If it's already an exception, just update it
+      const { error } = await supabase
+        .from("schedule_exceptions")
+        .update({ 
+          position_name: positionName
+        })
+        .eq("id", scheduleId);
         
-        if (error) throw error;
-      } else {
-        // If it's already an exception, just update it
-        const { error } = await supabase
-          .from("schedule_exceptions")
-          .update({ 
-            position_name: positionName
-          })
-          .eq("id", scheduleId);
-          
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      toast.success("Position updated");
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      setEditingSchedule(null);
-      setEditPosition("");
-      setCustomPosition("");
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to update position");
-    },
-  });
+      if (error) throw error;
+    }
+  },
+  onSuccess: () => {
+    toast.success("Position updated");
+    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    setEditingSchedule(null);
+    setEditPosition("");
+    setCustomPosition("");
+  },
+  onError: (error: any) => {
+    toast.error(error.message || "Failed to update position");
+  },
+});
 
   // Add mutation for removing an officer from the daily schedule
   const removeOfficerMutation = useMutation({
