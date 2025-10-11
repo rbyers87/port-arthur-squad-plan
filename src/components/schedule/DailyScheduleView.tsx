@@ -711,46 +711,131 @@ const renderOfficerSection = (title: string, officers: any[], minCount: number, 
               {renderOfficerSection("Supervisors", shiftData.supervisors, shiftData.minSupervisors, shiftData.currentSupervisors, supervisorsUnderstaffed)}
               {renderOfficerSection("Officers", shiftData.officers, shiftData.minOfficers, shiftData.currentOfficers, officersUnderstaffed)}
 
-             {/* Special Assignment Section - NO TRASHCAN */}
-<div className="flex items-center gap-2">
-  <div className="text-right">
-    <Badge variant="default" className="bg-blue-600 mb-1">
-      Special Assignment
-    </Badge>
-    <p className="text-xs text-muted-foreground max-w-32 truncate">
-      {officer.position}
-    </p>
-  </div>
-  
-  {/* EDIT POSITION BUTTON */}
-  <Button
-    size="sm"
-    variant="ghost"
-    onClick={() => handleEditClick(officer)}
-    title="Edit Position"
-  >
-    <Edit2 className="h-4 w-4" />
-  </Button>
-  
-  {/* ASSIGN PTO BUTTON */}
-  <Button
-    size="sm"
-    variant="ghost"
-    onClick={() => {
-      setSelectedOfficer({
-        officerId: officer.officerId,
-        name: officer.name,
-        scheduleId: officer.scheduleId,
-        type: officer.type,
-      });
-      setSelectedShift(officer.shift);
-      setPtoDialogOpen(true);
-    }}
-    title="Assign PTO"
-  >
-    <Clock className="h-4 w-4" />
-  </Button>
-</div>
+             {/* Special Assignment Section */}
+{shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between border-b pb-2">
+      <h4 className="font-semibold text-sm">Special Assignment</h4>
+      <Badge variant="outline">{shiftData.specialAssignmentOfficers.length}</Badge>
+    </div>
+    {shiftData.specialAssignmentOfficers.map((officer) => (
+      <div
+        key={`${officer.scheduleId}-${officer.type}`}
+        className="flex items-center justify-between p-3 bg-blue-50 rounded-md border border-blue-200"
+      >
+        <div className="flex-1">
+          <p className="font-medium">{officer.name}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">Badge #{officer.badge}</p>
+            {officer.customTime && (
+              <Badge variant="outline" className="text-xs">
+                {officer.customTime}
+              </Badge>
+            )}
+            {officer.type === "recurring" && (
+              <Badge variant="secondary" className="text-xs">
+                Recurring
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
+          <div className="flex items-center gap-2">
+            <div className="space-y-2">
+              <Select value={editPosition} onValueChange={setEditPosition}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select position" />
+                </SelectTrigger>
+                <SelectContent>
+                  {predefinedPositions.map((pos) => (
+                    <SelectItem key={pos} value={pos}>
+                      {pos}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {editPosition === "Other (Custom)" && (
+                <Input
+                  placeholder="Enter special assignment"
+                  value={customPosition}
+                  onChange={(e) => setCustomPosition(e.target.value)}
+                  className="w-48"
+                />
+              )}
+            </div>
+            <Button
+              size="sm"
+              onClick={() => handleSavePosition(officer)}
+              disabled={updatePositionMutation.isPending}
+            >
+              <Save className="h-4 w-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setEditingSchedule(null);
+                setEditPosition("");
+                setCustomPosition("");
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="text-right">
+              <Badge variant="default" className="bg-blue-600 mb-1">
+                Special Assignment
+              </Badge>
+              <p className="text-xs text-muted-foreground max-w-32 truncate">
+                {officer.position}
+              </p>
+            </div>
+            
+            {/* EDIT POSITION BUTTON */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => handleEditClick(officer)}
+              title="Edit Position"
+            >
+              <Edit2 className="h-4 w-4" />
+            </Button>
+            
+            {/* REMOVE BUTTON - Only show for daily exceptions (not base recurring) AND when no PTO */}
+            {officer.type === "exception" && !officer.hasPTO && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => removeOfficerMutation.mutate(officer)}
+                disabled={removeOfficerMutation.isPending}
+                title="Remove from Daily Schedule"
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            )}
+            
+            {/* ASSIGN PTO BUTTON */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSelectedOfficer({
+                  officerId: officer.officerId,
+                  name: officer.name,
+                  scheduleId: officer.scheduleId,
+                  type: officer.type,
+                });
+                setSelectedShift(officer.shift);
+                setPtoDialogOpen(true);
+              }}
+              title="Assign PTO"
+            >
+              <Clock className="h-4 w-4" />
+            </Button>
+          </div>
         )}
       </div>
     ))}
