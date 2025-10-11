@@ -612,14 +612,14 @@ const renderOfficerSection = (title: string, officers: any[], minCount: number, 
     <Edit2 className="h-4 w-4" />
   </Button>
   
-  {/* REMOVE BUTTON - Only show for daily exceptions (not base recurring) AND when no PTO */}
-  {officer.type === "exception" && !officer.hasPTO && (
+  {/* REMOVE BUTTON - Only show when officer has PTO */}
+  {officer.hasPTO && (
     <Button
       size="sm"
       variant="ghost"
-      onClick={() => removeOfficerMutation.mutate(officer)}
-      disabled={removeOfficerMutation.isPending}
-      title="Remove from Daily Schedule"
+      onClick={() => removePTOMutation.mutate(officer.ptoData)}
+      disabled={removePTOMutation.isPending}
+      title="Remove PTO"
     >
       <Trash2 className="h-4 w-4 text-destructive" />
     </Button>
@@ -628,20 +628,22 @@ const renderOfficerSection = (title: string, officers: any[], minCount: number, 
   {/* ASSIGN PTO BUTTON - Show for all regularly scheduled officers */}
   <Button
     size="sm"
-    variant="ghost"
+    variant={officer.hasPTO ? "default" : "ghost"}
     onClick={() => {
       setSelectedOfficer({
         officerId: officer.officerId,
         name: officer.name,
         scheduleId: officer.scheduleId,
         type: officer.type,
+        ...(officer.hasPTO && officer.ptoData ? { existingPTO: officer.ptoData } : {})
       });
       setSelectedShift(officer.shift);
       setPtoDialogOpen(true);
     }}
-    title="Assign PTO"
+    title={officer.hasPTO ? "Edit PTO" : "Assign PTO"}
   >
     <Clock className="h-4 w-4" />
+    {officer.hasPTO && <Badge variant="secondary" className="ml-1 h-4 w-4 p-0">!</Badge>}
   </Button>
 </div>
           )}
