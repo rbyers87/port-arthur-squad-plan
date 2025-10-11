@@ -843,57 +843,54 @@ const renderOfficerSection = (title: string, officers: any[], minCount: number, 
 )}
 
               {/* Other (PTO) Section */}
-              {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <h4 className="font-semibold text-sm">Other (PTO)</h4>
-                    <Badge variant="outline">{shiftData.ptoRecords.length}</Badge>
-                  </div>
-                  {shiftData.ptoRecords.map((record, idx) => (
-                    <div
-                      key={`${record.id}-${idx}`}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
-                    >
-                      <div className="flex-1">
-                        <p className="font-medium">{record.name}</p>
-                        <p className="text-sm text-muted-foreground">Badge #{record.badge}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-right">
-                          <Badge variant="destructive" className="mb-1">
-                            {record.ptoType}
-                          </Badge>
-                          <p className="text-xs text-muted-foreground">
-                            {record.startTime} - {record.endTime}
-                          </p>
-                        </div>
-                        {/* EDIT PTO BUTTON - For existing PTO records */}
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => handleEditPTO(record)}
-                          title="Edit PTO"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        {/* REMOVE PTO BUTTON - For existing PTO records */}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => removePTOMutation.mutate(record)}
-                          disabled={removePTOMutation.isPending}
-                          title="Remove PTO"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );  // <-- ADD THIS CLOSING PARENTHESIS AND SEMICOLON
-        })} 
+{shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between border-b pb-2">
+      <h4 className="font-semibold text-sm">Other (PTO)</h4>
+      <Badge variant="outline">{shiftData.ptoRecords.length}</Badge>
+    </div>
+    {shiftData.ptoRecords.map((record, idx) => (
+      <div
+        key={`${record.id}-${idx}`}
+        className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+      >
+        <div className="flex-1">
+          <p className="font-medium">{record.name}</p>
+          <p className="text-sm text-muted-foreground">Badge #{record.badge}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="text-right">
+            <Badge variant="destructive" className="mb-1">
+              {record.ptoType}
+            </Badge>
+            <p className="text-xs text-muted-foreground">
+              {record.startTime} - {record.endTime}
+            </p>
+          </div>
+          {/* EDIT PTO BUTTON - For existing PTO records */}
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => handleEditPTO(record)}
+            title="Edit PTO"
+          >
+            <Edit2 className="h-4 w-4" />
+          </Button>
+          {/* REMOVE PTO BUTTON - ONLY SHOW IN PTO SECTION */}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => removePTOMutation.mutate(record)}
+            disabled={removePTOMutation.isPending}
+            title="Remove PTO"
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      </div>
+    ))}
+  </div>
+)} 
 
         {selectedOfficer && selectedShift && (
           <PTOAssignmentDialog
