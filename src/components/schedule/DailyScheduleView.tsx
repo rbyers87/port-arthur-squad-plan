@@ -595,7 +595,7 @@ const renderOfficerSection = (title: string, officers: any[], minCount: number, 
               </Button>
             </div>
                    ) : (
-            {/* Regular Officers Section - NO TRASHCAN, NO EDIT PTO */}
+             {/* Regular officer section */}
             <div className="flex items-center gap-2">
               <div className="text-right min-w-32">
                 <Badge variant="secondary">
@@ -603,7 +603,7 @@ const renderOfficerSection = (title: string, officers: any[], minCount: number, 
                 </Badge>
               </div>
               
-              {/* EDIT POSITION BUTTON - Show for all officers */}
+               {/* Edit Position BUTTON - show for all */}
               <Button
                 size="sm"
                 variant="ghost"
