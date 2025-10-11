@@ -594,52 +594,47 @@ const renderOfficerSection = (title: string, officers: any[], minCount: number, 
                 <X className="h-4 w-4" />
               </Button>
             </div>
-          ) : (
-           {/* Regular Officers Section - NO TRASHCAN */}
-<div className="flex items-center gap-2">
-  <div className="text-right min-w-32">
-    <Badge variant="secondary">
-      {officer.position || "No Position"}
-    </Badge>
-  </div>
-  
-  {/* EDIT POSITION BUTTON - Show for all officers */}
-  <Button
-    size="sm"
-    variant="ghost"
-    onClick={() => handleEditClick(officer)}
-    title="Edit Position"
-  >
-    <Edit2 className="h-4 w-4" />
-  </Button>
-  
-  {/* ASSIGN PTO BUTTON - Show for all regularly scheduled officers */}
-  <Button
-    size="sm"
-    variant={officer.hasPTO ? "default" : "ghost"}
-    onClick={() => {
-      setSelectedOfficer({
-        officerId: officer.officerId,
-        name: officer.name,
-        scheduleId: officer.scheduleId,
-        type: officer.type,
-        ...(officer.hasPTO && officer.ptoData ? { existingPTO: officer.ptoData } : {})
-      });
-      setSelectedShift(officer.shift);
-      setPtoDialogOpen(true);
-    }}
-    title={officer.hasPTO ? "Edit PTO" : "Assign PTO"}
-  >
-    <Clock className="h-4 w-4" />
-    {officer.hasPTO && <Badge variant="secondary" className="ml-1 h-4 w-4 p-0">!</Badge>}
-  </Button>
-</div>
+                    ) : (
+            {/* Regular Officers Section - NO TRASHCAN */}
+            <div className="flex items-center gap-2">
+              <div className="text-right min-w-32">
+                <Badge variant="secondary">
+                  {officer.position || "No Position"}
+                </Badge>
+              </div>
+              
+              {/* EDIT POSITION BUTTON - Show for all officers */}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleEditClick(officer)}
+                title="Edit Position"
+              >
+                <Edit2 className="h-4 w-4" />
+              </Button>
+              
+              {/* ASSIGN PTO BUTTON - Show for all regularly scheduled officers */}
+              <Button
+                size="sm"
+                variant={officer.hasPTO ? "default" : "ghost"}
+                onClick={() => {
+                  setSelectedOfficer({
+                    officerId: officer.officerId,
+                    name: officer.name,
+                    scheduleId: officer.scheduleId,
+                    type: officer.type,
+                    ...(officer.hasPTO && officer.ptoData ? { existingPTO: officer.ptoData } : {})
+                  });
+                  setSelectedShift(officer.shift);
+                  setPtoDialogOpen(true);
+                }}
+                title={officer.hasPTO ? "Edit PTO" : "Assign PTO"}
+              >
+                <Clock className="h-4 w-4" />
+                {officer.hasPTO && <Badge variant="secondary" className="ml-1 h-4 w-4 p-0">!</Badge>}
+              </Button>
+            </div>
           )}
-        </div>
-      ))
-    )}
-  </div>
-);
 
   if (isLoading) {
     return (
