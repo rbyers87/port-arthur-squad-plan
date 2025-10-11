@@ -244,30 +244,67 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
   });
 
 const updatePositionMutation = useMutation({
-  mutationFn: async ({ scheduleId, type, positionName, date, officerId, shiftTypeId }: { 
+  mutationFn: async ({ scheduleId, type, positionName, date, officerId, shiftTypeId, currentPosition }: { 
     scheduleId: string; 
     type: "recurring" | "exception";
     positionName: string;
     date?: string;
     officerId?: string;
     shiftTypeId?: string;
+    currentPosition?: string; // Add current position to compare
   }) => {
-    // If it's a recurring schedule and we're making a daily adjustment, create/update an exception
+    // If it's a recurring schedule and we're making a daily adjustment
     if (type === "recurring") {
-      // Simply create a new exception - allow multiple officers in same position
-      const { error } = await supabase
+      // Check if we're just changing the position (not creating a new exception)
+      const { data: existingExceptions, error: checkError } = await supabase
         .from("schedule_exceptions")
-        .insert({
-          officer_id: officerId,
-          date: dateStr,
-          shift_type_id: shiftTypeId,
-          is_off: false,
-          position_name: positionName,
-          custom_start_time: null,
-          custom_end_time: null
-        });
-      
-      if (error) throw error;
+        .select("id, position_name")
+        .eq("officer_id", officerId)
+        .eq("date", dateStr)
+        .eq("shift_type_id", shiftTypeId)
+        .eq("is_off", false);
+
+      if (checkError) throw checkError;
+
+      if (existingExceptions && existingExceptions.length > 0) {
+        // Update existing exception with new position
+        const { error } = await supabase
+          .from("schedule_exceptions")
+          .update({ 
+            position_name: positionName
+          })
+          .eq("id", existingExceptions[0].id);
+        
+        if (error) throw error;
+      } else {
+        // Only create exception if position is actually different from recurring schedule
+        // Get the original recurring schedule position
+        const { data: recurringSchedule, error: recurringError } = await supabase
+          .from("recurring_schedules")
+          .select("position_name")
+          .eq("id", scheduleId)
+          .single();
+
+        if (recurringError) throw recurringError;
+
+        // If the new position is different from the recurring schedule position, create exception
+        if (positionName !== recurringSchedule?.position_name) {
+          const { error } = await supabase
+            .from("schedule_exceptions")
+            .insert({
+              officer_id: officerId,
+              date: dateStr,
+              shift_type_id: shiftTypeId,
+              is_off: false,
+              position_name: positionName,
+              custom_start_time: null,
+              custom_end_time: null
+            });
+          
+          if (error) throw error;
+        }
+        // If position is same as recurring, no exception needed
+      }
     } else {
       // If it's already an exception, just update it
       const { error } = await supabase
@@ -415,22 +452,23 @@ const updatePositionMutation = useMutation({
     },
   });
 
-  const handleSavePosition = (officer: any) => {
-    const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
-    if (!finalPosition) {
-      toast.error("Please select or enter a position");
-      return;
-    }
+const handleSavePosition = (officer: any) => {
+  const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
+  if (!finalPosition) {
+    toast.error("Please select or enter a position");
+    return;
+  }
 
-    updatePositionMutation.mutate({ 
-      scheduleId: officer.scheduleId, 
-      type: officer.type,
-      positionName: finalPosition,
-      date: dateStr,
-      officerId: officer.officerId,
-      shiftTypeId: officer.shift.id
-    });
-  };
+  updatePositionMutation.mutate({ 
+    scheduleId: officer.scheduleId, 
+    type: officer.type,
+    positionName: finalPosition,
+    date: dateStr,
+    officerId: officer.officerId,
+    shiftTypeId: officer.shift.id,
+    currentPosition: officer.position // Pass current position for comparison
+  });
+};
 
   const handleEditClick = (officer: any) => {
     setEditingSchedule(`${officer.scheduleId}-${officer.type}`);
