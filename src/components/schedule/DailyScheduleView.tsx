@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2, UserPlus } from "lucide-react";
+import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2, UserPlus, Download } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { usePDFExport } from "@/hooks/usePDFExport";
 
 interface DailyScheduleViewProps {
   selectedDate: Date;
@@ -48,6 +49,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
   } | null>(null);
   const [addOfficerDialogOpen, setAddOfficerDialogOpen] = useState(false);
   const [selectedShiftForAdd, setSelectedShiftForAdd] = useState<any>(null);
+	const { exportToPDF } = usePDFExport();
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const dayOfWeek = selectedDate.getDay();
@@ -536,6 +538,23 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
     setAddOfficerDialogOpen(true);
   };
 
+	const handleExportShiftToPDF = async (shift: any) => {
+  const elementId = `shift-card-${shift.id}`;
+  toast.info("Generating PDF...");
+  
+  const result = await exportToPDF({
+    selectedDate,
+    shiftName: shift.name,
+    elementId,
+  });
+
+  if (result.success) {
+    toast.success("PDF exported successfully");
+  } else {
+    toast.error("Failed to export PDF");
+  }
+};
+
   const renderOfficerSection = (title: string, officers: any[], minCount: number, currentCount: number, isUnderstaffed: boolean) => (
     <div className="space-y-2">
       <div className="flex items-center justify-between border-b pb-2">
@@ -679,7 +698,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
           Schedule for {format(selectedDate, "EEEE, MMMM d, yyyy")}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+   <CardContent className="space-y-6">
         {scheduleData?.map((shiftData) => {
           const supervisorsUnderstaffed = shiftData.currentSupervisors < shiftData.minSupervisors;
           const officersUnderstaffed = shiftData.currentOfficers < shiftData.minOfficers;
@@ -687,7 +706,7 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
           const isFullyStaffed = !isAnyUnderstaffed;
 
           return (
-            <div key={shiftData.shift.id} className="border rounded-lg p-4 space-y-4">
+            <div key={shiftData.shift.id} id={`shift-card-${shiftData.shift.id}`} className="border rounded-lg p-4 space-y-4">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-semibold">{shiftData.shift.name}</h3>
@@ -719,12 +738,20 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
                       Add Officer
                     </Button>
                   )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleExportShiftToPDF(shiftData.shift)}
+                    title="Export to PDF"
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Export PDF
+                  </Button>
                 </div>
               </div>
 
               {renderOfficerSection("Supervisors", shiftData.supervisors, shiftData.minSupervisors, shiftData.currentSupervisors, supervisorsUnderstaffed)}
               {renderOfficerSection("Officers", shiftData.officers, shiftData.minOfficers, shiftData.currentOfficers, officersUnderstaffed)}
-
               {/* Special Assignment Section */}
               {shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
                 <div className="space-y-2">
