@@ -23,7 +23,12 @@ interface DailyScheduleViewProps {
   userRole?: string; // Add this
 }
 
-export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdminOrSupervisor = false }: DailyScheduleViewProps) => {
+export const DailyScheduleView = ({ 
+  selectedDate, 
+  filterShiftId = "all", 
+  isAdminOrSupervisor = false,
+  userRole = "officer" // Add this parameter
+}: DailyScheduleViewProps) => {
   const queryClient = useQueryClient();
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
   const [editPosition, setEditPosition] = useState("");
