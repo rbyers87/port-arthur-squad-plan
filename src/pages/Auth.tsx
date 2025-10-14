@@ -67,11 +67,11 @@ const Auth = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-3 text-center">
-          <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center">
+          <div className="mx-auto w-16 h-16 flex items-center justify-center">
             <img 
               src={logoBase64} 
               alt="Port Arthur PD Logo" 
-              className="w-10 h-10 object-contain"
+              className="w-16 h-16 object-contain"
             />
           </div>
           <CardTitle className="text-2xl">Port Arthur PD</CardTitle>
