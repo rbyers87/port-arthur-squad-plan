@@ -67,18 +67,18 @@ const Auth = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-3 text-center">
-          <div className="mx-auto w-16 h-16 flex items-center justify-center">
-            <img 
-              src={logoBase64} 
-              alt="Port Arthur PD Logo" 
-              className="w-32 h-32 object-contain"
-            />
-          </div>
-          <CardTitle className="text-2xl">Port Arthur PD</CardTitle>
-          <CardDescription>
-            {isLogin ? "Sign in to access your schedule" : "Create your account"}
-          </CardDescription>
-        </CardHeader>
+      <div className="mx-auto w-32 h-32 flex items-center justify-center">
+        <img 
+          src={logoBase64} 
+          alt="Port Arthur PD Logo" 
+          className="w-32 h-32 object-contain"
+        />
+      </div>
+      <CardTitle className="text-2xl">Port Arthur PD</CardTitle>
+      <CardDescription>
+        {isLogin ? "Sign in to access your schedule" : "Create your account"}
+      </CardDescription>
+    </CardHeader>
         <CardContent>
           <form onSubmit={handleAuth} className="space-y-4">
             {!isLogin && (
