@@ -109,31 +109,29 @@ const Dashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10">
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-              <img 
-                src={logoBase64} 
-                alt="Port Arthur PD Logo" 
-                className="w-6 h-6 object-contain"
-              />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Port Arthur PD</h1>
-              <p className="text-sm text-muted-foreground">Shift Scheduler</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="font-medium">{profile?.full_name || user?.email}</p>
-              <p className="text-sm text-muted-foreground capitalize">{primaryRole}</p>
-            </div>
-            <Button variant="ghost" size="icon" onClick={handleSignOut}>
-              <LogOut className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      </header>
+  <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+    <div className="flex items-center gap-3">
+      <img 
+        src={logoBase64} 
+        alt="Port Arthur PD Logo" 
+        className="w-10 h-10 object-contain"
+      />
+      <div>
+        <h1 className="text-xl font-bold">Port Arthur PD</h1>
+        <p className="text-sm text-muted-foreground">Shift Scheduler</p>
+      </div>
+    </div>
+    <div className="flex items-center gap-4">
+      <div className="text-right">
+        <p className="font-medium">{profile?.full_name || user?.email}</p>
+        <p className="text-sm text-muted-foreground capitalize">{primaryRole}</p>
+      </div>
+      <Button variant="ghost" size="icon" onClick={handleSignOut}>
+        <LogOut className="h-5 w-5" />
+      </Button>
+    </div>
+  </div>
+</header>
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
