@@ -126,19 +126,18 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
   });
 
   // Mutation for creating new officer
-  // Replace the createProfileMutation in your OfficerProfileDialog.tsx with this:
-const createProfileMutation = useMutation({
+  const createProfileMutation = useMutation({
   mutationFn: async (data: typeof formData) => {
     // Helper function to generate random password
     const generateRandomPassword = () => {
       return `TempPass${Math.random().toString(36).slice(-8)}!`;
     };
 
-    // First create the auth user with email confirmation
+    // First create the auth user
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: data.email,
       password: generateRandomPassword(), // Temporary password
-      email_confirm: false, // Don't auto-confirm, will send confirmation
+      email_confirm: false, // Important: don't auto-confirm
       user_metadata: {
         full_name: data.full_name,
       }
@@ -167,24 +166,26 @@ const createProfileMutation = useMutation({
 
     if (profileError) throw profileError;
 
-    // Send password reset email
-    const { error: resetError } = await supabase.auth.admin.generateLink({
-      type: 'recovery',
-      email: data.email,
+    // Send invitation email which allows them to set their password
+    const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(data.email, {
+      data: {
+        full_name: data.full_name,
+      }
     });
 
-    if (resetError) {
-      console.error('Failed to send password reset email:', resetError);
+    if (inviteError) {
+      console.error('Failed to send invitation email:', inviteError);
       // Don't throw here - the user was created successfully, just the email failed
+      throw new Error(`Profile created but failed to send invitation email: ${inviteError.message}`);
     }
   },
   onSuccess: () => {
-    toast.success("Profile created successfully - password reset email sent");
+    toast.success("Profile created successfully - invitation email sent");
     queryClient.invalidateQueries({ queryKey: ["all-officers"] });
     onOpenChange(false);
   },
   onError: (error: any) => {
-    toast.error(error.message || "Failed to create profile");
+    toast.error(error.message);
   },
 });
 
@@ -211,13 +212,13 @@ const generateRandomPassword = () => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Officer Profile" : "Create New Officer Profile"}</DialogTitle>
-          <DialogDescription>
-            {isEditing ? "Update officer information" : "Create a new officer profile"}
-          </DialogDescription>
-        </DialogHeader>
+  <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+    <DialogHeader>
+      <DialogTitle>{isEditing ? "Edit Officer Profile" : "Create New Officer Profile"}</DialogTitle>
+      <DialogDescription>
+        {isEditing ? "Update officer information" : "Create a new officer profile"}
+      </DialogDescription>
+    </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
