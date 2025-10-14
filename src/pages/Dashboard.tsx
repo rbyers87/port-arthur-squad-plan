@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar, Users, AlertTriangle, Clock, LogOut, Shield, Settings } from "lucide-react";
+import { Calendar, Users, AlertTriangle, Clock, LogOut, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
 import { WeeklySchedule } from "@/components/schedule/WeeklySchedule";
@@ -23,6 +23,9 @@ const Dashboard = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { primaryRole, isAdminOrSupervisor, loading: roleLoading } = useUserRole(user?.id);
+
+  // Replace this base64 string with your actual logo
+  const logoBase64 = "data:image/svg+xml;base64,YOUR_BASE64_LOGO_STRING_HERE";
 
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
@@ -109,7 +112,11 @@ const Dashboard = () => {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-              <Shield className="w-6 h-6 text-primary-foreground" />
+              <img 
+                src={logoBase64} 
+                alt="Port Arthur PD Logo" 
+                className="w-6 h-6 object-contain"
+              />
             </div>
             <div>
               <h1 className="text-xl font-bold">Port Arthur PD</h1>
