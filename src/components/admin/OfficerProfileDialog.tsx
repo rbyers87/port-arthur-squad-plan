@@ -128,66 +128,43 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
   // Mutation for creating new officer
   const createProfileMutation = useMutation({
   mutationFn: async (data: typeof formData) => {
-    // Helper function to generate random password
-    const generateRandomPassword = () => {
-      return `TempPass${Math.random().toString(36).slice(-8)}!`;
-    };
-
-    // First create the auth user
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: data.email,
-      password: generateRandomPassword(), // Temporary password
-      email_confirm: false, // Important: don't auto-confirm
-      user_metadata: {
-        full_name: data.full_name,
-      }
-    });
-
-    if (authError) throw authError;
-    if (!authData.user) throw new Error("Failed to create user");
-
-    // Then create the profile
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .insert({
-        id: authData.user.id,
-        full_name: data.full_name,
+    const response = await fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/create-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         email: data.email,
-        phone: data.phone || null,
-        badge_number: data.badge_number || null,
-        rank: data.rank as "Officer" | "Sergeant" | "Lieutenant" | "Deputy Chief" | "Chief",
+        full_name: data.full_name,
+        phone: data.phone,
+        badge_number: data.badge_number,
+        rank: data.rank,
         hire_date: hireDate ? format(hireDate, "yyyy-MM-dd") : null,
         service_credit_override: serviceCreditOverride ? Number(serviceCreditOverride) : null,
         vacation_hours: Number(data.vacation_hours) || 0,
         sick_hours: Number(data.sick_hours) || 0,
         comp_hours: Number(data.comp_hours) || 0,
         holiday_hours: Number(data.holiday_hours) || 0,
-      });
+      }),
+    })
 
-    if (profileError) throw profileError;
-
-    // Send invitation email which allows them to set their password
-    const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(data.email, {
-      data: {
-        full_name: data.full_name,
-      }
-    });
-
-    if (inviteError) {
-      console.error('Failed to send invitation email:', inviteError);
-      // Don't throw here - the user was created successfully, just the email failed
-      throw new Error(`Profile created but failed to send invitation email: ${inviteError.message}`);
+    const result = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to create user')
     }
+    
+    return result
   },
-  onSuccess: () => {
-    toast.success("Profile created successfully - invitation email sent");
+  onSuccess: (result) => {
+    toast.success(result.message || "Profile created successfully");
     queryClient.invalidateQueries({ queryKey: ["all-officers"] });
     onOpenChange(false);
   },
   onError: (error: any) => {
     toast.error(error.message);
   },
-});
+})
 
 // Add this helper function to generate a random password
 const generateRandomPassword = () => {
