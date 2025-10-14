@@ -20,20 +20,10 @@ interface DailyScheduleViewProps {
   filterShiftId?: string;
   isAdminOrSupervisor?: boolean;
   userId?: string;
-  userRole?: string;
 }
 
-export const DailyScheduleView = ({ 
-  selectedDate, 
-  filterShiftId = "all", 
-  isAdminOrSupervisor = false,
-  userRole
-}: DailyScheduleViewProps) => {
+export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdminOrSupervisor = false }: DailyScheduleViewProps) => {
   const queryClient = useQueryClient();
-  
-  // Determine if user can edit - check both isAdminOrSupervisor AND userRole
-  const canEdit = isAdminOrSupervisor || userRole === "admin" || userRole === "supervisor";
-  
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
   const [editPosition, setEditPosition] = useState("");
   const [customPosition, setCustomPosition] = useState("");
@@ -621,39 +611,39 @@ export const DailyScheduleView = ({
   };
 
   const handleExportShiftToPDF = async (shiftData: any) => {
-    try {
-      console.log("Exporting PDF for shift:", shiftData.shift.name);
-      console.log("Shift data for PDF - Officers with notes:", shiftData.officers?.map((o: any) => ({
-        name: o.name,
-        notes: o.notes,
-        customTime: o.customTime
-      })));
-      
-      if (!shiftData) {
-        console.error("No shift data provided for PDF export");
-        toast.error("No schedule data available for PDF export");
-        return;
-      }
-
-      toast.info("Generating PDF...");
-      
-      const result = await exportToPDF({
-        selectedDate: selectedDate,
-        shiftName: shiftData.shift.name,
-        shiftData: shiftData
-      });
-
-      if (result.success) {
-        toast.success("PDF exported successfully");
-      } else {
-        console.error("PDF export failed:", result.error);
-        toast.error("Failed to export PDF");
-      }
-    } catch (error) {
-      console.error("Error in handleExportShiftToPDF:", error);
-      toast.error("Error generating PDF");
+  try {
+    console.log("Exporting PDF for shift:", shiftData.shift.name);
+    console.log("Shift data for PDF - Officers with notes:", shiftData.officers?.map((o: any) => ({
+      name: o.name,
+      notes: o.notes,
+      customTime: o.customTime
+    })));
+    
+    if (!shiftData) {
+      console.error("No shift data provided for PDF export");
+      toast.error("No schedule data available for PDF export");
+      return;
     }
-  };
+
+    toast.info("Generating PDF...");
+    
+    const result = await exportToPDF({
+      selectedDate: selectedDate,
+      shiftName: shiftData.shift.name,
+      shiftData: shiftData
+    });
+
+    if (result.success) {
+      toast.success("PDF exported successfully");
+    } else {
+      console.error("PDF export failed:", result.error);
+      toast.error("Failed to export PDF");
+    }
+  } catch (error) {
+    console.error("Error in handleExportShiftToPDF:", error);
+    toast.error("Error generating PDF");
+  }
+};
 
   const renderOfficerSection = (title: string, officers: any[], minCount: number, currentCount: number, isUnderstaffed: boolean) => (
     <div className="space-y-2">
@@ -700,7 +690,7 @@ export const DailyScheduleView = ({
                 <Label htmlFor={`unit-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
                   Unit
                 </Label>
-                {editingUnitNumber === `${officer.scheduleId}-${officer.type}` && canEdit ? (
+                {editingUnitNumber === `${officer.scheduleId}-${officer.type}` ? (
                   <div className="flex items-center gap-1">
                     <Input
                       id={`unit-${officer.scheduleId}`}
@@ -732,10 +722,10 @@ export const DailyScheduleView = ({
                 ) : (
                   <Badge 
                     variant={officer.unitNumber ? "default" : "outline"} 
-                    className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
-                    onClick={() => canEdit && handleEditUnitClick(officer)}
+                    className="w-16 cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => handleEditUnitClick(officer)}
                   >
-                    {officer.unitNumber || (canEdit ? "Add" : "N/A")}
+                    {officer.unitNumber || "Add"}
                   </Badge>
                 )}
               </div>
@@ -745,7 +735,7 @@ export const DailyScheduleView = ({
                 <Label htmlFor={`notes-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
                   Notes
                 </Label>
-                {editingNotes === `${officer.scheduleId}-${officer.type}` && canEdit ? (
+                {editingNotes === `${officer.scheduleId}-${officer.type}` ? (
                   <div className="flex items-center gap-1">
                     <Input
                       id={`notes-${officer.scheduleId}`}
@@ -776,14 +766,10 @@ export const DailyScheduleView = ({
                   </div>
                 ) : (
                   <div 
-                    className={`text-xs p-2 rounded border ${
-                      canEdit 
-                        ? 'border-dashed border-muted-foreground/30 cursor-pointer hover:bg-muted transition-colors' 
-                        : 'border-solid border-muted-foreground/20'
-                    } min-h-8 flex items-center justify-center`}
-                    onClick={() => canEdit && handleEditNotesClick(officer)}
+                    className="text-xs p-2 rounded border border-dashed border-muted-foreground/30 cursor-pointer hover:bg-muted transition-colors min-h-8 flex items-center justify-center"
+                    onClick={() => handleEditNotesClick(officer)}
                   >
-                    {officer.notes || (canEdit ? "Add notes" : "N/A")}
+                    {officer.notes || "Add notes"}
                   </div>
                 )}
               </div>
@@ -792,7 +778,7 @@ export const DailyScheduleView = ({
             {/* Position & Actions - Right Side */}
             <div className="flex items-center gap-2 shrink-0">
               {/* Position Display/Edit */}
-              {editingSchedule === `${officer.scheduleId}-${officer.type}` && canEdit ? (
+              {editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
                 <div className="flex items-center gap-2">
                   <div className="space-y-2">
                     <Select value={editPosition} onValueChange={setEditPosition}>
@@ -840,37 +826,35 @@ export const DailyScheduleView = ({
                   <Badge variant="secondary" className="mb-1 w-full justify-center">
                     {officer.position || "No Position"}
                   </Badge>
-                  {canEdit && (
-                    <div className="flex gap-1 justify-center">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleEditClick(officer)}
-                        title="Edit Position"
-                        className="h-6 w-6"
-                      >
-                        <Edit2 className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setSelectedOfficer({
-                            officerId: officer.officerId,
-                            name: officer.name,
-                            scheduleId: officer.scheduleId,
-                            type: officer.type,
-                          });
-                          setSelectedShift(officer.shift);
-                          setPtoDialogOpen(true);
-                        }}
-                        title="Assign PTO"
-                        className="h-6 w-6"
-                      >
-                        <Clock className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex gap-1 justify-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleEditClick(officer)}
+                      title="Edit Position"
+                      className="h-6 w-6"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSelectedOfficer({
+                          officerId: officer.officerId,
+                          name: officer.name,
+                          scheduleId: officer.scheduleId,
+                          type: officer.type,
+                        });
+                        setSelectedShift(officer.shift);
+                        setPtoDialogOpen(true);
+                      }}
+                      title="Assign PTO"
+                      className="h-6 w-6"
+                    >
+                      <Clock className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -933,7 +917,7 @@ export const DailyScheduleView = ({
                       Fully Staffed
                     </Badge>
                   )}
-                  {canEdit && (
+                  {isAdminOrSupervisor && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -958,7 +942,6 @@ export const DailyScheduleView = ({
 
               {renderOfficerSection("Supervisors", shiftData.supervisors, shiftData.minSupervisors, shiftData.currentSupervisors, supervisorsUnderstaffed)}
               {renderOfficerSection("Officers", shiftData.officers, shiftData.minOfficers, shiftData.currentOfficers, officersUnderstaffed)}
-              
               {/* Special Assignment Section */}
               {shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
                 <div className="space-y-2">
@@ -1000,7 +983,7 @@ export const DailyScheduleView = ({
                           <Label htmlFor={`unit-special-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
                             Unit
                           </Label>
-                          {editingUnitNumber === `${officer.scheduleId}-${officer.type}` && canEdit ? (
+                          {editingUnitNumber === `${officer.scheduleId}-${officer.type}` ? (
                             <div className="flex items-center gap-1">
                               <Input
                                 id={`unit-special-${officer.scheduleId}`}
@@ -1032,10 +1015,10 @@ export const DailyScheduleView = ({
                           ) : (
                             <Badge 
                               variant={officer.unitNumber ? "default" : "outline"} 
-                              className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
-                              onClick={() => canEdit && handleEditUnitClick(officer)}
+                              className="w-16 cursor-pointer hover:bg-muted transition-colors"
+                              onClick={() => handleEditUnitClick(officer)}
                             >
-                              {officer.unitNumber || (canEdit ? "Add" : "N/A")}
+                              {officer.unitNumber || "Add"}
                             </Badge>
                           )}
                         </div>
@@ -1045,7 +1028,7 @@ export const DailyScheduleView = ({
                           <Label htmlFor={`notes-special-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
                             Notes
                           </Label>
-                          {editingNotes === `${officer.scheduleId}-${officer.type}` && canEdit ? (
+                          {editingNotes === `${officer.scheduleId}-${officer.type}` ? (
                             <div className="flex items-center gap-1">
                               <Input
                                 id={`notes-special-${officer.scheduleId}`}
@@ -1076,14 +1059,10 @@ export const DailyScheduleView = ({
                             </div>
                           ) : (
                             <div 
-                              className={`text-xs p-2 rounded border ${
-                                canEdit 
-                                  ? 'border-dashed border-muted-foreground/30 cursor-pointer hover:bg-muted transition-colors' 
-                                  : 'border-solid border-muted-foreground/20'
-                              } min-h-8 flex items-center justify-center`}
-                              onClick={() => canEdit && handleEditNotesClick(officer)}
+                              className="text-xs p-2 rounded border border-dashed border-muted-foreground/30 cursor-pointer hover:bg-muted transition-colors min-h-8 flex items-center justify-center"
+                              onClick={() => handleEditNotesClick(officer)}
                             >
-                              {officer.notes || (canEdit ? "Add notes" : "N/A")}
+                              {officer.notes || "Add notes"}
                             </div>
                           )}
                         </div>
@@ -1098,37 +1077,35 @@ export const DailyScheduleView = ({
                           <p className="text-xs text-muted-foreground max-w-32 truncate">
                             {officer.position}
                           </p>
-                          {canEdit && (
-                            <div className="flex gap-1 justify-center mt-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleEditClick(officer)}
-                                title="Edit Position"
-                                className="h-6 w-6"
-                              >
-                                <Edit2 className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setSelectedOfficer({
-                                    officerId: officer.officerId,
-                                    name: officer.name,
-                                    scheduleId: officer.scheduleId,
-                                    type: officer.type,
-                                  });
-                                  setSelectedShift(officer.shift);
-                                  setPtoDialogOpen(true);
-                                }}
-                                title="Assign PTO"
-                                className="h-6 w-6"
-                              >
-                                <Clock className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          )}
+                          <div className="flex gap-1 justify-center mt-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEditClick(officer)}
+                              title="Edit Position"
+                              className="h-6 w-6"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedOfficer({
+                                  officerId: officer.officerId,
+                                  name: officer.name,
+                                  scheduleId: officer.scheduleId,
+                                  type: officer.type,
+                                });
+                                setSelectedShift(officer.shift);
+                                setPtoDialogOpen(true);
+                              }}
+                              title="Assign PTO"
+                              className="h-6 w-6"
+                            >
+                              <Clock className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1161,27 +1138,25 @@ export const DailyScheduleView = ({
                             {record.startTime} - {record.endTime}
                           </p>
                         </div>
-                        {canEdit && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleEditPTO(record)}
-                              title="Edit PTO"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => removePTOMutation.mutate(record)}
-                              disabled={removePTOMutation.isPending}
-                              title="Remove PTO"
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </>
-                        )}
+                        {/* EDIT PTO BUTTON - For existing PTO records */}
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleEditPTO(record)}
+                          title="Edit PTO"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        {/* REMOVE PTO BUTTON - ONLY SHOW IN PTO SECTION */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removePTOMutation.mutate(record)}
+                          disabled={removePTOMutation.isPending}
+                          title="Remove PTO"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -1202,7 +1177,7 @@ export const DailyScheduleView = ({
         )}
 
         {/* Add Officer Dialog */}
-        {canEdit && selectedShiftForAdd && (
+        {isAdminOrSupervisor && selectedShiftForAdd && (
           <AddOfficerDialog
             open={addOfficerDialogOpen}
             onOpenChange={setAddOfficerDialogOpen}
