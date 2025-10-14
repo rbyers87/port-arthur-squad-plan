@@ -91,39 +91,61 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     setCalculatedCredit(data || 0);
   };
 
-  // Mutation for updating existing officer
-  const updateProfileMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      if (!officer?.id) throw new Error("No officer ID provided");
-      
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          full_name: data.full_name,
-          email: data.email,
-          phone: data.phone || null,
-          badge_number: data.badge_number || null,
-          rank: data.rank as "Officer" | "Sergeant" | "Lieutenant" | "Deputy Chief" | "Chief",
-          hire_date: hireDate ? format(hireDate, "yyyy-MM-dd") : null,
-          service_credit_override: serviceCreditOverride ? Number(serviceCreditOverride) : null,
-          vacation_hours: Number(data.vacation_hours) || 0,
-          sick_hours: Number(data.sick_hours) || 0,
-          comp_hours: Number(data.comp_hours) || 0,
-          holiday_hours: Number(data.holiday_hours) || 0,
-        })
-        .eq("id", officer.id);
+// Mutation for updating existing officer
+const updateProfileMutation = useMutation({
+  mutationFn: async (data: typeof formData) => {
+    if (!officer?.id) throw new Error("No officer ID provided");
+    
+    // Update profile first
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        full_name: data.full_name,
+        email: data.email,
+        phone: data.phone || null,
+        badge_number: data.badge_number || null,
+        rank: data.rank as "Officer" | "Sergeant" | "Lieutenant" | "Deputy Chief" | "Chief",
+        hire_date: hireDate ? format(hireDate, "yyyy-MM-dd") : null,
+        service_credit_override: serviceCreditOverride ? Number(serviceCreditOverride) : null,
+        vacation_hours: Number(data.vacation_hours) || 0,
+        sick_hours: Number(data.sick_hours) || 0,
+        comp_hours: Number(data.comp_hours) || 0,
+        holiday_hours: Number(data.holiday_hours) || 0,
+      })
+      .eq("id", officer.id);
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Profile updated successfully");
-      queryClient.invalidateQueries({ queryKey: ["all-officers"] });
-      onOpenChange(false);
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to update profile");
-    },
-  });
+    if (error) throw error;
+
+    // Update user role based on new rank
+    const getRoleFromRank = (rank: string): string => {
+      const rankLower = rank.toLowerCase();
+      if (rankLower === 'chief' || rankLower === 'deputy chief') return 'admin';
+      if (rankLower === 'sergeant' || rankLower === 'lieutenant') return 'supervisor';
+      return 'officer';
+    };
+
+    const newRole = getRoleFromRank(data.rank);
+    
+    // Update the user_roles table
+    const { error: roleError } = await supabase
+      .from('user_roles')
+      .update({ role: newRole })
+      .eq('user_id', officer.id);
+
+    if (roleError) {
+      console.error('Failed to update role:', roleError);
+      // Don't throw - the profile was updated successfully, just role update failed
+    }
+  },
+  onSuccess: () => {
+    toast.success("Profile updated successfully");
+    queryClient.invalidateQueries({ queryKey: ["all-officers"] });
+    onOpenChange(false);
+  },
+  onError: (error: any) => {
+    toast.error(error.message || "Failed to update profile");
+  },
+});
 
   // Mutation for creating new officer
   const createProfileMutation = useMutation({
