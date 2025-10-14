@@ -88,3 +88,14 @@ Add ability to add notes when assigning officer on daily view.  "court at 11:30"
 "Work Schedule" is recurring schedule.  Add new work schedule refers to creating a new recurring schedule.  Still need ability to add officer to daily view from accepting a vacancy alert and manually from a supvervisor profile on the daily view schedule.
 
 Daily View shift selector is not loading until you change the date.  Need shift selector to reload page after it is changed.
+
+## RidingList PDF logo instructions:
+🔧 Easy Logo Replacement:
+The placeholder logo is drawn in the drawPlaceholderLogo function. When you're ready to add your actual logo, you can replace this function with one that loads your logo image:
+
+typescript
+// Future: Replace with actual logo
+const drawActualLogo = (pdf: jsPDF, x: number, y: number) => {
+  // You can use pdf.addImage() here with your logo file
+  // pdf.addImage(logoData, 'PNG', x, y, 25, 25);
+};

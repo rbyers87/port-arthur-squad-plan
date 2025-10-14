@@ -1,178 +1,373 @@
 // hooks/usePDFExport.ts
 import { useCallback } from "react";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import { format } from "date-fns";
 
 interface ExportOptions {
   selectedDate: Date;
   shiftName: string;
-  elementId: string;
+  shiftData: any;
 }
 
-export const usePDFExport = () => {
-  const exportToPDF = useCallback(async ({ selectedDate, shiftName, elementId }: ExportOptions) => {
-    try {
-      // Find the element to export
-      const element = document.getElementById(elementId);
-      if (!element) {
-        throw new Error("Schedule element not found");
+// Modern color scheme
+const COLORS = {
+  primary: [41, 128, 185],    // Blue
+  secondary: [52, 152, 219],  // Light Blue
+  accent: [155, 89, 182],     // Purple
+  success: [39, 174, 96],     // Green
+  warning: [243, 156, 18],    // Orange
+  danger: [231, 76, 60],      // Red
+  light: [248, 249, 250],     // Very Light Gray
+  dark: [44, 62, 80],         // Dark Blue
+  gray: [108, 117, 125],      // Medium Gray
+  border: [222, 226, 230]     // Border Gray
+};
+
+// Convert image to base64 (you'll need to do this for your logo)
+const getLogoBase64 = async (): Promise<string> => {
+  try {
+    const response = await fetch('/logo.png'); // Adjust path to your logo
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Failed to load logo:', error);
+    return ''; // Fallback to no logo
+  }
+};
+
+// Draw actual logo function
+const drawActualLogo = (pdf: jsPDF, x: number, y: number, logoBase64: string) => {
+  if (!logoBase64) {
+    // Fallback to placeholder if logo fails to load
+    const logoSize = 20;
+    pdf.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
+    pdf.rect(x, y, logoSize, logoSize, 'F');
+    pdf.setFontSize(6);
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("LOGO", x + logoSize/2, y + logoSize/2, { align: 'center', baseline: 'middle' });
+    return logoSize;
+  }
+
+  try {
+    const logoWidth = 20;
+    const logoHeight = 20;
+    pdf.addImage(logoBase64, 'PNG', x, y, logoWidth, logoHeight);
+    return logoWidth;
+  } catch (error) {
+    console.error('Error drawing logo:', error);
+    // Fallback to placeholder
+    const logoSize = 20;
+    pdf.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
+    pdf.rect(x, y, logoSize, logoSize, 'F');
+    pdf.setFontSize(6);
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("LOGO", x + logoSize/2, y + logoSize/2, { align: 'center', baseline: 'middle' });
+    return logoSize;
+  }
+};
+
+// Fixed table drawing function - expands to full width
+const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: number, margins: { left: number, right: number }, sectionColor?: number[]) => {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const tableWidth = pageWidth - margins.left - margins.right;
+  
+  // Fixed column widths that use the full table width
+  const getColumnWidths = (headers: string[]) => {
+    const totalColumns = headers.length;
+    const baseWidths = {
+      "OFFICER NAME": 0.35,    // 35% of table width
+      "BEAT": 0.15,            // 15% of table width
+      "ASSIGNMENT": 0.20,      // 20% of table width
+      "BADGE #": 0.15,         // 15% of table width
+      "UNIT": 0.10,            // 10% of table width
+      "NOTES": 0.25,           // 25% of table width
+      "TYPE": 0.15,            // 15% of table width
+      "TIME": 0.20             // 20% of table width
+    };
+
+    return headers.map(header => {
+      const widthPercentage = baseWidths[header as keyof typeof baseWidths] || (1 / totalColumns);
+      return tableWidth * widthPercentage;
+    });
+  };
+
+  const colWidths = getColumnWidths(headers);
+  
+  // Verify total width matches table width (adjust if needed due to rounding)
+  const totalWidth = colWidths.reduce((sum, width) => sum + width, 0);
+  if (Math.abs(totalWidth - tableWidth) > 1) {
+    const adjustmentFactor = tableWidth / totalWidth;
+    colWidths.forEach((width, index) => {
+      colWidths[index] = width * adjustmentFactor;
+    });
+  }
+
+  let y = startY;
+  const rowHeight = 8;
+  const cellPadding = 3;
+
+  // Draw headers - full width
+  let x = margins.left;
+  headers.forEach((header, index) => {
+    pdf.setFillColor(sectionColor?.[0] || COLORS.primary[0], sectionColor?.[1] || COLORS.primary[1], sectionColor?.[2] || COLORS.primary[2]);
+    pdf.rect(x, y, colWidths[index], rowHeight, 'F');
+    
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7);
+    pdf.setTextColor(255, 255, 255);
+    
+    // Center text in header cells
+    const textWidth = pdf.getTextWidth(header);
+    const textX = x + (colWidths[index] - textWidth) / 2;
+    pdf.text(header, Math.max(textX, x + 2), y + rowHeight - cellPadding);
+    
+    x += colWidths[index];
+  });
+
+  y += rowHeight;
+
+  // Draw data rows - full width
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7);
+  
+  data.forEach((row, rowIndex) => {
+    x = margins.left;
+    
+    // Alternate row colors
+    if (rowIndex % 2 === 0) {
+      pdf.setFillColor(255, 255, 255);
+    } else {
+      pdf.setFillColor(COLORS.light[0], COLORS.light[1], COLORS.light[2]);
+    }
+    
+    // Fill entire row background
+    pdf.rect(x, y, tableWidth, rowHeight, 'F');
+    
+    // Light borders
+    pdf.setDrawColor(COLORS.border[0], COLORS.border[1], COLORS.border[2]);
+    pdf.setLineWidth(0.1);
+    
+    row.forEach((cell, cellIndex) => {
+      // Draw cell border
+      pdf.rect(x, y, colWidths[cellIndex], rowHeight, 'S');
+      
+      // Cell content
+      pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
+      
+      const cellText = cell?.toString() || "";
+      const maxTextWidth = colWidths[cellIndex] - (cellPadding * 2);
+      
+      let displayText = cellText;
+      if (pdf.getTextWidth(cellText) > maxTextWidth) {
+        // Truncate text that's too long
+        let truncated = cellText;
+        while (pdf.getTextWidth(truncated + "...") > maxTextWidth && truncated.length > 1) {
+          truncated = truncated.substring(0, truncated.length - 1);
+        }
+        displayText = truncated + (truncated.length < cellText.length ? "..." : "");
       }
-
-      // Store original styles
-      const originalOverflow = element.style.overflow;
-      const originalHeight = element.style.height;
-      const originalMaxHeight = element.style.maxHeight;
       
-      // Temporarily adjust element for better capture
-      element.style.overflow = 'visible';
-      element.style.height = 'auto';
-      element.style.maxHeight = 'none';
-
-      // Fix all nested elements that might be clipped
-      const badges = element.querySelectorAll('[class*="badge"], [class*="Badge"]');
-      const originalBadgeStyles: Array<{ el: HTMLElement; styles: { [key: string]: string } }> = [];
+      pdf.text(displayText, x + cellPadding, y + rowHeight - cellPadding);
+      x += colWidths[cellIndex];
+    });
+    
+    y += rowHeight;
+    
+    // Check if we need a new page
+    if (y > pdf.internal.pageSize.getHeight() - 30) {
+      pdf.addPage();
+      y = 30;
       
-      badges.forEach((badge) => {
-        const el = badge as HTMLElement;
-        const original = {
-          el,
-          styles: {
-            overflow: el.style.overflow,
-            whiteSpace: el.style.whiteSpace,
-            textOverflow: el.style.textOverflow,
-            display: el.style.display,
-            width: el.style.width,
-            maxWidth: el.style.maxWidth,
-          }
-        };
-        originalBadgeStyles.push(original);
+      // Redraw headers on new page
+      x = margins.left;
+      headers.forEach((header, index) => {
+        pdf.setFillColor(sectionColor?.[0] || COLORS.primary[0], sectionColor?.[1] || COLORS.primary[1], sectionColor?.[2] || COLORS.primary[2]);
+        pdf.rect(x, y, colWidths[index], rowHeight, 'F');
         
-        // Force badges to display fully
-        el.style.overflow = 'visible';
-        el.style.whiteSpace = 'nowrap';
-        el.style.textOverflow = 'clip';
-        el.style.display = 'inline-flex';
-        el.style.width = 'auto';
-        el.style.maxWidth = 'none';
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7);
+        pdf.setTextColor(255, 255, 255);
+        
+        const textWidth = pdf.getTextWidth(header);
+        const textX = x + (colWidths[index] - textWidth) / 2;
+        pdf.text(header, Math.max(textX, x + 2), y + rowHeight - cellPadding);
+        
+        x += colWidths[index];
       });
+      y += rowHeight;
+    }
+  });
 
-      // Wait for layout to stabilize
-      await new Promise(resolve => setTimeout(resolve, 200));
+  return y + 8;
+};
 
-      // Capture the element as canvas with better quality settings
-      const canvas = await html2canvas(element, {
-        scale: 3, // Even higher quality
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        windowWidth: element.scrollWidth + 100, // Extra padding
-        windowHeight: element.scrollHeight + 100,
-        scrollY: -window.scrollY,
-        scrollX: -window.scrollX,
-        // Ensure everything is captured fully
-        onclone: (clonedDoc) => {
-          const clonedElement = clonedDoc.getElementById(elementId);
-          if (clonedElement) {
-            clonedElement.style.overflow = 'visible';
-            clonedElement.style.height = 'auto';
-            clonedElement.style.maxHeight = 'none';
-            
-            // Fix all elements in the cloned document
-            const allElements = clonedElement.getElementsByTagName('*');
-            for (let i = 0; i < allElements.length; i++) {
-              const el = allElements[i] as HTMLElement;
-              el.style.overflow = 'visible';
-              el.style.maxWidth = 'none';
-              el.style.textOverflow = 'clip';
-              
-              // Special handling for flex containers
-              if (el.classList.contains('flex') || 
-                  el.style.display === 'flex' || 
-                  el.style.display === 'inline-flex') {
-                el.style.flexWrap = 'wrap';
-              }
-            }
-          }
-        }
-      });
+export const usePDFExport = () => {
+  const exportToPDF = useCallback(async ({ selectedDate, shiftName, shiftData }: ExportOptions) => {
+    try {
+      console.log("PDF Export - Received data:", { selectedDate, shiftName, shiftData });
 
-      // Restore original styles
-      element.style.overflow = originalOverflow;
-      element.style.height = originalHeight;
-      element.style.maxHeight = originalMaxHeight;
-      
-      // Restore badge styles
-      originalBadgeStyles.forEach(({ el, styles }) => {
-        Object.keys(styles).forEach(key => {
-          el.style[key as any] = styles[key];
-        });
-      });
-
-      // Calculate dimensions for PDF (A4 landscape for better fit)
-      const pdf = new jsPDF("l", "mm", "a4"); // landscape orientation
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      const imgWidth = pdfWidth - 20; // 10mm margin on each side
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      const imgData = canvas.toDataURL("image/png", 1.0);
-
-      // Add header with date
-      pdf.setFontSize(16);
-      pdf.setFont(undefined, 'bold');
-      const headerText = `${shiftName} - ${format(selectedDate, "EEEE, MMMM d, yyyy")}`;
-      const textWidth = pdf.getTextWidth(headerText);
-      pdf.text(headerText, (pdfWidth - textWidth) / 2, 15);
-
-      // Add the schedule image
-      let yPosition = 25;
-      let heightLeft = imgHeight;
-
-      // First page
-      if (heightLeft <= pdfHeight - 30) {
-        // Fits on one page
-        pdf.addImage(imgData, "PNG", 10, yPosition, imgWidth, imgHeight);
-      } else {
-        // Multiple pages needed
-        let currentHeight = 0;
-        while (heightLeft > 0) {
-          const pageImgHeight = Math.min(pdfHeight - 30, heightLeft);
-          
-          // Crop the canvas for this page
-          const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = canvas.width;
-          pageCanvas.height = (pageImgHeight / imgWidth) * canvas.width;
-          
-          const ctx = pageCanvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(
-              canvas,
-              0, currentHeight * (canvas.width / imgWidth),
-              canvas.width, pageCanvas.height,
-              0, 0,
-              canvas.width, pageCanvas.height
-            );
-            
-            const pageImgData = pageCanvas.toDataURL("image/png", 1.0);
-            
-            if (currentHeight > 0) {
-              pdf.addPage();
-            }
-            
-            pdf.addImage(pageImgData, "PNG", 10, 25, imgWidth, pageImgHeight);
-          }
-          
-          currentHeight += pageImgHeight;
-          heightLeft -= pageImgHeight;
-        }
+      if (!shiftData || !selectedDate) {
+        throw new Error("No shift data or date provided for PDF export");
       }
+
+      // Load logo first
+      const logoBase64 = await getLogoBase64();
+
+      // Create PDF in portrait orientation
+      const pdf = new jsPDF("p", "mm", "letter");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      let yPosition = 20;
+
+      // Draw actual logo
+      drawActualLogo(pdf, 15, 15, logoBase64);
+
+      // Compact header section
+      pdf.setFillColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
+      pdf.rect(40, 15, pageWidth - 55, 20, 'F');
+      
+      // Organization header - smaller font
+      pdf.setFontSize(12);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(255, 255, 255);
+      pdf.text("PAPD FIELD OPERATIONS", 45, 25);
+      
+      pdf.setFontSize(10);
+      pdf.text("DAILY SCHEDULE", 45, 31);
+
+      // Compact shift info
+      yPosition = 42;
+      
+      pdf.setFillColor(COLORS.light[0], COLORS.light[1], COLORS.light[2]);
+      pdf.roundedRect(15, yPosition, pageWidth - 30, 12, 2, 2, 'F');
+      
+      pdf.setFontSize(8);
+      pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
+      pdf.setFont("helvetica", "bold");
+      
+      const dateText = `${format(selectedDate, "EEE, MMM d, yyyy")} • ${shiftName.toUpperCase()} • ${shiftData.shift?.start_time || "N/A"}-${shiftData.shift?.end_time || "N/A"}`;
+      pdf.text(dateText, 20, yPosition + 7);
+
+      yPosition += 18;
+
+      // Supervisors - compact display
+      if (shiftData.supervisors && shiftData.supervisors.length > 0) {
+        pdf.setFontSize(7);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
+        pdf.text("SUPERVISORS:", 15, yPosition);
+        
+        yPosition += 4;
+
+        // Supervisors in a compact row
+        const supervisorNames = shiftData.supervisors.map((supervisor: any) => {
+          const name = supervisor?.name ? supervisor.name.toUpperCase() : "UNKNOWN";
+          const unit = supervisor?.unitNumber ? `(Unit ${supervisor.unitNumber})` : "";
+          return `${name} ${unit}`;
+        }).join(" • ");
+        
+        pdf.setFont("helvetica", "normal");
+        pdf.text(supervisorNames, 15, yPosition);
+        
+        yPosition += 8;
+      }
+
+      // SECTION 1: REGULAR OFFICERS TABLE - Full width
+      const regularOfficersData: any[] = [];
+      
+      if (shiftData.officers && shiftData.officers.length > 0) {
+        shiftData.officers.forEach((officer: any) => {
+          regularOfficersData.push([
+            officer?.name ? officer.name.toUpperCase() : "UNKNOWN",
+            officer?.position || "",
+            officer?.badge || "",
+            officer?.unitNumber || "",
+            officer?.notes || officer?.customTime || ""
+          ]);
+        });
+
+        const officersHeaders = ["OFFICER NAME", "BEAT", "BADGE #", "UNIT", "NOTES"];
+        yPosition = drawCompactTable(pdf, officersHeaders, regularOfficersData, yPosition, { left: 15, right: 15 }, COLORS.primary);
+      }
+
+      // SECTION 2: SPECIAL ASSIGNMENT OFFICERS TABLE - Full width
+      const specialAssignmentData: any[] = [];
+      
+      if (shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0) {
+        shiftData.specialAssignmentOfficers.forEach((officer: any) => {
+          specialAssignmentData.push([
+            officer?.name ? officer.name.toUpperCase() : "UNKNOWN",
+            officer?.position || "Special",
+            officer?.badge || "",
+            officer?.unitNumber || "",
+            officer?.notes || officer?.customTime || ""
+          ]);
+        });
+
+        const specialHeaders = ["OFFICER NAME", "ASSIGNMENT", "BADGE #", "UNIT", "NOTES"];
+        yPosition = drawCompactTable(pdf, specialHeaders, specialAssignmentData, yPosition, { left: 15, right: 15 }, COLORS.accent);
+      }
+
+      // SECTION 3: PTO/OFF DUTY TABLE - Full width
+      if (shiftData.ptoRecords && shiftData.ptoRecords.length > 0) {
+        const ptoData: any[] = [];
+        
+        shiftData.ptoRecords.forEach((record: any) => {
+          const name = record?.name ? record.name.toUpperCase() : "UNKNOWN";
+          const badge = record?.badge || "";
+          const ptoType = record?.ptoType ? record.ptoType.toUpperCase() : "UNKNOWN";
+          
+          const timeInfo = record?.isFullShift 
+            ? "FULL SHIFT" 
+            : `${record?.startTime || "N/A"}-${record?.endTime || "N/A"}`;
+          
+          ptoData.push([name, badge, ptoType, timeInfo]);
+        });
+
+        const ptoHeaders = ["OFFICER NAME", "BADGE #", "TYPE", "TIME"];
+        yPosition = drawCompactTable(pdf, ptoHeaders, ptoData, yPosition, { left: 15, right: 15 }, COLORS.warning);
+      }
+
+      // Compact staffing summary at bottom
+      yPosition += 5;
+      const currentSupervisors = shiftData.currentSupervisors || 0;
+      const minSupervisors = shiftData.minSupervisors || 0;
+      const currentOfficers = shiftData.currentOfficers || 0;
+      const minOfficers = shiftData.minOfficers || 0;
+      
+      pdf.setFontSize(7);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
+      
+      const staffingText = `STAFFING: Supervisors ${currentSupervisors}/${minSupervisors} • Officers ${currentOfficers}/${minOfficers}`;
+      pdf.text(staffingText, 15, yPosition);
+
+      // Compact footer reminders
+      yPosition += 8;
+      const reminders = [
+        " Check Email •  Complete Paperwork •  Tag Video •  Clock In/Out"
+      ];
+
+      pdf.setFontSize(6);
+      pdf.setTextColor(COLORS.gray[0], COLORS.gray[1], COLORS.gray[2]);
+      reminders.forEach((reminder) => {
+        pdf.text(reminder, 15, yPosition);
+        yPosition += 3;
+      });
+
+      // Generated timestamp
+      const generatedAt = `Generated: ${format(new Date(), "MMM d, h:mm a")}`;
+      pdf.text(generatedAt, pageWidth - 15, yPosition, { align: 'right' });
 
       // Generate filename
       const dateStr = format(selectedDate, "yyyy-MM-dd");
-      const filename = `schedule_${shiftName.replace(/\s+/g, "_")}_${dateStr}.pdf`;
+      const dayOfWeek = format(selectedDate, "EEEE").toUpperCase();
+      const filename = `PAPD_Schedule_${shiftName.replace(/\s+/g, "_")}_${dayOfWeek}_${dateStr}.pdf`;
 
       // Save the PDF
       pdf.save(filename);
