@@ -27,46 +27,75 @@ interface OfficerProfileDialogProps {
     comp_hours?: number | null;
     holiday_hours?: number | null;
     rank?: string | null;
-  };
+  } | null; // Allow null for new officer creation
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerProfileDialogProps) => {
   const queryClient = useQueryClient();
+  const isEditing = officer !== null;
+  
+  // Initialize state with defaults or existing officer data
   const [hireDate, setHireDate] = useState<Date | undefined>(
-    officer.hire_date ? new Date(officer.hire_date) : undefined
+    officer?.hire_date ? new Date(officer.hire_date) : undefined
   );
   const [serviceCreditOverride, setServiceCreditOverride] = useState<string>(
-    officer.service_credit_override?.toString() || ""
+    officer?.service_credit_override?.toString() || ""
   );
   const [calculatedCredit, setCalculatedCredit] = useState<number>(0);
   const [formData, setFormData] = useState({
-    full_name: officer.full_name,
-    email: officer.email,
-    phone: officer.phone || "",
-    badge_number: officer.badge_number || "",
-    rank: officer.rank || "Officer",
-    vacation_hours: officer.vacation_hours?.toString() || "0",
-    sick_hours: officer.sick_hours?.toString() || "0",
-    comp_hours: officer.comp_hours?.toString() || "0",
-    holiday_hours: officer.holiday_hours?.toString() || "0",
+    full_name: officer?.full_name || "",
+    email: officer?.email || "",
+    phone: officer?.phone || "",
+    badge_number: officer?.badge_number || "",
+    rank: officer?.rank || "Officer",
+    vacation_hours: officer?.vacation_hours?.toString() || "0",
+    sick_hours: officer?.sick_hours?.toString() || "0",
+    comp_hours: officer?.comp_hours?.toString() || "0",
+    holiday_hours: officer?.holiday_hours?.toString() || "0",
   });
 
+  // Reset form when dialog opens/closes or officer changes
   useEffect(() => {
-    const fetchServiceCredit = async () => {
-      const { data } = await supabase.rpc("get_service_credit", {
-        profile_id: officer.id,
-      });
-      setCalculatedCredit(data || 0);
-    };
     if (open) {
-      fetchServiceCredit();
+      setHireDate(officer?.hire_date ? new Date(officer.hire_date) : undefined);
+      setServiceCreditOverride(officer?.service_credit_override?.toString() || "");
+      setFormData({
+        full_name: officer?.full_name || "",
+        email: officer?.email || "",
+        phone: officer?.phone || "",
+        badge_number: officer?.badge_number || "",
+        rank: officer?.rank || "Officer",
+        vacation_hours: officer?.vacation_hours?.toString() || "0",
+        sick_hours: officer?.sick_hours?.toString() || "0",
+        comp_hours: officer?.comp_hours?.toString() || "0",
+        holiday_hours: officer?.holiday_hours?.toString() || "0",
+      });
+      
+      // Only fetch service credit for existing officers
+      if (officer?.id) {
+        fetchServiceCredit();
+      } else {
+        setCalculatedCredit(0);
+      }
     }
-  }, [officer.id, open, hireDate, serviceCreditOverride]);
+  }, [open, officer]);
 
+  const fetchServiceCredit = async () => {
+    if (!officer?.id) return;
+    
+    const { data } = await supabase.rpc("get_service_credit", {
+      profile_id: officer.id,
+    });
+    setCalculatedCredit(data || 0);
+  };
+
+  // Mutation for updating existing officer
   const updateProfileMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      if (!officer?.id) throw new Error("No officer ID provided");
+      
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -96,21 +125,98 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     },
   });
 
+  // Mutation for creating new officer
+  // Replace the createProfileMutation in your OfficerProfileDialog.tsx with this:
+const createProfileMutation = useMutation({
+  mutationFn: async (data: typeof formData) => {
+    // Helper function to generate random password
+    const generateRandomPassword = () => {
+      return `TempPass${Math.random().toString(36).slice(-8)}!`;
+    };
+
+    // First create the auth user with email confirmation
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: data.email,
+      password: generateRandomPassword(), // Temporary password
+      email_confirm: false, // Don't auto-confirm, will send confirmation
+      user_metadata: {
+        full_name: data.full_name,
+      }
+    });
+
+    if (authError) throw authError;
+    if (!authData.user) throw new Error("Failed to create user");
+
+    // Then create the profile
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert({
+        id: authData.user.id,
+        full_name: data.full_name,
+        email: data.email,
+        phone: data.phone || null,
+        badge_number: data.badge_number || null,
+        rank: data.rank as "Officer" | "Sergeant" | "Lieutenant" | "Deputy Chief" | "Chief",
+        hire_date: hireDate ? format(hireDate, "yyyy-MM-dd") : null,
+        service_credit_override: serviceCreditOverride ? Number(serviceCreditOverride) : null,
+        vacation_hours: Number(data.vacation_hours) || 0,
+        sick_hours: Number(data.sick_hours) || 0,
+        comp_hours: Number(data.comp_hours) || 0,
+        holiday_hours: Number(data.holiday_hours) || 0,
+      });
+
+    if (profileError) throw profileError;
+
+    // Send password reset email
+    const { error: resetError } = await supabase.auth.admin.generateLink({
+      type: 'recovery',
+      email: data.email,
+    });
+
+    if (resetError) {
+      console.error('Failed to send password reset email:', resetError);
+      // Don't throw here - the user was created successfully, just the email failed
+    }
+  },
+  onSuccess: () => {
+    toast.success("Profile created successfully - password reset email sent");
+    queryClient.invalidateQueries({ queryKey: ["all-officers"] });
+    onOpenChange(false);
+  },
+  onError: (error: any) => {
+    toast.error(error.message || "Failed to create profile");
+  },
+});
+
+// Add this helper function to generate a random password
+const generateRandomPassword = () => {
+  return `TempPass${Math.random().toString(36).slice(-8)}!`;
+};
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.full_name || !formData.email) {
       toast.error("Name and email are required");
       return;
     }
-    updateProfileMutation.mutate(formData);
+
+    if (isEditing) {
+      updateProfileMutation.mutate(formData);
+    } else {
+      createProfileMutation.mutate(formData);
+    }
   };
+
+  const isPending = updateProfileMutation.isPending || createProfileMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Edit Officer Profile</DialogTitle>
-          <DialogDescription>Update officer information</DialogDescription>
+          <DialogTitle>{isEditing ? "Edit Officer Profile" : "Create New Officer Profile"}</DialogTitle>
+          <DialogDescription>
+            {isEditing ? "Update officer information" : "Create a new officer profile"}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -215,33 +321,35 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="service_credit_override" className="flex items-center gap-2">
-              <Award className="h-4 w-4" />
-              Service Credit Adjustment (Years)
-            </Label>
-            <Input
-              id="service_credit_override"
-              type="number"
-              placeholder="0 (no adjustment)"
-              value={serviceCreditOverride}
-              onChange={(e) => setServiceCreditOverride(e.target.value)}
-              step="0.1"
-            />
-            <p className="text-sm text-muted-foreground">
-              {hireDate ? (
-                <>
-                  Calculated from hire date: <strong>{(calculatedCredit - (Number(serviceCreditOverride) || 0)).toFixed(1)} years</strong>
-                  {serviceCreditOverride && ` + adjustment (${Number(serviceCreditOverride).toFixed(1)}) = ${calculatedCredit.toFixed(1)} years total`}
-                </>
-              ) : (
-                <>Current service credit: <strong>{calculatedCredit.toFixed(1)} years</strong></>
-              )}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Enter positive values to add credit, negative to deduct (e.g., -2 to subtract 2 years)
-            </p>
-          </div>
+          {isEditing && (
+            <div className="space-y-2">
+              <Label htmlFor="service_credit_override" className="flex items-center gap-2">
+                <Award className="h-4 w-4" />
+                Service Credit Adjustment (Years)
+              </Label>
+              <Input
+                id="service_credit_override"
+                type="number"
+                placeholder="0 (no adjustment)"
+                value={serviceCreditOverride}
+                onChange={(e) => setServiceCreditOverride(e.target.value)}
+                step="0.1"
+              />
+              <p className="text-sm text-muted-foreground">
+                {hireDate ? (
+                  <>
+                    Calculated from hire date: <strong>{(calculatedCredit - (Number(serviceCreditOverride) || 0)).toFixed(1)} years</strong>
+                    {serviceCreditOverride && ` + adjustment (${Number(serviceCreditOverride).toFixed(1)}) = ${calculatedCredit.toFixed(1)} years total`}
+                  </>
+                ) : (
+                  <>Current service credit: <strong>{calculatedCredit.toFixed(1)} years</strong></>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Enter positive values to add credit, negative to deduct (e.g., -2 to subtract 2 years)
+              </p>
+            </div>
+          )}
 
           <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
             <h3 className="font-semibold text-sm">PTO Balances</h3>
@@ -297,8 +405,8 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={updateProfileMutation.isPending}>
-              {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Saving..." : (isEditing ? "Save Changes" : "Create Profile")}
             </Button>
           </div>
         </form>

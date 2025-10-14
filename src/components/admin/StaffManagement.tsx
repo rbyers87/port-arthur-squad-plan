@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, Clock, Edit2, Calendar, Award } from "lucide-react";
+import { Users, Clock, Edit2, Calendar, Award, Plus } from "lucide-react";
 import { OfficerProfileDialog } from "./OfficerProfileDialog";
 import { OfficerScheduleManager } from "./OfficerScheduleManager";
 import { format } from "date-fns";
@@ -12,6 +12,7 @@ import { format } from "date-fns";
 export const StaffManagement = () => {
   const [editingOfficer, setEditingOfficer] = useState<any>(null);
   const [managingSchedule, setManagingSchedule] = useState<any>(null);
+  const [creatingNewOfficer, setCreatingNewOfficer] = useState(false);
 
   const { data: officers, isLoading } = useQuery({
     queryKey: ["all-officers"],
@@ -59,17 +60,37 @@ export const StaffManagement = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Staff Directory
-        </CardTitle>
-        <CardDescription>View all officers and their information</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Staff Directory
+            </CardTitle>
+            <CardDescription>View all officers and their information</CardDescription>
+          </div>
+          <Button 
+            onClick={() => setCreatingNewOfficer(true)}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            New Profile
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading officers...</p>
         ) : !officers || officers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No officers found.</p>
+          <div className="text-center py-8">
+            <p className="text-sm text-muted-foreground mb-4">No officers found.</p>
+            <Button 
+              onClick={() => setCreatingNewOfficer(true)}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Create First Officer Profile
+            </Button>
+          </div>
         ) : (
           <div className="space-y-3">
             {officers.map((officer) => (
@@ -178,6 +199,14 @@ export const StaffManagement = () => {
           officer={managingSchedule}
           open={!!managingSchedule}
           onOpenChange={(open) => !open && setManagingSchedule(null)}
+        />
+      )}
+
+      {creatingNewOfficer && (
+        <OfficerProfileDialog
+          officer={null}
+          open={!!creatingNewOfficer}
+          onOpenChange={(open) => !open && setCreatingNewOfficer(false)}
         />
       )}
     </Card>
