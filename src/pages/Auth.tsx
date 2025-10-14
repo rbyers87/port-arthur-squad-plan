@@ -71,7 +71,7 @@ const Auth = () => {
             <img 
               src={logoBase64} 
               alt="Port Arthur PD Logo" 
-              className="w-16 h-16 object-contain"
+              className="w-24 h-24 object-contain"
             />
           </div>
           <CardTitle className="text-2xl">Port Arthur PD</CardTitle>
