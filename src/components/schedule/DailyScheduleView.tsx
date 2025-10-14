@@ -556,8 +556,6 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
   };
 
   const handleEditClick = (officer: any) => {
-    if (!isAdminOrSupervisor) return;
-    
     setEditingSchedule(`${officer.scheduleId}-${officer.type}`);
     
     // Check if the officer's current position is a custom position
@@ -575,22 +573,16 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
   };
 
   const handleEditUnitClick = (officer: any) => {
-    if (!isAdminOrSupervisor) return;
-    
     setEditingUnitNumber(`${officer.scheduleId}-${officer.type}`);
     setEditUnitValue(officer.unitNumber || "");
   };
 
   const handleEditNotesClick = (officer: any) => {
-    if (!isAdminOrSupervisor) return;
-    
     setEditingNotes(`${officer.scheduleId}-${officer.type}`);
     setEditNotesValue(officer.notes || "");
   };
 
   const handleEditPTO = (ptoRecord: any) => {
-    if (!isAdminOrSupervisor) return;
-    
     setSelectedOfficer({
       officerId: ptoRecord.officerId,
       name: ptoRecord.name,
@@ -614,8 +606,6 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
   };
 
   const handleAddOfficer = (shift: any) => {
-    if (!isAdminOrSupervisor) return;
-    
     setSelectedShiftForAdd(shift);
     setAddOfficerDialogOpen(true);
   };
@@ -709,37 +699,33 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
                       onChange={(e) => setEditUnitValue(e.target.value)}
                       className="w-16 h-8 text-sm"
                     />
-                    {isAdminOrSupervisor && (
-                      <>
-                        <Button
-                          size="sm"
-                          onClick={() => handleSaveUnitNumber(officer)}
-                          disabled={updatePositionMutation.isPending}
-                          className="h-8 w-8"
-                        >
-                          <Save className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditingUnitNumber(null);
-                            setEditUnitValue("");
-                          }}
-                          className="h-8 w-8"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </>
-                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => handleSaveUnitNumber(officer)}
+                      disabled={updatePositionMutation.isPending}
+                      className="h-8 w-8"
+                    >
+                      <Save className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingUnitNumber(null);
+                        setEditUnitValue("");
+                      }}
+                      className="h-8 w-8"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
                   </div>
                 ) : (
                   <Badge 
                     variant={officer.unitNumber ? "default" : "outline"} 
-                    className={`w-16 ${isAdminOrSupervisor ? "cursor-pointer hover:bg-muted transition-colors" : ""}`}
-                    onClick={() => isAdminOrSupervisor && handleEditUnitClick(officer)}
+                    className="w-16 cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => handleEditUnitClick(officer)}
                   >
-                    {officer.unitNumber || (isAdminOrSupervisor ? "Add" : "-")}
+                    {officer.unitNumber || "Add"}
                   </Badge>
                 )}
               </div>
@@ -758,40 +744,32 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
                       onChange={(e) => setEditNotesValue(e.target.value)}
                       className="h-8 text-sm"
                     />
-                    {isAdminOrSupervisor && (
-                      <>
-                        <Button
-                          size="sm"
-                          onClick={() => handleSaveNotes(officer)}
-                          disabled={updatePositionMutation.isPending}
-                          className="h-8 w-8"
-                        >
-                          <Save className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditingNotes(null);
-                            setEditNotesValue("");
-                          }}
-                          className="h-8 w-8"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </>
-                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => handleSaveNotes(officer)}
+                      disabled={updatePositionMutation.isPending}
+                      className="h-8 w-8"
+                    >
+                      <Save className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingNotes(null);
+                        setEditNotesValue("");
+                      }}
+                      className="h-8 w-8"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
                   </div>
                 ) : (
                   <div 
-                    className={`text-xs p-2 rounded border min-h-8 flex items-center justify-center ${
-                      isAdminOrSupervisor 
-                        ? "border-dashed border-muted-foreground/30 cursor-pointer hover:bg-muted transition-colors" 
-                        : "border-transparent"
-                    }`}
-                    onClick={() => isAdminOrSupervisor && handleEditNotesClick(officer)}
+                    className="text-xs p-2 rounded border border-dashed border-muted-foreground/30 cursor-pointer hover:bg-muted transition-colors min-h-8 flex items-center justify-center"
+                    onClick={() => handleEditNotesClick(officer)}
                   >
-                    {officer.notes || (isAdminOrSupervisor ? "Add notes" : "-")}
+                    {officer.notes || "Add notes"}
                   </div>
                 )}
               </div>
@@ -824,65 +802,59 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
                       />
                     )}
                   </div>
-                  {isAdminOrSupervisor && (
-                    <>
-                      <Button
-                        size="sm"
-                        onClick={() => handleSavePosition(officer)}
-                        disabled={updatePositionMutation.isPending}
-                      >
-                        <Save className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditingSchedule(null);
-                          setEditPosition("");
-                          setCustomPosition("");
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => handleSavePosition(officer)}
+                    disabled={updatePositionMutation.isPending}
+                  >
+                    <Save className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditingSchedule(null);
+                      setEditPosition("");
+                      setCustomPosition("");
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               ) : (
                 <div className="text-right min-w-24">
                   <Badge variant="secondary" className="mb-1 w-full justify-center">
                     {officer.position || "No Position"}
                   </Badge>
-                  {isAdminOrSupervisor && (
-                    <div className="flex gap-1 justify-center">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleEditClick(officer)}
-                        title="Edit Position"
-                        className="h-6 w-6"
-                      >
-                        <Edit2 className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setSelectedOfficer({
-                            officerId: officer.officerId,
-                            name: officer.name,
-                            scheduleId: officer.scheduleId,
-                            type: officer.type,
-                          });
-                          setSelectedShift(officer.shift);
-                          setPtoDialogOpen(true);
-                        }}
-                        title="Assign PTO"
-                        className="h-6 w-6"
-                      >
-                        <Clock className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex gap-1 justify-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleEditClick(officer)}
+                      title="Edit Position"
+                      className="h-6 w-6"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSelectedOfficer({
+                          officerId: officer.officerId,
+                          name: officer.name,
+                          scheduleId: officer.scheduleId,
+                          type: officer.type,
+                        });
+                        setSelectedShift(officer.shift);
+                        setPtoDialogOpen(true);
+                      }}
+                      title="Assign PTO"
+                      className="h-6 w-6"
+                    >
+                      <Clock className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1020,37 +992,33 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
                                 onChange={(e) => setEditUnitValue(e.target.value)}
                                 className="w-16 h-8 text-sm"
                               />
-                              {isAdminOrSupervisor && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleSaveUnitNumber(officer)}
-                                    disabled={updatePositionMutation.isPending}
-                                    className="h-8 w-8"
-                                  >
-                                    <Save className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => {
-                                      setEditingUnitNumber(null);
-                                      setEditUnitValue("");
-                                    }}
-                                    className="h-8 w-8"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </>
-                              )}
+                              <Button
+                                size="sm"
+                                onClick={() => handleSaveUnitNumber(officer)}
+                                disabled={updatePositionMutation.isPending}
+                                className="h-8 w-8"
+                              >
+                                <Save className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingUnitNumber(null);
+                                  setEditUnitValue("");
+                                }}
+                                className="h-8 w-8"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
                             </div>
                           ) : (
                             <Badge 
                               variant={officer.unitNumber ? "default" : "outline"} 
-                              className={`w-16 ${isAdminOrSupervisor ? "cursor-pointer hover:bg-muted transition-colors" : ""}`}
-                              onClick={() => isAdminOrSupervisor && handleEditUnitClick(officer)}
+                              className="w-16 cursor-pointer hover:bg-muted transition-colors"
+                              onClick={() => handleEditUnitClick(officer)}
                             >
-                              {officer.unitNumber || (isAdminOrSupervisor ? "Add" : "-")}
+                              {officer.unitNumber || "Add"}
                             </Badge>
                           )}
                         </div>
@@ -1069,40 +1037,32 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
                                 onChange={(e) => setEditNotesValue(e.target.value)}
                                 className="h-8 text-sm"
                               />
-                              {isAdminOrSupervisor && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleSaveNotes(officer)}
-                                    disabled={updatePositionMutation.isPending}
-                                    className="h-8 w-8"
-                                  >
-                                    <Save className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => {
-                                      setEditingNotes(null);
-                                      setEditNotesValue("");
-                                    }}
-                                    className="h-8 w-8"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </>
-                              )}
+                              <Button
+                                size="sm"
+                                onClick={() => handleSaveNotes(officer)}
+                                disabled={updatePositionMutation.isPending}
+                                className="h-8 w-8"
+                              >
+                                <Save className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingNotes(null);
+                                  setEditNotesValue("");
+                                }}
+                                className="h-8 w-8"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
                             </div>
                           ) : (
                             <div 
-                              className={`text-xs p-2 rounded border min-h-8 flex items-center justify-center ${
-                                isAdminOrSupervisor 
-                                  ? "border-dashed border-muted-foreground/30 cursor-pointer hover:bg-muted transition-colors" 
-                                  : "border-transparent"
-                              }`}
-                              onClick={() => isAdminOrSupervisor && handleEditNotesClick(officer)}
+                              className="text-xs p-2 rounded border border-dashed border-muted-foreground/30 cursor-pointer hover:bg-muted transition-colors min-h-8 flex items-center justify-center"
+                              onClick={() => handleEditNotesClick(officer)}
                             >
-                              {officer.notes || (isAdminOrSupervisor ? "Add notes" : "-")}
+                              {officer.notes || "Add notes"}
                             </div>
                           )}
                         </div>
@@ -1117,37 +1077,35 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
                           <p className="text-xs text-muted-foreground max-w-32 truncate">
                             {officer.position}
                           </p>
-                          {isAdminOrSupervisor && (
-                            <div className="flex gap-1 justify-center mt-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleEditClick(officer)}
-                                title="Edit Position"
-                                className="h-6 w-6"
-                              >
-                                <Edit2 className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setSelectedOfficer({
-                                    officerId: officer.officerId,
-                                    name: officer.name,
-                                    scheduleId: officer.scheduleId,
-                                    type: officer.type,
-                                  });
-                                  setSelectedShift(officer.shift);
-                                  setPtoDialogOpen(true);
-                                }}
-                                title="Assign PTO"
-                                className="h-6 w-6"
-                              >
-                                <Clock className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          )}
+                          <div className="flex gap-1 justify-center mt-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEditClick(officer)}
+                              title="Edit Position"
+                              className="h-6 w-6"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedOfficer({
+                                  officerId: officer.officerId,
+                                  name: officer.name,
+                                  scheduleId: officer.scheduleId,
+                                  type: officer.type,
+                                });
+                                setSelectedShift(officer.shift);
+                                setPtoDialogOpen(true);
+                              }}
+                              title="Assign PTO"
+                              className="h-6 w-6"
+                            >
+                              <Clock className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1181,28 +1139,24 @@ export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdmin
                           </p>
                         </div>
                         {/* EDIT PTO BUTTON - For existing PTO records */}
-                        {isAdminOrSupervisor && (
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => handleEditPTO(record)}
-                            title="Edit PTO"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleEditPTO(record)}
+                          title="Edit PTO"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
                         {/* REMOVE PTO BUTTON - ONLY SHOW IN PTO SECTION */}
-                        {isAdminOrSupervisor && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removePTOMutation.mutate(record)}
-                            disabled={removePTOMutation.isPending}
-                            title="Remove PTO"
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removePTOMutation.mutate(record)}
+                          disabled={removePTOMutation.isPending}
+                          title="Remove PTO"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </div>
                     </div>
                   ))}
