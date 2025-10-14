@@ -20,6 +20,7 @@ interface DailyScheduleViewProps {
   filterShiftId?: string;
   isAdminOrSupervisor?: boolean;
   userId?: string;
+  userRole?: string; // Add this
 }
 
 export const DailyScheduleView = ({ selectedDate, filterShiftId = "all", isAdminOrSupervisor = false }: DailyScheduleViewProps) => {
