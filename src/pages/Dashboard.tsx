@@ -114,7 +114,7 @@ const Dashboard = () => {
       <img 
         src={logoBase64} 
         alt="Port Arthur PD Logo" 
-        className="w-10 h-10 object-contain"
+        className="w-16 h-16 object-contain"
       />
       <div>
         <h1 className="text-xl font-bold">Port Arthur PD</h1>
