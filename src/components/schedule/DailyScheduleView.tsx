@@ -27,9 +27,11 @@ export const DailyScheduleView = ({
   selectedDate, 
   filterShiftId = "all", 
   isAdminOrSupervisor = false,
-  userRole = "officer"
+  userRole
 }: DailyScheduleViewProps) => {
   const queryClient = useQueryClient();
+  
+  // Determine if user can edit - check both isAdminOrSupervisor AND userRole
   const canEdit = isAdminOrSupervisor || userRole === "admin" || userRole === "supervisor";
   
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
@@ -698,7 +700,7 @@ export const DailyScheduleView = ({
                 <Label htmlFor={`unit-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
                   Unit
                 </Label>
-                {canEdit && editingUnitNumber === `${officer.scheduleId}-${officer.type}` ? (
+                {editingUnitNumber === `${officer.scheduleId}-${officer.type}` && canEdit ? (
                   <div className="flex items-center gap-1">
                     <Input
                       id={`unit-${officer.scheduleId}`}
@@ -733,7 +735,7 @@ export const DailyScheduleView = ({
                     className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
                     onClick={() => canEdit && handleEditUnitClick(officer)}
                   >
-                    {officer.unitNumber || "N/A"}
+                    {officer.unitNumber || (canEdit ? "Add" : "N/A")}
                   </Badge>
                 )}
               </div>
@@ -743,7 +745,7 @@ export const DailyScheduleView = ({
                 <Label htmlFor={`notes-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
                   Notes
                 </Label>
-                {canEdit && editingNotes === `${officer.scheduleId}-${officer.type}` ? (
+                {editingNotes === `${officer.scheduleId}-${officer.type}` && canEdit ? (
                   <div className="flex items-center gap-1">
                     <Input
                       id={`notes-${officer.scheduleId}`}
@@ -790,7 +792,7 @@ export const DailyScheduleView = ({
             {/* Position & Actions - Right Side */}
             <div className="flex items-center gap-2 shrink-0">
               {/* Position Display/Edit */}
-              {canEdit && editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
+              {editingSchedule === `${officer.scheduleId}-${officer.type}` && canEdit ? (
                 <div className="flex items-center gap-2">
                   <div className="space-y-2">
                     <Select value={editPosition} onValueChange={setEditPosition}>
@@ -998,7 +1000,7 @@ export const DailyScheduleView = ({
                           <Label htmlFor={`unit-special-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
                             Unit
                           </Label>
-                          {canEdit && editingUnitNumber === `${officer.scheduleId}-${officer.type}` ? (
+                          {editingUnitNumber === `${officer.scheduleId}-${officer.type}` && canEdit ? (
                             <div className="flex items-center gap-1">
                               <Input
                                 id={`unit-special-${officer.scheduleId}`}
@@ -1033,7 +1035,7 @@ export const DailyScheduleView = ({
                               className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
                               onClick={() => canEdit && handleEditUnitClick(officer)}
                             >
-                              {officer.unitNumber || "N/A"}
+                              {officer.unitNumber || (canEdit ? "Add" : "N/A")}
                             </Badge>
                           )}
                         </div>
@@ -1043,7 +1045,7 @@ export const DailyScheduleView = ({
                           <Label htmlFor={`notes-special-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
                             Notes
                           </Label>
-                          {canEdit && editingNotes === `${officer.scheduleId}-${officer.type}` ? (
+                          {editingNotes === `${officer.scheduleId}-${officer.type}` && canEdit ? (
                             <div className="flex items-center gap-1">
                               <Input
                                 id={`notes-special-${officer.scheduleId}`}
