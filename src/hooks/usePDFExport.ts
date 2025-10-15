@@ -223,30 +223,23 @@ export const usePDFExport = () => {
 
       yPosition += 15;
 
-      // Supervisors section - FIXED: Added missing closing brace
+      // Supervisors section - removed the SUPERVISOR table title and space
       if (shiftData.supervisors && shiftData.supervisors.length > 0) {
-        pdf.setFontSize(7);
-        pdf.setFont("helvetica", "bold");
-        pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
-        pdf.text("SUPERVISORS:", 15, yPosition);
-        
-        yPosition += 6;
-
         const supervisorsData: any[] = [];
 
         shiftData.supervisors.forEach((supervisor: any) => {
-          supervisorsData.push([
+        supervisorsData.push([
             supervisor?.name ? supervisor.name.toUpperCase() : "UNKNOWN",
             supervisor?.rank || "",
             supervisor?.badge || "",
             supervisor?.unitNumber ? `Unit ${supervisor.unitNumber}` : "",
             supervisor?.notes || ""
-          ]);
-        });
+                  ]);
+              });
 
-        const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
-        yPosition = drawCompactTable(pdf, officersHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
-        
+          const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
+          yPosition = drawCompactTable(pdf, officersHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
+  
         yPosition += 4;
       } // <-- This closing brace was missing
 
