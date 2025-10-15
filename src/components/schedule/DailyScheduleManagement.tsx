@@ -78,11 +78,12 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleMa
       </Card>
 
       <DailyScheduleView 
-        selectedDate={selectedDate} 
-        filterShiftId={selectedShiftId} 
-        key={`${selectedDate.toISOString()}-${selectedShiftId}`}
-        isAdminOrSupervisor={isAdminOrSupervisor}
-      />
+  selectedDate={selectedDate} 
+  filterShiftId={selectedShiftId} 
+  key={`${selectedDate.toISOString()}-${selectedShiftId}`}
+  isAdminOrSupervisor={isAdminOrSupervisor}
+  userRole={isAdminOrSupervisor ? "admin" : "officer"} // Add this line
+/>
     </div>
   );
 };
