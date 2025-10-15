@@ -377,3 +377,6 @@ Sergeant or Lieutenant → supervisor role
 Deputy Chief or Chief → admin role
 
 This ensures that both new profiles (created via the Edge Function) and existing profiles (edited via this dialog) maintain the proper role hierarchy based on rank.
+
+## Current problems
+The "end this schedule" button does not delete the future schedules.  I have to go into supabase and manually delete the recurring schedule to build a new one in the app.
