@@ -1301,39 +1301,39 @@ export const DailyScheduleView = ({
               )}
 
               {/* PTO Section - UPDATED WITH EDITABLE FIELDS */}
-              {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <h4 className="font-semibold text-sm">Time Off</h4>
-                    <Badge variant="outline">
-                      {shiftData.ptoRecords.length}
-                    </Badge>
-                  </div>
-                  {shiftData.ptoRecords.map((ptoRecord) => (
-                    <div
-                      key={ptoRecord.id}
-                      className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-md"
-                    >
-                      {/* Officer Info - Left Side */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                          <div>
-                            <p className="font-medium truncate text-red-900">{ptoRecord.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {ptoRecord.rank || 'Officer'} • Badge #{ptoRecord.badge}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Badge variant="destructive" className="text-xs">
-                            {ptoRecord.ptoType}
-                          </Badge>
-                          <span className="text-red-700">
-                            {ptoRecord.startTime} - {ptoRecord.endTime}
-                            {!ptoRecord.isFullShift && " (Partial Day)"}
-                          </span>
-                        </div>
-                      </div>
+{shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between border-b pb-2">
+      <h4 className="font-semibold text-sm">Time Off</h4>
+      <Badge variant="outline">
+        {shiftData.ptoRecords.length}
+      </Badge>
+    </div>
+    {shiftData.ptoRecords.map((ptoRecord) => (
+      <div
+        key={ptoRecord.id}
+        className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-md"
+      >
+        {/* Officer Info - Left Side */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-1">
+            <div>
+              <p className="font-medium truncate text-gray-900">{ptoRecord.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {ptoRecord.rank || 'Officer'} • Badge #{ptoRecord.badge}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Badge variant="secondary" className="text-xs">
+              {ptoRecord.ptoType}
+            </Badge>
+            <span className="text-gray-700">
+              {ptoRecord.startTime} - {ptoRecord.endTime}
+              {!ptoRecord.isFullShift && " (Partial Day)"}
+            </span>
+          </div>
+        </div>
 
                       {/* Unit & Notes - Middle Section - NOW EDITABLE */}
                       <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
