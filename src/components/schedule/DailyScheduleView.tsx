@@ -19,7 +19,7 @@ interface DailyScheduleViewProps {
   selectedDate: Date;
   filterShiftId?: string;
   isAdminOrSupervisor?: boolean;
-  userRole?: 'officer' | 'supervisor' | 'admin'; // Make sure this is included
+  userRole?: 'officer' | 'supervisor' | 'admin';
   userId?: string;
 }
 
@@ -82,22 +82,22 @@ export const DailyScheduleView = ({
   ];
 
   // Add rank order for sorting supervisors only
-const rankOrder = {
-  'Chief': 1,
-  'Deputy Chief': 2,
-  'Lieutenant': 3,
-  'Sergeant': 4,
-  'Officer': 5
-};
+  const rankOrder = {
+    'Chief': 1,
+    'Deputy Chief': 2,
+    'Lieutenant': 3,
+    'Sergeant': 4,
+    'Officer': 5
+  };
 
-// Function to sort supervisors by rank ONLY
-const sortSupervisorsByRank = (supervisors: any[]) => {
-  return supervisors.sort((a, b) => {
-    const rankA = a.officer_rank || 'Officer';
-    const rankB = b.officer_rank || 'Officer';
-    return (rankOrder[rankA as keyof typeof rankOrder] || 99) - (rankOrder[rankB as keyof typeof rankOrder] || 99);
-  });
-};
+  // Function to sort supervisors by rank ONLY
+  const sortSupervisorsByRank = (supervisors: any[]) => {
+    return supervisors.sort((a, b) => {
+      const rankA = a.officer_rank || 'Officer';
+      const rankB = b.officer_rank || 'Officer';
+      return (rankOrder[rankA as keyof typeof rankOrder] || 99) - (rankOrder[rankB as keyof typeof rankOrder] || 99);
+    });
+  };
 
   const { data: scheduleData, isLoading } = useQuery({
     queryKey: ["daily-schedule", dateStr],
@@ -116,7 +116,7 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
         .eq("day_of_week", dayOfWeek);
       if (minError) throw minError;
 
-      // Get recurring schedules for this day of week
+      // Get recurring schedules for this day of week - UPDATED TO INCLUDE officer_rank
       const { data: recurringData, error: recurringError } = await supabase
         .from("recurring_schedules")
         .select(`
@@ -129,7 +129,7 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
 
       if (recurringError) throw recurringError;
 
-      // Get schedule exceptions for this specific date
+      // Get schedule exceptions for this specific date - UPDATED TO INCLUDE officer_rank
       const { data: exceptionsData, error: exceptionsError } = await supabase
         .from("schedule_exceptions")
         .select(`
@@ -183,6 +183,7 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
               officerId: r.officer_id,
               name: r.profiles?.full_name || "Unknown",
               badge: r.profiles?.badge_number,
+              officer_rank: r.profiles?.officer_rank,
               position: workingException ? workingException.position_name : r.position_name,
               unitNumber: workingException ? workingException.unit_number : null,
               notes: workingException ? workingException.notes : null,
@@ -230,6 +231,7 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
               officerId: e.officer_id,
               name: e.profiles?.full_name || "Unknown",
               badge: e.profiles?.badge_number,
+              officer_rank: e.profiles?.officer_rank,
               position: e.position_name,
               unitNumber: e.unit_number,
               notes: e.notes,
@@ -259,6 +261,7 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
           officerId: e.officer_id,
           name: e.profiles?.full_name || "Unknown",
           badge: e.profiles?.badge_number,
+          officer_rank: e.profiles?.officer_rank,
           ptoType: e.reason || "PTO",
           startTime: e.custom_start_time || shift.start_time,
           endTime: e.custom_end_time || shift.end_time,
@@ -266,12 +269,12 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
           shiftTypeId: shift.id
         })) || [];
 
-        // Categorize officers
+        // Categorize officers - ONLY SUPERVISORS GET SORTED BY RANK
         const supervisors = sortSupervisorsByRank(
-  allOfficers.filter(o => 
-    o.position?.toLowerCase().includes('supervisor')
-  )
-);
+          allOfficers.filter(o => 
+            o.position?.toLowerCase().includes('supervisor')
+          )
+        );
 
         const specialAssignmentOfficers = allOfficers.filter(o => {
           const position = o.position?.toLowerCase() || '';
@@ -680,9 +683,12 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
             {/* Officer Info - Left Side */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-1">
-               <p className="font-medium truncate">{officer.name}</p>
-              <p className="text-xs text-muted-foreground">
-            {officer.officer_rank || 'Officer'} • Badge #{officer.badge}
+                <div>
+                  <p className="font-medium truncate">{officer.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {officer.officer_rank || 'Officer'} • Badge #{officer.badge}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 {officer.customTime && (
@@ -982,9 +988,12 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-1">
-                          <p className="font-medium truncate">{officer.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                    {officer.officer_rank || 'Officer'} • Badge #{officer.badge}
+                          <div>
+                            <p className="font-medium truncate">{officer.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {officer.officer_rank || 'Officer'} • Badge #{officer.badge}
+                            </p>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           {officer.customTime && (
@@ -1047,10 +1056,12 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-1">
-                          <p className="font-medium truncate text-red-900">{ptoRecord.name}</p>
-                          <Badge variant="outline" className="text-xs shrink-0 bg-red-100">
-                            Badge #{ptoRecord.badge}
-                          </Badge>
+                          <div>
+                            <p className="font-medium truncate text-red-900">{ptoRecord.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {ptoRecord.officer_rank || 'Officer'} • Badge #{ptoRecord.badge}
+                            </p>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                           <Badge variant="destructive" className="text-xs">
@@ -1101,15 +1112,15 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
       </CardContent>
 
       {/* PTO Assignment Dialog */}
-{selectedOfficer && selectedShift && (
-  <PTOAssignmentDialog
-    open={ptoDialogOpen}
-    onOpenChange={setPtoDialogOpen}
-    officer={selectedOfficer}
-    shift={selectedShift}
-    date={dateStr}
-  />
-)}
+      {selectedOfficer && selectedShift && (
+        <PTOAssignmentDialog
+          open={ptoDialogOpen}
+          onOpenChange={setPtoDialogOpen}
+          officer={selectedOfficer}
+          shift={selectedShift}
+          date={dateStr}
+        />
+      )}
 
       {/* Add Officer Dialog */}
       <Dialog open={addOfficerDialogOpen} onOpenChange={setAddOfficerDialogOpen}>
@@ -1138,7 +1149,7 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
   );
 };
 
-// Add Officer Form Component (simplified for brevity)
+// Add Officer Form Component
 const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel }: any) => {
   const [selectedOfficerId, setSelectedOfficerId] = useState("");
   const [position, setPosition] = useState("");
