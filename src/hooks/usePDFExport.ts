@@ -29,165 +29,6 @@ const getLogoBase64 = (): string => {
   return departmentLogo;
 };
 
-// Draw actual logo function
-const drawActualLogo = (pdf: jsPDF, x: number, y: number) => {
-  const logoBase64 = getLogoBase64();
-  
-  if (!logoBase64 || logoBase64 === "your-base64-logo-here") {
-    const logoSize = 20;
-    pdf.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
-    pdf.rect(x, y, logoSize, logoSize, 'F');
-    pdf.setFontSize(6);
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFont("helvetica", "bold");
-    pdf.text("LOGO", x + logoSize/2, y + logoSize/2, { align: 'center', baseline: 'middle' });
-    return logoSize;
-  }
-
-  try {
-    const logoWidth = 20;
-    const logoHeight = 20;
-    pdf.addImage(logoBase64, 'PNG', x, y, logoWidth, logoHeight);
-    return logoWidth;
-  } catch (error) {
-    console.error('Error drawing logo:', error);
-    const logoSize = 20;
-    pdf.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
-    pdf.rect(x, y, logoSize, logoSize, 'F');
-    pdf.setFontSize(6);
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFont("helvetica", "bold");
-    pdf.text("LOGO", x + logoSize/2, y + logoSize/2, { align: 'center', baseline: 'middle' });
-    return logoSize;
-  }
-};
-
-// Fixed table drawing function
-const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: number, margins: { left: number, right: number }, sectionColor?: number[]) => {
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const tableWidth = pageWidth - margins.left - margins.right;
-  
-  const getColumnWidths = (headers: string[]) => {
-    const totalColumns = headers.length;
-    const baseWidths = {
-      "REGULAR OFFICERS": 0.35,
-      "SPECIAL ASSIGNMENT OFFICERS": 0.35,
-      "PTO OFFICERS": 0.35,
-      "BEAT": 0.10,
-      "ASSIGNMENT": 0.20,
-      "BADGE #": 0.10,
-      "UNIT": 0.10,
-      "NOTES": 0.35,
-      "TYPE": 0.15,
-      "TIME": 0.35
-    };
-
-    return headers.map(header => {
-      const widthPercentage = baseWidths[header as keyof typeof baseWidths] || (1 / totalColumns);
-      return tableWidth * widthPercentage;
-    });
-  };
-
-  const colWidths = getColumnWidths(headers);
-  
-  const totalWidth = colWidths.reduce((sum, width) => sum + width, 0);
-  if (Math.abs(totalWidth - tableWidth) > 1) {
-    const adjustmentFactor = tableWidth / totalWidth;
-    colWidths.forEach((width, index) => {
-      colWidths[index] = width * adjustmentFactor;
-    });
-  }
-
-  let y = startY;
-  const rowHeight = 8;
-  const cellPadding = 3;
-
-  // Draw headers
-  let x = margins.left;
-  headers.forEach((header, index) => {
-    pdf.setFillColor(sectionColor?.[0] || COLORS.primary[0], sectionColor?.[1] || COLORS.primary[1], sectionColor?.[2] || COLORS.primary[2]);
-    pdf.rect(x, y, colWidths[index], rowHeight, 'F');
-    
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(7);
-    pdf.setTextColor(255, 255, 255);
-    
-    const textWidth = pdf.getTextWidth(header);
-    const textX = x + (colWidths[index] - textWidth) / 2;
-    pdf.text(header, Math.max(textX, x + 2), y + rowHeight - cellPadding);
-    
-    x += colWidths[index];
-  });
-
-  y += rowHeight;
-
-  // Draw data rows
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(7);
-  
-  data.forEach((row, rowIndex) => {
-    x = margins.left;
-    
-    if (rowIndex % 2 === 0) {
-      pdf.setFillColor(255, 255, 255);
-    } else {
-      pdf.setFillColor(COLORS.light[0], COLORS.light[1], COLORS.light[2]);
-    }
-    
-    pdf.rect(x, y, tableWidth, rowHeight, 'F');
-    
-    pdf.setDrawColor(COLORS.border[0], COLORS.border[1], COLORS.border[2]);
-    pdf.setLineWidth(0.1);
-    
-    row.forEach((cell, cellIndex) => {
-      pdf.rect(x, y, colWidths[cellIndex], rowHeight, 'S');
-      
-      pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
-      
-      const cellText = cell?.toString() || "";
-      const maxTextWidth = colWidths[cellIndex] - (cellPadding * 2);
-      
-      let displayText = cellText;
-      if (pdf.getTextWidth(cellText) > maxTextWidth) {
-        let truncated = cellText;
-        while (pdf.getTextWidth(truncated + "...") > maxTextWidth && truncated.length > 1) {
-          truncated = truncated.substring(0, truncated.length - 1);
-        }
-        displayText = truncated + (truncated.length < cellText.length ? "..." : "");
-      }
-      
-      pdf.text(displayText, x + cellPadding, y + rowHeight - cellPadding);
-      x += colWidths[cellIndex];
-    });
-    
-    y += rowHeight;
-    
-    if (y > pdf.internal.pageSize.getHeight() - 30) {
-      pdf.addPage();
-      y = 30;
-      
-      x = margins.left;
-      headers.forEach((header, index) => {
-        pdf.setFillColor(sectionColor?.[0] || COLORS.primary[0], sectionColor?.[1] || COLORS.primary[1], sectionColor?.[2] || COLORS.primary[2]);
-        pdf.rect(x, y, colWidths[index], rowHeight, 'F');
-        
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(7);
-        pdf.setTextColor(255, 255, 255);
-        
-        const textWidth = pdf.getTextWidth(header);
-        const textX = x + (colWidths[index] - textWidth) / 2;
-        pdf.text(header, Math.max(textX, x + 2), y + rowHeight - cellPadding);
-        
-        x += colWidths[index];
-      });
-      y += rowHeight;
-    }
-  });
-
-  return y + 8;
-};
-
 export const usePDFExport = () => {
   const exportToPDF = useCallback(async ({ selectedDate, shiftName, shiftData }: ExportOptions) => {
     try {
@@ -201,48 +42,49 @@ export const usePDFExport = () => {
       const pageWidth = pdf.internal.pageSize.getWidth();
       let yPosition = 20;
 
+      // Draw logo (unchanged)
       drawActualLogo(pdf, 15, 15);
 
+      // Date next to logo
       pdf.setFontSize(10);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
       const dateText = format(selectedDate, "EEE, MMM d, yyyy");
       pdf.text(dateText, 45, 28);
 
-      yPosition = 35;
-      
-      pdf.setFillColor(COLORS.light[0], COLORS.light[1], COLORS.light[2]);
-      pdf.roundedRect(15, yPosition, pageWidth - 30, 10, 2, 2, 'F');
-      
+      // Shift info on the same line, right-aligned
       pdf.setFontSize(8);
       pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
       pdf.setFont("helvetica", "bold");
       
       const shiftInfo = `${shiftName.toUpperCase()} • ${shiftData.shift?.start_time || "N/A"}-${shiftData.shift?.end_time || "N/A"}`;
-      pdf.text(shiftInfo, 20, yPosition + 6);
+      const shiftInfoX = pageWidth - 15 - pdf.getTextWidth(shiftInfo); // Right-aligned
+      pdf.text(shiftInfo, shiftInfoX, 28);
 
-      yPosition += 15;
+      // Start content lower to maintain spacing
+      yPosition = 40;
 
       // Supervisors section - removed the SUPERVISOR table title and space
       if (shiftData.supervisors && shiftData.supervisors.length > 0) {
         const supervisorsData: any[] = [];
 
         shiftData.supervisors.forEach((supervisor: any) => {
-        supervisorsData.push([
+          supervisorsData.push([
             supervisor?.name ? supervisor.name.toUpperCase() : "UNKNOWN",
             supervisor?.rank || "",
             supervisor?.badge || "",
             supervisor?.unitNumber ? `Unit ${supervisor.unitNumber}` : "",
             supervisor?.notes || ""
-                  ]);
-              });
+          ]);
+        });
 
-          const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
-          yPosition = drawCompactTable(pdf, officersHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
-  
+        const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
+        yPosition = drawCompactTable(pdf, officersHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
+        
         yPosition += 4;
-      } // <-- This closing brace was missing
+      }
 
+      // ... rest of your code remains exactly the same ...
       // SECTION 1: REGULAR OFFICERS TABLE
       const regularOfficersData: any[] = [];
       
