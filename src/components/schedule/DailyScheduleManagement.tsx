@@ -12,10 +12,9 @@ import { DailyScheduleView } from "./DailyScheduleView";
 
 interface DailyScheduleManagementProps {
   isAdminOrSupervisor: boolean;
-  userId: string;
 }
 
-export const DailyScheduleManagement = ({ isAdminOrSupervisor, userId }: DailyScheduleManagementProps) => {
+export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleManagementProps) => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
 
@@ -79,10 +78,11 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor, userId }: DailySc
       </Card>
 
       <DailyScheduleView 
-  selectedDate={selectedDate} 
-  filterShiftId={selectedShiftId} 
-  key={`${selectedDate.toISOString()}-${selectedShiftId}`}
-  isAdminOrSupervisor={isAdminOrSupervisor}
-/>
+        selectedDate={selectedDate} 
+        filterShiftId={selectedShiftId} 
+        key={`${selectedDate.toISOString()}-${selectedShiftId}`}
+        isAdminOrSupervisor={isAdminOrSupervisor}
+      />
+    </div>
   );
 };
