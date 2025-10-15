@@ -1232,8 +1232,6 @@ export const DailyScheduleView = ({
       </div>
     ))}
   </div>
-)}
-
               {/* PTO Section */}
 {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
   <div className="space-y-2">
