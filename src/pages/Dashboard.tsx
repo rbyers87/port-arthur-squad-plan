@@ -245,29 +245,32 @@ const Dashboard = () => {
             </TabsContent>
           </Tabs>
         ) : (
-          <Tabs defaultValue="daily" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
-              <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
-              <TabsTrigger value="requests">Time Off</TabsTrigger>
-            </TabsList>
+  <Tabs defaultValue="daily" className="space-y-6">
+    <TabsList className="grid w-full grid-cols-3">
+      <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
+      <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
+      <TabsTrigger value="requests">Time Off</TabsTrigger>
+    </TabsList>
 
-            <TabsContent value="daily" className="space-y-6">
-              <DailyScheduleView selectedDate={new Date()} isAdminOrSupervisor={false} userRole="officer" />
-            </TabsContent>
+    <TabsContent value="daily" className="space-y-6">
+      <div className="p-4 border rounded-lg bg-yellow-50">
+        <h3 className="text-lg font-semibold mb-4 text-yellow-800">Daily Schedule - Debug View</h3>
+        <DailyScheduleView 
+          selectedDate={new Date()} 
+          isAdminOrSupervisor={false} 
+          userRole="officer" 
+        />
+      </div>
+    </TabsContent>
 
-            <TabsContent value="schedule" className="space-y-6">
-              <WeeklySchedule userId={user!.id} isAdminOrSupervisor={false} />
-            </TabsContent>
+    <TabsContent value="schedule" className="space-y-6">
+      <WeeklySchedule userId={user!.id} isAdminOrSupervisor={false} />
+    </TabsContent>
 
-            <TabsContent value="requests" className="space-y-6">
-              <TimeOffRequests userId={user!.id} isAdminOrSupervisor={false} />
-            </TabsContent>
-          </Tabs>
-        )}
-      </main>
-    </div>
-  );
-};
+    <TabsContent value="requests" className="space-y-6">
+      <TimeOffRequests userId={user!.id} isAdminOrSupervisor={false} />
+    </TabsContent>
+  </Tabs>
+)}
 
 export default Dashboard;
