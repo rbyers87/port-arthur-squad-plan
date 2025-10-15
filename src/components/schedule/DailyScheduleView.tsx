@@ -1232,6 +1232,7 @@ export const DailyScheduleView = ({
       </div>
     ))}
   </div>
+  )}
 
   
         {/* PTO Section */}  
