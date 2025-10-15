@@ -31,13 +31,13 @@ interface PTOAssignmentDialogProps {
       endTime: string;
       isFullShift: boolean;
     };
-  };
+  } | null; // Make officer nullable
   shift: {
     id: string;
     name: string;
     start_time: string;
     end_time: string;
-  };
+  } | null; // Make shift nullable
   date: string;
 }
 
@@ -56,20 +56,31 @@ export const PTOAssignmentDialog = ({
   date,
 }: PTOAssignmentDialogProps) => {
   const queryClient = useQueryClient();
-  const [ptoType, setPtoType] = useState(officer.existingPTO?.ptoType || "");
-  const [isFullShift, setIsFullShift] = useState(officer.existingPTO?.isFullShift ?? true);
-  const [startTime, setStartTime] = useState(officer.existingPTO?.startTime || shift.start_time);
-  const [endTime, setEndTime] = useState(officer.existingPTO?.endTime || shift.end_time);
+  const [ptoType, setPtoType] = useState("");
+  const [isFullShift, setIsFullShift] = useState(true);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
 
-  // Reset form when dialog opens/closes or existingPTO changes
+  // Reset form when dialog opens/closes or officer changes
   useEffect(() => {
-    if (open) {
+    if (open && officer && shift) {
       setPtoType(officer.existingPTO?.ptoType || "");
       setIsFullShift(officer.existingPTO?.isFullShift ?? true);
       setStartTime(officer.existingPTO?.startTime || shift.start_time);
       setEndTime(officer.existingPTO?.endTime || shift.end_time);
+    } else {
+      // Reset form when dialog closes or no officer/shift
+      setPtoType("");
+      setIsFullShift(true);
+      setStartTime("");
+      setEndTime("");
     }
-  }, [open, officer.existingPTO, shift]);
+  }, [open, officer, shift]);
+
+  // Don't render the dialog content if officer or shift is null
+  if (!officer || !shift) {
+    return null;
+  }
 
   const calculateHours = (start: string, end: string) => {
     const [startHour, startMin] = start.split(":").map(Number);
@@ -223,19 +234,11 @@ export const PTOAssignmentDialog = ({
       queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
       queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
       onOpenChange(false);
-      resetForm();
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to assign PTO");
     },
   });
-
-  const resetForm = () => {
-    setPtoType("");
-    setIsFullShift(true);
-    setStartTime(shift.start_time);
-    setEndTime(shift.end_time);
-  };
 
   const removePTOMutation = useMutation({
     mutationFn: async () => {
