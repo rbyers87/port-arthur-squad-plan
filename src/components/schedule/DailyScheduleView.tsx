@@ -19,7 +19,7 @@ interface DailyScheduleViewProps {
   selectedDate: Date;
   filterShiftId?: string;
   isAdminOrSupervisor?: boolean;
-  userRole?: 'officer' | 'supervisor' | 'admin';
+  userRole?: 'officer' | 'supervisor' | 'admin'; // Make sure this is included
   userId?: string;
 }
 
