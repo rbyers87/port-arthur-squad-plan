@@ -11,16 +11,16 @@ interface ExportOptions {
 
 // Modern color scheme
 const COLORS = {
-  primary: [41, 128, 185],    // Blue
-  secondary: [52, 152, 219],  // Light Blue
-  accent: [155, 89, 182],     // Purple
-  success: [39, 174, 96],     // Green
-  warning: [243, 156, 18],    // Orange
-  danger: [231, 76, 60],      // Red
-  light: [248, 249, 250],     // Very Light Gray
-  dark: [44, 62, 80],         // Dark Blue
-  gray: [108, 117, 125],      // Medium Gray
-  border: [222, 226, 230]     // Border Gray
+  primary: [41, 128, 185],
+  secondary: [52, 152, 219],
+  accent: [155, 89, 182],
+  success: [39, 174, 96],
+  warning: [243, 156, 18],
+  danger: [231, 76, 60],
+  light: [248, 249, 250],
+  dark: [44, 62, 80],
+  gray: [108, 117, 125],
+  border: [222, 226, 230]
 };
 
 // Your actual base64 logo - paste your complete string here
@@ -29,12 +29,12 @@ const getLogoBase64 = (): string => {
   return departmentLogo;
 };
 
+
 // Draw actual logo function
 const drawActualLogo = (pdf: jsPDF, x: number, y: number) => {
   const logoBase64 = getLogoBase64();
   
-  if (!logoBase64 || logoBase64 === "PASTE_YOUR_COMPLETE_BASE64_LOGO_STRING_HERE") {
-    // Fallback to placeholder if logo fails to load or not replaced
+  if (!logoBase64 || logoBase64 === "your-base64-logo-here") {
     const logoSize = 20;
     pdf.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
     pdf.rect(x, y, logoSize, logoSize, 'F');
@@ -52,7 +52,6 @@ const drawActualLogo = (pdf: jsPDF, x: number, y: number) => {
     return logoWidth;
   } catch (error) {
     console.error('Error drawing logo:', error);
-    // Fallback to placeholder
     const logoSize = 20;
     pdf.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
     pdf.rect(x, y, logoSize, logoSize, 'F');
@@ -64,25 +63,24 @@ const drawActualLogo = (pdf: jsPDF, x: number, y: number) => {
   }
 };
 
-// Fixed table drawing function - expands to full width
+// Fixed table drawing function
 const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: number, margins: { left: number, right: number }, sectionColor?: number[]) => {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const tableWidth = pageWidth - margins.left - margins.right;
   
-  // Fixed column widths that use the full table width
   const getColumnWidths = (headers: string[]) => {
     const totalColumns = headers.length;
     const baseWidths = {
-      "REGULAR OFFICERS": 0.35,           // 35% of table width
-      "SPECIAL ASSIGNMENT OFFICERS": 0.35, // 35% of table width
-      "PTO OFFICERS": 0.35,               // 35% of table width
-      "BEAT": 0.10,                       // 15% of table width - changed to 10
-      "ASSIGNMENT": 0.20,                 // 20% of table width
-      "BADGE #": 0.10,                    // 15% of table width changed to 10
-      "UNIT": 0.10,                       // 10% of table width
-      "NOTES": 0.35,                      // 25% of table width changed to 35
-      "TYPE": 0.15,                       // 15% of table width
-      "TIME": 0.35                        // 20% of table width changed to 35
+      "REGULAR OFFICERS": 0.35,
+      "SPECIAL ASSIGNMENT OFFICERS": 0.35,
+      "PTO OFFICERS": 0.35,
+      "BEAT": 0.10,
+      "ASSIGNMENT": 0.20,
+      "BADGE #": 0.10,
+      "UNIT": 0.10,
+      "NOTES": 0.35,
+      "TYPE": 0.15,
+      "TIME": 0.35
     };
 
     return headers.map(header => {
@@ -93,7 +91,6 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
 
   const colWidths = getColumnWidths(headers);
   
-  // Verify total width matches table width (adjust if needed due to rounding)
   const totalWidth = colWidths.reduce((sum, width) => sum + width, 0);
   if (Math.abs(totalWidth - tableWidth) > 1) {
     const adjustmentFactor = tableWidth / totalWidth;
@@ -106,7 +103,7 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
   const rowHeight = 8;
   const cellPadding = 3;
 
-  // Draw headers - full width
+  // Draw headers
   let x = margins.left;
   headers.forEach((header, index) => {
     pdf.setFillColor(sectionColor?.[0] || COLORS.primary[0], sectionColor?.[1] || COLORS.primary[1], sectionColor?.[2] || COLORS.primary[2]);
@@ -116,7 +113,6 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
     pdf.setFontSize(7);
     pdf.setTextColor(255, 255, 255);
     
-    // Center text in header cells
     const textWidth = pdf.getTextWidth(header);
     const textX = x + (colWidths[index] - textWidth) / 2;
     pdf.text(header, Math.max(textX, x + 2), y + rowHeight - cellPadding);
@@ -126,32 +122,27 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
 
   y += rowHeight;
 
-  // Draw data rows - full width
+  // Draw data rows
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7);
   
   data.forEach((row, rowIndex) => {
     x = margins.left;
     
-    // Alternate row colors
     if (rowIndex % 2 === 0) {
       pdf.setFillColor(255, 255, 255);
     } else {
       pdf.setFillColor(COLORS.light[0], COLORS.light[1], COLORS.light[2]);
     }
     
-    // Fill entire row background
     pdf.rect(x, y, tableWidth, rowHeight, 'F');
     
-    // Light borders
     pdf.setDrawColor(COLORS.border[0], COLORS.border[1], COLORS.border[2]);
     pdf.setLineWidth(0.1);
     
     row.forEach((cell, cellIndex) => {
-      // Draw cell border
       pdf.rect(x, y, colWidths[cellIndex], rowHeight, 'S');
       
-      // Cell content
       pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
       
       const cellText = cell?.toString() || "";
@@ -159,7 +150,6 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
       
       let displayText = cellText;
       if (pdf.getTextWidth(cellText) > maxTextWidth) {
-        // Truncate text that's too long
         let truncated = cellText;
         while (pdf.getTextWidth(truncated + "...") > maxTextWidth && truncated.length > 1) {
           truncated = truncated.substring(0, truncated.length - 1);
@@ -173,12 +163,10 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
     
     y += rowHeight;
     
-    // Check if we need a new page
     if (y > pdf.internal.pageSize.getHeight() - 30) {
       pdf.addPage();
       y = 30;
       
-      // Redraw headers on new page
       x = margins.left;
       headers.forEach((header, index) => {
         pdf.setFillColor(sectionColor?.[0] || COLORS.primary[0], sectionColor?.[1] || COLORS.primary[1], sectionColor?.[2] || COLORS.primary[2]);
@@ -210,22 +198,18 @@ export const usePDFExport = () => {
         throw new Error("No shift data or date provided for PDF export");
       }
 
-      // Create PDF in portrait orientation
       const pdf = new jsPDF("p", "mm", "letter");
       const pageWidth = pdf.internal.pageSize.getWidth();
       let yPosition = 20;
 
-      // Draw actual logo
       drawActualLogo(pdf, 15, 15);
 
-      // Date next to logo - moved up
       pdf.setFontSize(10);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
       const dateText = format(selectedDate, "EEE, MMM d, yyyy");
       pdf.text(dateText, 45, 28);
 
-      // Shift info below date - KEEP the rounded rectangle background
       yPosition = 35;
       
       pdf.setFillColor(COLORS.light[0], COLORS.light[1], COLORS.light[2]);
@@ -240,45 +224,37 @@ export const usePDFExport = () => {
 
       yPosition += 15;
 
-     
-      // Supervisors - table-like vertical display
-if (shiftData.supervisors && shiftData.supervisors.length > 0) {
-  pdf.setFontSize(7);
-  pdf.setFont("helvetica", "bold");
-  pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
-  pdf.text("SUPERVISORS:", 15, yPosition);
-  
-  yPosition += 6;
+      // Supervisors section - FIXED: Added missing closing brace
+      if (shiftData.supervisors && shiftData.supervisors.length > 0) {
+        pdf.setFontSize(7);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
+        pdf.text("SUPERVISORS:", 15, yPosition);
+        
+        yPosition += 6;
 
-  // Create a mini-table for supervisors
-  const supervisorsData: any[] = [];
+        const supervisorsData: any[] = [];
 
-   if (shiftData.supervisors && shiftData.supervisors.length > 0) {
-     // REMOVED the section header for supervisors - using table header only
-  
-  shiftData.supervisors.forEach((supervisor: any) => {
-    supervisorsData.push([
-      supervisor?.name ? supervisor.name.toUpperCase() : "UNKNOWN",
-      supervisor?.rank || "",
-      supervisor?.badge || "",
-      supervisor?.unitNumber ? `Unit ${supervisor.unitNumber}` : "",
-      supervisor?.notes || ""
-    ]);
-  });
+        shiftData.supervisors.forEach((supervisor: any) => {
+          supervisorsData.push([
+            supervisor?.name ? supervisor.name.toUpperCase() : "UNKNOWN",
+            supervisor?.rank || "",
+            supervisor?.badge || "",
+            supervisor?.unitNumber ? `Unit ${supervisor.unitNumber}` : "",
+            supervisor?.notes || ""
+          ]);
+        });
 
-      // Replace "OFFICER NAME" with "SUPERVISORS" in headers
-   const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
-  yPosition = drawCompactTable(pdf, supervisorsHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
-  
-  yPosition += 4; // Space after supervisors table
-}
+        const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
+        yPosition = drawCompactTable(pdf, officersHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
+        
+        yPosition += 4;
+      } // <-- This closing brace was missing
 
-      // SECTION 1: REGULAR OFFICERS TABLE - Full width
+      // SECTION 1: REGULAR OFFICERS TABLE
       const regularOfficersData: any[] = [];
       
       if (shiftData.officers && shiftData.officers.length > 0) {
-        // REMOVED the section header for Regular Officers - using table header only
-        
         shiftData.officers.forEach((officer: any) => {
           regularOfficersData.push([
             officer?.name ? officer.name.toUpperCase() : "UNKNOWN",
@@ -289,17 +265,14 @@ if (shiftData.supervisors && shiftData.supervisors.length > 0) {
           ]);
         });
 
-        // Replace "OFFICER NAME" with "OFFICERS" in headers
         const officersHeaders = ["OFFICERS", "BEAT", "BADGE #", "UNIT", "NOTES"];
         yPosition = drawCompactTable(pdf, officersHeaders, regularOfficersData, yPosition, { left: 15, right: 15 }, COLORS.primary);
       }
 
-      // SECTION 2: SPECIAL ASSIGNMENT OFFICERS TABLE - Full width
+      // SECTION 2: SPECIAL ASSIGNMENT OFFICERS TABLE
       const specialAssignmentData: any[] = [];
       
       if (shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0) {
-        // REMOVED the section header for Special Assignment Officers - using table header only
-        
         shiftData.specialAssignmentOfficers.forEach((officer: any) => {
           specialAssignmentData.push([
             officer?.name ? officer.name.toUpperCase() : "UNKNOWN",
@@ -310,16 +283,13 @@ if (shiftData.supervisors && shiftData.supervisors.length > 0) {
           ]);
         });
 
-        // Replace "OFFICER NAME" with "SPECIAL ASSIGNMENT OFFICERS" in headers
         const specialHeaders = ["SPECIAL ASSIGNMENT OFFICERS", "ASSIGNMENT", "BADGE #", "UNIT", "NOTES"];
         yPosition = drawCompactTable(pdf, specialHeaders, specialAssignmentData, yPosition, { left: 15, right: 15 }, COLORS.accent);
       }
 
-      // SECTION 3: PTO/OFF DUTY TABLE - Full width
+      // SECTION 3: PTO/OFF DUTY TABLE
       if (shiftData.ptoRecords && shiftData.ptoRecords.length > 0) {
         const ptoData: any[] = [];
-        
-        // REMOVED the section header for PTO/Off Duty - using table header only
         
         shiftData.ptoRecords.forEach((record: any) => {
           const name = record?.name ? record.name.toUpperCase() : "UNKNOWN";
@@ -333,12 +303,11 @@ if (shiftData.supervisors && shiftData.supervisors.length > 0) {
           ptoData.push([name, badge, ptoType, timeInfo]);
         });
 
-        // Replace "OFFICER NAME" with "PTO OFFICERS" in headers
         const ptoHeaders = ["PTO OFFICERS", "BADGE #", "TYPE", "TIME"];
         yPosition = drawCompactTable(pdf, ptoHeaders, ptoData, yPosition, { left: 15, right: 15 }, COLORS.warning);
       }
 
-      // Compact staffing summary at bottom - moved up and made more compact
+      // Compact staffing summary at bottom
       yPosition += 5;
       const currentSupervisors = shiftData.currentSupervisors || 0;
       const minSupervisors = shiftData.minSupervisors || 0;
@@ -352,16 +321,13 @@ if (shiftData.supervisors && shiftData.supervisors.length > 0) {
       const staffingText = `STAFFING: Supervisors ${currentSupervisors}/${minSupervisors} • Officers ${currentOfficers}/${minOfficers}`;
       pdf.text(staffingText, 15, yPosition);
 
-      // Generated timestamp only - removed the reminders line
       const generatedAt = `Generated: ${format(new Date(), "MMM d, h:mm a")}`;
       pdf.text(generatedAt, pageWidth - 15, yPosition, { align: 'right' });
 
-      // Generate filename
       const dateStr = format(selectedDate, "yyyy-MM-dd");
       const dayOfWeek = format(selectedDate, "EEEE").toUpperCase();
       const filename = `PAPD_Schedule_${shiftName.replace(/\s+/g, "_")}_${dayOfWeek}_${dateStr}.pdf`;
 
-      // Save the PDF
       pdf.save(filename);
 
       return { success: true };
