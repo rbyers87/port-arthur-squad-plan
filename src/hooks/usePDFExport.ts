@@ -76,13 +76,13 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
       "REGULAR OFFICERS": 0.35,           // 35% of table width
       "SPECIAL ASSIGNMENT OFFICERS": 0.35, // 35% of table width
       "PTO OFFICERS": 0.35,               // 35% of table width
-      "BEAT": 0.15,                       // 15% of table width
+      "BEAT": 0.10,                       // 15% of table width - changed to 10
       "ASSIGNMENT": 0.20,                 // 20% of table width
-      "BADGE #": 0.15,                    // 15% of table width
+      "BADGE #": 0.10,                    // 15% of table width changed to 10
       "UNIT": 0.10,                       // 10% of table width
-      "NOTES": 0.25,                      // 25% of table width
+      "NOTES": 0.35,                      // 25% of table width changed to 35
       "TYPE": 0.15,                       // 15% of table width
-      "TIME": 0.20                        // 20% of table width
+      "TIME": 0.35                        // 20% of table width changed to 35
     };
 
     return headers.map(header => {
@@ -240,27 +240,34 @@ export const usePDFExport = () => {
 
       yPosition += 15;
 
-      // Supervisors - compact display - KEEP the "SUPERVISORS:" label
-      if (shiftData.supervisors && shiftData.supervisors.length > 0) {
-        pdf.setFontSize(7);
-        pdf.setFont("helvetica", "bold");
-        pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
-        pdf.text("SUPERVISORS:", 15, yPosition);
-        
-        yPosition += 4;
+     
+      // Supervisors - table-like vertical display
+if (shiftData.supervisors && shiftData.supervisors.length > 0) {
+  pdf.setFontSize(7);
+  pdf.setFont("helvetica", "bold");
+  pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
+  pdf.text("SUPERVISORS:", 15, yPosition);
+  
+  yPosition += 6;
 
-        // Supervisors in a compact row
-        const supervisorNames = shiftData.supervisors.map((supervisor: any) => {
-          const name = supervisor?.name ? supervisor.name.toUpperCase() : "UNKNOWN";
-          const unit = supervisor?.unitNumber ? `(Unit ${supervisor.unitNumber})` : "";
-          return `${name} ${unit}`;
-        }).join(" • ");
-        
-        pdf.setFont("helvetica", "normal");
-        pdf.text(supervisorNames, 15, yPosition);
-        
-        yPosition += 8;
-      }
+  // Create a mini-table for supervisors
+  const supervisorsData: any[] = [];
+  
+  shiftData.supervisors.forEach((supervisor: any) => {
+    supervisorsData.push([
+      supervisor?.name ? supervisor.name.toUpperCase() : "UNKNOWN",
+      supervisor?.rank || "",
+      supervisor?.badge || "",
+      supervisor?.unitNumber ? `Unit ${supervisor.unitNumber}` : "",
+      supervisor?.notes || ""
+    ]);
+  });
+
+  const supervisorsHeaders = ["NAME", "RANK", "BADGE #", "UNIT", "NOTES"];
+  yPosition = drawCompactTable(pdf, supervisorsHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
+  
+  yPosition += 4; // Space after supervisors table
+}
 
       // SECTION 1: REGULAR OFFICERS TABLE - Full width
       const regularOfficersData: any[] = [];
