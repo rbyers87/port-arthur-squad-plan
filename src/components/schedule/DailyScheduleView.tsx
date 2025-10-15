@@ -999,136 +999,327 @@ export const DailyScheduleView = ({
               {renderOfficerSection("Officers", shiftData.officers, shiftData.minOfficers, shiftData.currentOfficers, officersUnderstaffed)}
               
               {/* Special Assignment Section */}
-              {shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <h4 className="font-semibold text-sm">Special Assignments</h4>
-                    <Badge variant="outline">
-                      {shiftData.specialAssignmentOfficers.length}
-                    </Badge>
-                  </div>
-                  {shiftData.specialAssignmentOfficers.map((officer) => (
-                    <div
-                      key={`${officer.scheduleId}-${officer.type}`}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                          <div>
-                            <p className="font-medium truncate">{officer.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {officer.rank || 'Officer'} • Badge #{officer.badge}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          {officer.customTime && (
-                            <Badge variant="secondary" className="text-xs">
-                              {officer.customTime}
-                            </Badge>
-                          )}
-                          {officer.type === "recurring" && (
-                            <Badge variant="secondary" className="text-xs">
-                              Recurring
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="min-w-24 justify-center">
-                          {officer.position || "Special Assignment"}
-                        </Badge>
-                        {canEdit && (
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setSelectedOfficer({
-                                  officerId: officer.officerId,
-                                  name: officer.name,
-                                  scheduleId: officer.scheduleId,
-                                  type: officer.type,
-                                });
-                                setSelectedShift(officer.shift);
-                                setPtoDialogOpen(true);
-                              }}
-                              title="Assign PTO"
-                              className="h-6 w-6"
-                            >
-                              <Clock className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+{shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between border-b pb-2">
+      <h4 className="font-semibold text-sm">Special Assignments</h4>
+      <Badge variant="outline">
+        {shiftData.specialAssignmentOfficers.length}
+      </Badge>
+    </div>
+    {shiftData.specialAssignmentOfficers.map((officer) => (
+      <div
+        key={`${officer.scheduleId}-${officer.type}`}
+        className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+      >
+        {/* Officer Info - Left Side */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-1">
+            <div>
+              <p className="font-medium truncate">{officer.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {officer.rank || 'Officer'} • Badge #{officer.badge}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {officer.customTime && (
+              <Badge variant="secondary" className="text-xs">
+                {officer.customTime}
+              </Badge>
+            )}
+            {officer.type === "recurring" && (
+              <Badge variant="secondary" className="text-xs">
+                Recurring
+              </Badge>
+            )}
+            {/* Show partial PTO indicator */}
+            {officer.hasPTO && !officer.ptoData?.isFullShift && (
+              <Badge variant="destructive" className="text-xs">
+                Partial PTO
+              </Badge>
+            )}
+          </div>
+        </div>
 
-              {/* PTO Section */}
-              {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <h4 className="font-semibold text-sm">Time Off</h4>
-                    <Badge variant="outline">
-                      {shiftData.ptoRecords.length}
-                    </Badge>
-                  </div>
-                  {shiftData.ptoRecords.map((ptoRecord) => (
-                    <div
-                      key={ptoRecord.id}
-                      className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-md"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                          <div>
-                            <p className="font-medium truncate text-red-900">{ptoRecord.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {ptoRecord.rank || 'Officer'} • Badge #{ptoRecord.badge}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Badge variant="destructive" className="text-xs">
-                            {ptoRecord.ptoType}
-                          </Badge>
-                          <span className="text-red-700">
-                            {ptoRecord.startTime} - {ptoRecord.endTime}
-                            {!ptoRecord.isFullShift && " (Partial Day)"}
-                          </span>
-                        </div>
-                      </div>
-                      {canEdit && (
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleEditPTO(ptoRecord)}
-                            title="Edit PTO"
-                            className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
-                          >
-                            <Edit2 className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removePTOMutation.mutate(ptoRecord)}
-                            disabled={removePTOMutation.isPending}
-                            title="Remove PTO"
-                            className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+        {/* Unit & Notes - Middle Section */}
+        <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
+          {/* Unit Number */}
+          <div className="text-center min-w-16">
+            <Label htmlFor={`unit-special-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
+              Unit
+            </Label>
+            {canEdit && editingUnitNumber === `${officer.scheduleId}-${officer.type}` ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  id={`unit-special-${officer.scheduleId}`}
+                  placeholder="Unit #"
+                  value={editUnitValue}
+                  onChange={(e) => setEditUnitValue(e.target.value)}
+                  className="w-16 h-8 text-sm"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleSaveUnitNumber(officer)}
+                  disabled={updatePositionMutation.isPending}
+                  className="h-8 w-8"
+                >
+                  <Save className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditingUnitNumber(null);
+                    setEditUnitValue("");
+                  }}
+                  className="h-8 w-8"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <Badge 
+                variant={officer.unitNumber ? "default" : "outline"} 
+                className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
+                onClick={() => canEdit && handleEditUnitClick(officer)}
+              >
+                {officer.unitNumber || (canEdit ? "Add" : "-")}
+              </Badge>
+            )}
+          </div>
+
+          {/* Notes/Assignments */}
+          <div className="text-center min-w-24 flex-1">
+            <Label htmlFor={`notes-special-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
+              Notes
+            </Label>
+            {canEdit && editingNotes === `${officer.scheduleId}-${officer.type}` ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  id={`notes-special-${officer.scheduleId}`}
+                  placeholder="Notes..."
+                  value={editNotesValue}
+                  onChange={(e) => setEditNotesValue(e.target.value)}
+                  className="h-8 text-sm"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleSaveNotes(officer)}
+                  disabled={updatePositionMutation.isPending}
+                  className="h-8 w-8"
+                >
+                  <Save className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditingNotes(null);
+                    setEditNotesValue("");
+                  }}
+                  className="h-8 w-8"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <div 
+                className={`text-xs p-2 rounded border border-dashed border-muted-foreground/30 ${canEdit ? 'cursor-pointer hover:bg-muted' : ''} transition-colors min-h-8 flex items-center justify-center`}
+                onClick={() => canEdit && handleEditNotesClick(officer)}
+              >
+                {officer.notes || (canEdit ? "Add notes" : "-")}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Position & Actions - Right Side */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Position Display/Edit */}
+          {canEdit && editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
+            <div className="flex items-center gap-2">
+              <div className="space-y-2">
+                <Select value={editPosition} onValueChange={setEditPosition}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {predefinedPositions.map((pos) => (
+                      <SelectItem key={pos} value={pos}>
+                        {pos}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {editPosition === "Other (Custom)" && (
+                  <Input
+                    placeholder="Custom position"
+                    value={customPosition}
+                    onChange={(e) => setCustomPosition(e.target.value)}
+                    className="w-32"
+                  />
+                )}
+              </div>
+              <Button
+                size="sm"
+                onClick={() => handleSavePosition(officer)}
+                disabled={updatePositionMutation.isPending}
+              >
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setEditingSchedule(null);
+                  setEditPosition("");
+                  setCustomPosition("");
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="text-right min-w-24">
+              <Badge variant="secondary" className="mb-1 w-full justify-center">
+                {officer.position || "Special Assignment"}
+              </Badge>
+              {canEdit && (
+                <div className="flex gap-1 justify-center">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleEditClick(officer)}
+                    title="Edit Position"
+                    className="h-6 w-6"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setSelectedOfficer({
+                        officerId: officer.officerId,
+                        name: officer.name,
+                        scheduleId: officer.scheduleId,
+                        type: officer.type,
+                      });
+                      setSelectedShift(officer.shift);
+                      setPtoDialogOpen(true);
+                    }}
+                    title="Assign PTO"
+                    className="h-6 w-6"
+                  >
+                    <Clock className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeOfficerMutation.mutate(officer)}
+                    disabled={removeOfficerMutation.isPending}
+                    title="Remove Officer"
+                    className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
                 </div>
               )}
             </div>
-          );
-        })}
+          )}
+        </div>
+      </div>
+    ))}
+  </div>
+)}
+
+              {/* PTO Section */}
+{shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between border-b pb-2">
+      <h4 className="font-semibold text-sm">Time Off</h4>
+      <Badge variant="outline">
+        {shiftData.ptoRecords.length}
+      </Badge>
+    </div>
+    {shiftData.ptoRecords.map((ptoRecord) => (
+      <div
+        key={ptoRecord.id}
+        className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-md"
+      >
+        {/* Officer Info - Left Side */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-1">
+            <div>
+              <p className="font-medium truncate text-red-900">{ptoRecord.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {ptoRecord.rank || 'Officer'} • Badge #{ptoRecord.badge}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Badge variant="destructive" className="text-xs">
+              {ptoRecord.ptoType}
+            </Badge>
+            <span className="text-red-700">
+              {ptoRecord.startTime} - {ptoRecord.endTime}
+              {!ptoRecord.isFullShift && " (Partial Day)"}
+            </span>
+          </div>
+        </div>
+
+        {/* Unit & Notes - Middle Section */}
+        <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
+          {/* Unit Number Display */}
+          <div className="text-center min-w-16">
+            <Label className="text-xs text-muted-foreground mb-1 block">
+              Unit
+            </Label>
+            <Badge variant="outline" className="w-16">
+              -
+            </Badge>
+          </div>
+
+          {/* Notes Display */}
+          <div className="text-center min-w-24 flex-1">
+            <Label className="text-xs text-muted-foreground mb-1 block">
+              Notes
+            </Label>
+            <div className="text-xs p-2 rounded border border-dashed border-muted-foreground/30 min-h-8 flex items-center justify-center">
+              -
+            </div>
+          </div>
+        </div>
+
+        {/* Actions - Right Side */}
+        {canEdit && (
+          <div className="flex gap-1 shrink-0">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => handleEditPTO(ptoRecord)}
+              title="Edit PTO"
+              className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+            >
+              <Edit2 className="h-3 w-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => removePTOMutation.mutate(ptoRecord)}
+              disabled={removePTOMutation.isPending}
+              title="Remove PTO"
+              className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+)}
 
         {scheduleData?.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
