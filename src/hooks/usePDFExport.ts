@@ -268,10 +268,6 @@ if (shiftData.supervisors && shiftData.supervisors.length > 0) {
 
       // Replace "OFFICER NAME" with "SUPERVISORS" in headers
    const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
-  yPosition = drawCompactTable(pdf, officersHeaders, regularOfficersData, yPosition, { left: 15, right: 15 }, COLORS.primary);
-      }
-
-  const supervisorsHeaders = ["NAME", "RANK", "BADGE #", "UNIT", "NOTES"];
   yPosition = drawCompactTable(pdf, supervisorsHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
   
   yPosition += 4; // Space after supervisors table
