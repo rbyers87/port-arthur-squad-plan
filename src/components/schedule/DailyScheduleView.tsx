@@ -1234,10 +1234,10 @@ export const DailyScheduleView = ({
   </div>
 
   
-           //   {/* PTO Section */}
-{shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
-  <div className="space-y-2">
-    <div className="flex items-center justify-between border-b pb-2">
+  {/* PTO Section */}    
+      {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between border-b pb-2">
       <h4 className="font-semibold text-sm">Time Off</h4>
       <Badge variant="outline">
         {shiftData.ptoRecords.length}
