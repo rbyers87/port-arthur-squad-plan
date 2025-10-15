@@ -1234,7 +1234,7 @@ export const DailyScheduleView = ({
   </div>
 
   
-   
+        {/* PTO Section */}  
       {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between border-b pb-2">
