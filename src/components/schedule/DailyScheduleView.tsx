@@ -81,6 +81,24 @@ export const DailyScheduleView = ({
     "Other (Custom)",
   ];
 
+  // Add rank order for sorting supervisors only
+const rankOrder = {
+  'Chief': 1,
+  'Deputy Chief': 2,
+  'Lieutenant': 3,
+  'Sergeant': 4,
+  'Officer': 5
+};
+
+// Function to sort supervisors by rank ONLY
+const sortSupervisorsByRank = (supervisors: any[]) => {
+  return supervisors.sort((a, b) => {
+    const rankA = a.officer_rank || 'Officer';
+    const rankB = b.officer_rank || 'Officer';
+    return (rankOrder[rankA as keyof typeof rankOrder] || 99) - (rankOrder[rankB as keyof typeof rankOrder] || 99);
+  });
+};
+
   const { data: scheduleData, isLoading } = useQuery({
     queryKey: ["daily-schedule", dateStr],
     queryFn: async () => {
@@ -103,7 +121,7 @@ export const DailyScheduleView = ({
         .from("recurring_schedules")
         .select(`
           *,
-          profiles(id, full_name, badge_number),
+          profiles(id, full_name, badge_number, officer_rank),
           shift_types(id, name, start_time, end_time)
         `)
         .eq("day_of_week", dayOfWeek)
@@ -116,7 +134,7 @@ export const DailyScheduleView = ({
         .from("schedule_exceptions")
         .select(`
           *,
-          profiles(id, full_name, badge_number),
+          profiles(id, full_name, badge_number, officer_rank),
           shift_types(id, name, start_time, end_time)
         `)
         .eq("date", dateStr);
@@ -249,9 +267,11 @@ export const DailyScheduleView = ({
         })) || [];
 
         // Categorize officers
-        const supervisors = allOfficers.filter(o => 
-          o.position?.toLowerCase().includes('supervisor')
-        ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        const supervisors = sortSupervisorsByRank(
+  allOfficers.filter(o => 
+    o.position?.toLowerCase().includes('supervisor')
+  )
+);
 
         const specialAssignmentOfficers = allOfficers.filter(o => {
           const position = o.position?.toLowerCase() || '';
@@ -660,10 +680,9 @@ export const DailyScheduleView = ({
             {/* Officer Info - Left Side */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-1">
-                <p className="font-medium truncate">{officer.name}</p>
-                <Badge variant="outline" className="text-xs shrink-0">
-                  Badge #{officer.badge}
-                </Badge>
+               <p className="font-medium truncate">{officer.name}</p>
+              <p className="text-xs text-muted-foreground">
+            {officer.officer_rank || 'Officer'} • Badge #{officer.badge}
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 {officer.customTime && (
@@ -964,9 +983,8 @@ export const DailyScheduleView = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-1">
                           <p className="font-medium truncate">{officer.name}</p>
-                          <Badge variant="outline" className="text-xs shrink-0">
-                            Badge #{officer.badge}
-                          </Badge>
+                          <p className="text-xs text-muted-foreground">
+                    {officer.officer_rank || 'Officer'} • Badge #{officer.badge}
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           {officer.customTime && (
