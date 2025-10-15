@@ -222,8 +222,6 @@ export const usePDFExport = () => {
       const shiftInfo = `${shiftName.toUpperCase()} • ${shiftData.shift?.start_time || "N/A"}-${shiftData.shift?.end_time || "N/A"}`;
       pdf.text(shiftInfo, 20, yPosition + 6);
 
-      yPosition += 15;
-
 
         const supervisorsData: any[] = [];
 
