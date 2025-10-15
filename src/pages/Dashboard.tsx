@@ -208,48 +208,63 @@ const Dashboard = () => {
         </div>
 
         {/* Main Content */}
-        {isAdminOrSupervisor ? (
-          <Tabs defaultValue="daily" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-6">
-              <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
-              <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
-              <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
-              <TabsTrigger value="staff">Staff</TabsTrigger>
-              <TabsTrigger value="requests">Time Off</TabsTrigger>
-              <TabsTrigger value="pto">PTO</TabsTrigger>
-            </TabsList>
+       {isAdminOrSupervisor ? (
+  <Tabs defaultValue="daily" className="space-y-6">
+    <TabsList className="grid w-full grid-cols-6">
+      <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
+      <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
+      <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
+      <TabsTrigger value="staff">Staff</TabsTrigger>
+      <TabsTrigger value="requests">Time Off</TabsTrigger>
+      <TabsTrigger value="pto">PTO</TabsTrigger>
+    </TabsList>
 
-            <TabsContent value="daily" className="space-y-6">
-              <DailyScheduleManagement />
-            </TabsContent>
+    <TabsContent value="daily" className="space-y-6">
+      <DailyScheduleManagement />
+    </TabsContent>
 
-            <TabsContent value="schedule" className="space-y-6">
-              <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-            </TabsContent>
+    <TabsContent value="schedule" className="space-y-6">
+      <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+    </TabsContent>
 
-            <TabsContent value="vacancies" className="space-y-6">
-              <VacancyManagement />
-            </TabsContent>
+    <TabsContent value="vacancies" className="space-y-6">
+      <VacancyManagement />
+    </TabsContent>
 
-            <TabsContent value="staff" className="space-y-6">
-              <StaffManagement />
-            </TabsContent>
+    <TabsContent value="staff" className="space-y-6">
+      <StaffManagement />
+    </TabsContent>
 
-            <TabsContent value="requests" className="space-y-6">
-              <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-            </TabsContent>
+    <TabsContent value="requests" className="space-y-6">
+      <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+    </TabsContent>
 
-            <TabsContent value="pto" className="space-y-6">
-              <PTOManagement />
-            </TabsContent>
-          </Tabs>
-        ) : (
-          <div className="space-y-6">
-            <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-            <VacancyAlerts userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-            <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-          </div>
-        )}
+    <TabsContent value="pto" className="space-y-6">
+      <PTOManagement />
+    </TabsContent>
+  </Tabs>
+) : (
+  <Tabs defaultValue="daily" className="space-y-6">
+    <TabsList className="grid w-full grid-cols-3">
+      <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
+      <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
+      <TabsTrigger value="requests">Time Off</TabsTrigger>
+    </TabsList>
+
+    <TabsContent value="daily" className="space-y-6">
+      <DailyScheduleView selectedDate={new Date()} isAdminOrSupervisor={false} />
+    </TabsContent>
+
+    <TabsContent value="schedule" className="space-y-6">
+      <WeeklySchedule userId={user!.id} isAdminOrSupervisor={false} />
+    </TabsContent>
+
+    <TabsContent value="requests" className="space-y-6">
+      <TimeOffRequests userId={user!.id} isAdminOrSupervisor={false} />
+    </TabsContent>
+  </Tabs>
+)}
+
       </main>
     </div>
   );
