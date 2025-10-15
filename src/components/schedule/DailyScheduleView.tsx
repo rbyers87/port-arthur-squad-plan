@@ -100,46 +100,72 @@ export const DailyScheduleView = ({
   };
 
   const { data: scheduleData, isLoading } = useQuery({
-    queryKey: ["daily-schedule", dateStr],
-    queryFn: async () => {
-      // Get all shift types
-      const { data: shiftTypes, error: shiftError } = await supabase
-        .from("shift_types")
-        .select("*")
-        .order("start_time");
-      if (shiftError) throw shiftError;
+  queryKey: ["daily-schedule", dateStr],
+  queryFn: async () => {
+    // Get all shift types
+    const { data: shiftTypes, error: shiftError } = await supabase
+      .from("shift_types")
+      .select("*")
+      .order("start_time");
+    if (shiftError) throw shiftError;
 
-      // Get minimum staffing requirements
-      const { data: minimumStaffing, error: minError } = await supabase
-        .from("minimum_staffing")
-        .select("minimum_officers, minimum_supervisors, shift_type_id")
-        .eq("day_of_week", dayOfWeek);
-      if (minError) throw minError;
+    // Get minimum staffing requirements
+    const { data: minimumStaffing, error: minError } = await supabase
+      .from("minimum_staffing")
+      .select("minimum_officers, minimum_supervisors, shift_type_id")
+      .eq("day_of_week", dayOfWeek);
+    if (minError) throw minError;
 
-      // Get recurring schedules for this day of week - UPDATED TO INCLUDE officer_rank
-      const { data: recurringData, error: recurringError } = await supabase
-        .from("recurring_schedules")
-        .select(`
-          *,
-          profiles(id, full_name, badge_number, officer_rank),
-          shift_types(id, name, start_time, end_time)
-        `)
-        .eq("day_of_week", dayOfWeek)
-        .is("end_date", null);
+    // Get recurring schedules for this day of week - FIXED QUERY
+    const { data: recurringData, error: recurringError } = await supabase
+      .from("recurring_schedules")
+      .select(`
+        *,
+        profiles!inner (
+          id, 
+          full_name, 
+          badge_number, 
+          officer_rank
+        ),
+        shift_types (
+          id, 
+          name, 
+          start_time, 
+          end_time
+        )
+      `)
+      .eq("day_of_week", dayOfWeek)
+      .is("end_date", null);
 
-      if (recurringError) throw recurringError;
+    if (recurringError) {
+      console.error("Recurring schedules error:", recurringError);
+      throw recurringError;
+    }
 
-      // Get schedule exceptions for this specific date - UPDATED TO INCLUDE officer_rank
-      const { data: exceptionsData, error: exceptionsError } = await supabase
-        .from("schedule_exceptions")
-        .select(`
-          *,
-          profiles(id, full_name, badge_number, officer_rank),
-          shift_types(id, name, start_time, end_time)
-        `)
-        .eq("date", dateStr);
+    // Get schedule exceptions for this specific date - FIXED QUERY
+    const { data: exceptionsData, error: exceptionsError } = await supabase
+      .from("schedule_exceptions")
+      .select(`
+        *,
+        profiles!inner (
+          id, 
+          full_name, 
+          badge_number, 
+          officer_rank
+        ),
+        shift_types (
+          id, 
+          name, 
+          start_time, 
+          end_time
+        )
+      `)
+      .eq("date", dateStr);
 
-      if (exceptionsError) throw exceptionsError;
+    if (exceptionsError) {
+      console.error("Schedule exceptions error:", exceptionsError);
+      throw exceptionsError;
+    }
 
       // Separate PTO exceptions from regular exceptions
       const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
