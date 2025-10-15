@@ -279,7 +279,7 @@ export const DailyScheduleView = ({
 
         const allOfficers = [...recurringOfficers, ...additionalOfficers];
 
-        // Get PTO records for this shift
+        // Get PTO records for this shift - UPDATED TO INCLUDE unitNumber and notes
         const shiftPTORecords = ptoExceptions?.filter(e => 
           e.shift_types?.id === shift.id
         ).map(e => ({
@@ -292,7 +292,9 @@ export const DailyScheduleView = ({
           startTime: e.custom_start_time || shift.start_time,
           endTime: e.custom_end_time || shift.end_time,
           isFullShift: !e.custom_start_time && !e.custom_end_time,
-          shiftTypeId: shift.id
+          shiftTypeId: shift.id,
+          unitNumber: e.unit_number, // Added
+          notes: e.notes // Added
         })) || [];
 
         // Categorize officers - ONLY SUPERVISORS GET SORTED BY RANK
@@ -440,6 +442,40 @@ export const DailyScheduleView = ({
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to update position");
+    },
+  });
+
+  // NEW: Mutation for updating PTO details
+  const updatePTODetailsMutation = useMutation({
+    mutationFn: async ({ 
+      ptoId, 
+      unitNumber, 
+      notes 
+    }: { 
+      ptoId: string; 
+      unitNumber?: string; 
+      notes?: string; 
+    }) => {
+      const { error } = await supabase
+        .from("schedule_exceptions")
+        .update({ 
+          unit_number: unitNumber,
+          notes: notes
+        })
+        .eq("id", ptoId);
+        
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("PTO details updated");
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      setEditingUnitNumber(null);
+      setEditUnitValue("");
+      setEditingNotes(null);
+      setEditNotesValue("");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update PTO details");
     },
   });
 
@@ -607,6 +643,23 @@ export const DailyScheduleView = ({
     });
   };
 
+  // NEW: Handlers for PTO unit number and notes
+  const handleSavePTOUnitNumber = (ptoRecord: any) => {
+    updatePTODetailsMutation.mutate({
+      ptoId: ptoRecord.id,
+      unitNumber: editUnitValue,
+      notes: ptoRecord.notes
+    });
+  };
+
+  const handleSavePTONotes = (ptoRecord: any) => {
+    updatePTODetailsMutation.mutate({
+      ptoId: ptoRecord.id,
+      unitNumber: ptoRecord.unitNumber,
+      notes: editNotesValue
+    });
+  };
+
   const handleEditClick = (officer: any) => {
     if (!canEdit) return; // Prevent editing for officers
     
@@ -633,6 +686,19 @@ export const DailyScheduleView = ({
     if (!canEdit) return; // Prevent editing for officers
     setEditingNotes(`${officer.scheduleId}-${officer.type}`);
     setEditNotesValue(officer.notes || "");
+  };
+
+  // NEW: Handlers for PTO unit number and notes editing
+  const handleEditPTOUnitClick = (ptoRecord: any) => {
+    if (!canEdit) return;
+    setEditingUnitNumber(`pto-${ptoRecord.id}`);
+    setEditUnitValue(ptoRecord.unitNumber || "");
+  };
+
+  const handleEditPTONotesClick = (ptoRecord: any) => {
+    if (!canEdit) return;
+    setEditingNotes(`pto-${ptoRecord.id}`);
+    setEditNotesValue(ptoRecord.notes || "");
   };
 
   const handleEditPTO = (ptoRecord: any) => {
@@ -1234,7 +1300,7 @@ export const DailyScheduleView = ({
                 </div>
               )}
 
-              {/* PTO Section */}  
+              {/* PTO Section - UPDATED WITH EDITABLE FIELDS */}
               {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between border-b pb-2">
@@ -1269,26 +1335,95 @@ export const DailyScheduleView = ({
                         </div>
                       </div>
 
-                      {/* Unit & Notes - Middle Section */}
+                      {/* Unit & Notes - Middle Section - NOW EDITABLE */}
                       <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
-                        {/* Unit Number Display */}
+                        {/* Unit Number */}
                         <div className="text-center min-w-16">
-                          <Label className="text-xs text-muted-foreground mb-1 block">
+                          <Label htmlFor={`unit-pto-${ptoRecord.id}`} className="text-xs text-muted-foreground mb-1 block">
                             Unit
                           </Label>
-                          <Badge variant="outline" className="w-16">
-                            -
-                          </Badge>
+                          {canEdit && editingUnitNumber === `pto-${ptoRecord.id}` ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                id={`unit-pto-${ptoRecord.id}`}
+                                placeholder="Unit #"
+                                value={editUnitValue}
+                                onChange={(e) => setEditUnitValue(e.target.value)}
+                                className="w-16 h-8 text-sm"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => handleSavePTOUnitNumber(ptoRecord)}
+                                disabled={updatePTODetailsMutation.isPending}
+                                className="h-8 w-8"
+                              >
+                                <Save className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingUnitNumber(null);
+                                  setEditUnitValue("");
+                                }}
+                                className="h-8 w-8"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Badge 
+                              variant={ptoRecord.unitNumber ? "default" : "outline"} 
+                              className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
+                              onClick={() => canEdit && handleEditPTOUnitClick(ptoRecord)}
+                            >
+                              {ptoRecord.unitNumber || (canEdit ? "Add" : "-")}
+                            </Badge>
+                          )}
                         </div>
 
-                        {/* Notes Display */}
+                        {/* Notes/Assignments */}
                         <div className="text-center min-w-24 flex-1">
-                          <Label className="text-xs text-muted-foreground mb-1 block">
+                          <Label htmlFor={`notes-pto-${ptoRecord.id}`} className="text-xs text-muted-foreground mb-1 block">
                             Notes
                           </Label>
-                          <div className="text-xs p-2 rounded border border-dashed border-muted-foreground/30 min-h-8 flex items-center justify-center">
-                            -
-                          </div>
+                          {canEdit && editingNotes === `pto-${ptoRecord.id}` ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                id={`notes-pto-${ptoRecord.id}`}
+                                placeholder="Notes..."
+                                value={editNotesValue}
+                                onChange={(e) => setEditNotesValue(e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => handleSavePTONotes(ptoRecord)}
+                                disabled={updatePTODetailsMutation.isPending}
+                                className="h-8 w-8"
+                              >
+                                <Save className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingNotes(null);
+                                  setEditNotesValue("");
+                                }}
+                                className="h-8 w-8"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div 
+                              className={`text-xs p-2 rounded border border-dashed border-muted-foreground/30 ${canEdit ? 'cursor-pointer hover:bg-muted' : ''} transition-colors min-h-8 flex items-center justify-center`}
+                              onClick={() => canEdit && handleEditPTONotesClick(ptoRecord)}
+                            >
+                              {ptoRecord.notes || (canEdit ? "Add notes" : "-")}
+                            </div>
+                          )}
                         </div>
                       </div>
 
