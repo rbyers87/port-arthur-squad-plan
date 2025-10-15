@@ -1218,9 +1218,9 @@ const AddOfficerDialog = ({ open, onOpenChange, shift, date, onAddOfficer, isAdd
           </div>
         </div>
       </DialogContent>
-    </Dialog>
-  );
-};                
+</Dialog>
+);
+};   
                       className="h-8 w-8"
                     >
                       <X className="h-3 w-3" />
