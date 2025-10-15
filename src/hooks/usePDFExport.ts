@@ -62,7 +62,7 @@ const drawActualLogo = (pdf: jsPDF, x: number, y: number) => {
   }
 };
 
-// Fixed table drawing function (unchanged)
+// Fixed table drawing function with centered columns
 const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: number, margins: { left: number, right: number }, sectionColor?: number[]) => {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const tableWidth = pageWidth - margins.left - margins.right;
@@ -102,7 +102,7 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
   const rowHeight = 8;
   const cellPadding = 3;
 
-  // Draw headers
+  // Draw headers - center all headers
   let x = margins.left;
   headers.forEach((header, index) => {
     pdf.setFillColor(sectionColor?.[0] || COLORS.primary[0], sectionColor?.[1] || COLORS.primary[1], sectionColor?.[2] || COLORS.primary[2]);
@@ -156,7 +156,20 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
         displayText = truncated + (truncated.length < cellText.length ? "..." : "");
       }
       
-      pdf.text(displayText, x + cellPadding, y + rowHeight - cellPadding);
+      // Center specific columns: BADGE #, BEAT, UNIT, TYPE
+      const currentHeader = headers[cellIndex].toUpperCase();
+      const centerColumns = ["BADGE #", "BEAT", "UNIT", "TYPE"];
+      
+      if (centerColumns.includes(currentHeader)) {
+        // Center align for badge#, beat, unit, type
+        const textWidth = pdf.getTextWidth(displayText);
+        const textX = x + (colWidths[cellIndex] - textWidth) / 2;
+        pdf.text(displayText, Math.max(textX, x + 2), y + rowHeight - cellPadding);
+      } else {
+        // Left align for other columns
+        pdf.text(displayText, x + cellPadding, y + rowHeight - cellPadding);
+      }
+      
       x += colWidths[cellIndex];
     });
     
