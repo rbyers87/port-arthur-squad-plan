@@ -1220,7 +1220,7 @@ const AddOfficerDialog = ({ open, onOpenChange, shift, date, onAddOfficer, isAdd
       </DialogContent>
     </Dialog>
   );
-};ghost"
+};
                       onClick={() => {
                         setEditingUnitNumber(null);
                         setEditUnitValue("");
