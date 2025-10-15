@@ -220,7 +220,7 @@ const Dashboard = () => {
             </TabsList>
 
             <TabsContent value="daily" className="space-y-6">
-              <DailyScheduleManagement />
+              <DailyScheduleManagement isAdminOrSupervisor={isAdminOrSupervisor} />
             </TabsContent>
 
             <TabsContent value="schedule" className="space-y-6">
