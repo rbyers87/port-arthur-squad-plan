@@ -19,7 +19,7 @@ interface DailyScheduleViewProps {
   selectedDate: Date;
   filterShiftId?: string;
   isAdminOrSupervisor?: boolean;
-  userRole?: 'officer' | 'supervisor' | 'admin'; // Add userRole prop
+  userRole?: 'officer' | 'supervisor' | 'admin';
   userId?: string;
 }
 
@@ -27,7 +27,7 @@ export const DailyScheduleView = ({
   selectedDate, 
   filterShiftId = "all", 
   isAdminOrSupervisor = false,
-  userRole = 'officer' // Default to most restrictive role
+  userRole = 'officer'
 }: DailyScheduleViewProps) => {
   const queryClient = useQueryClient();
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
@@ -712,6 +712,51 @@ export const DailyScheduleView = ({
                       size="sm"
                       variant="ghost"
                       onClick={() => {
+                        setEditingUnitNumber(null);
+                        setEditUnitValue("");
+                      }}
+                      className="h-8 w-8"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Badge 
+                    variant={officer.unitNumber ? "default" : "outline"} 
+                    className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
+                    onClick={() => canEdit && handleEditUnitClick(officer)}
+                  >
+                    {officer.unitNumber || (canEdit ? "Add" : "-")}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Notes/Assignments */}
+              <div className="text-center min-w-24 flex-1">
+                <Label htmlFor={`notes-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
+                  Notes
+                </Label>
+                {canEdit && editingNotes === `${officer.scheduleId}-${officer.type}` ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      id={`notes-${officer.scheduleId}`}
+                      placeholder="Notes..."
+                      value={editNotesValue}
+                      onChange={(e) => setEditNotesValue(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => handleSaveNotes(officer)}
+                      disabled={updatePositionMutation.isPending}
+                      className="h-8 w-8"
+                    >
+                      <Save className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
                         setEditingNotes(null);
                         setEditNotesValue("");
                       }}
@@ -905,15 +950,16 @@ export const DailyScheduleView = ({
               {shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between border-b pb-2">
-                    <h4 className="font-semibold text-sm">Special Assignment</h4>
-                    <Badge variant="outline">{shiftData.specialAssignmentOfficers.length}</Badge>
+                    <h4 className="font-semibold text-sm">Special Assignments</h4>
+                    <Badge variant="outline">
+                      {shiftData.specialAssignmentOfficers.length}
+                    </Badge>
                   </div>
                   {shiftData.specialAssignmentOfficers.map((officer) => (
                     <div
                       key={`${officer.scheduleId}-${officer.type}`}
-                      className="flex items-center justify-between p-3 bg-blue-50 rounded-md border border-blue-200"
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
                     >
-                      {/* Officer Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-1">
                           <p className="font-medium truncate">{officer.name}</p>
@@ -932,78 +978,34 @@ export const DailyScheduleView = ({
                               Recurring
                             </Badge>
                           )}
-                          {officer.hasPTO && !officer.ptoData?.isFullShift && (
-                            <Badge variant="destructive" className="text-xs">
-                              Partial PTO
-                            </Badge>
-                          )}
                         </div>
                       </div>
-
-                      {/* Unit & Notes */}
-                      <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
-                        <div className="text-center min-w-16">
-                          <Label className="text-xs text-muted-foreground mb-1 block">Unit</Label>
-                          <Badge 
-                            variant={officer.unitNumber ? "default" : "outline"} 
-                            className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
-                            onClick={() => canEdit && handleEditUnitClick(officer)}
-                          >
-                            {officer.unitNumber || (canEdit ? "Add" : "-")}
-                          </Badge>
-                        </div>
-                        <div className="text-center min-w-24 flex-1">
-                          <Label className="text-xs text-muted-foreground mb-1 block">Notes</Label>
-                          <div 
-                            className={`text-xs p-2 rounded border border-dashed border-muted-foreground/30 ${canEdit ? 'cursor-pointer hover:bg-muted' : ''} transition-colors min-h-8 flex items-center justify-center`}
-                            onClick={() => canEdit && handleEditNotesClick(officer)}
-                          >
-                            {officer.notes || (canEdit ? "Add notes" : "-")}
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="min-w-24 justify-center">
+                          {officer.position || "Special Assignment"}
+                        </Badge>
+                        {canEdit && (
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedOfficer({
+                                  officerId: officer.officerId,
+                                  name: officer.name,
+                                  scheduleId: officer.scheduleId,
+                                  type: officer.type,
+                                });
+                                setSelectedShift(officer.shift);
+                                setPtoDialogOpen(true);
+                              }}
+                              title="Assign PTO"
+                              className="h-6 w-6"
+                            >
+                              <Clock className="h-3 w-3" />
+                            </Button>
                           </div>
-                        </div>
-                      </div>
-
-                      {/* Position & Actions */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-right">
-                          <Badge variant="default" className="bg-blue-600 mb-1">
-                            Special Assignment
-                          </Badge>
-                          <p className="text-xs text-muted-foreground max-w-32 truncate">
-                            {officer.position}
-                          </p>
-                          {canEdit && (
-                            <div className="flex gap-1 justify-center mt-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleEditClick(officer)}
-                                title="Edit Position"
-                                className="h-6 w-6"
-                              >
-                                <Edit2 className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setSelectedOfficer({
-                                    officerId: officer.officerId,
-                                    name: officer.name,
-                                    scheduleId: officer.scheduleId,
-                                    type: officer.type,
-                                  });
-                                  setSelectedShift(officer.shift);
-                                  setPtoDialogOpen(true);
-                                }}
-                                title="Assign PTO"
-                                className="h-6 w-6"
-                              >
-                                <Clock className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1014,49 +1016,56 @@ export const DailyScheduleView = ({
               {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between border-b pb-2">
-                    <h4 className="font-semibold text-sm">Other (PTO)</h4>
-                    <Badge variant="outline">{shiftData.ptoRecords.length}</Badge>
+                    <h4 className="font-semibold text-sm">Time Off</h4>
+                    <Badge variant="outline">
+                      {shiftData.ptoRecords.length}
+                    </Badge>
                   </div>
-                  {shiftData.ptoRecords.map((record, idx) => (
+                  {shiftData.ptoRecords.map((ptoRecord) => (
                     <div
-                      key={`${record.id}-${idx}`}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+                      key={ptoRecord.id}
+                      className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-md"
                     >
-                      <div className="flex-1">
-                        <p className="font-medium">{record.name}</p>
-                        <p className="text-sm text-muted-foreground">Badge #{record.badge}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-right">
-                          <Badge variant="destructive" className="mb-1">
-                            {record.ptoType}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <p className="font-medium truncate text-red-900">{ptoRecord.name}</p>
+                          <Badge variant="outline" className="text-xs shrink-0 bg-red-100">
+                            Badge #{ptoRecord.badge}
                           </Badge>
-                          <p className="text-xs text-muted-foreground">
-                            {record.isFullShift ? "Full Shift" : `${record.startTime} - ${record.endTime}`}
-                          </p>
                         </div>
-                        {canEdit && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleEditPTO(record)}
-                              title="Edit PTO"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => removePTOMutation.mutate(record)}
-                              disabled={removePTOMutation.isPending}
-                              title="Remove PTO"
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </>
-                        )}
+                        <div className="flex items-center gap-2 text-sm">
+                          <Badge variant="destructive" className="text-xs">
+                            {ptoRecord.ptoType}
+                          </Badge>
+                          <span className="text-red-700">
+                            {ptoRecord.startTime} - {ptoRecord.endTime}
+                            {!ptoRecord.isFullShift && " (Partial Day)"}
+                          </span>
+                        </div>
                       </div>
+                      {canEdit && (
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditPTO(ptoRecord)}
+                            title="Edit PTO"
+                            className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => removePTOMutation.mutate(ptoRecord)}
+                            disabled={removePTOMutation.isPending}
+                            title="Remove PTO"
+                            className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1065,204 +1074,197 @@ export const DailyScheduleView = ({
           );
         })}
 
-        {selectedOfficer && selectedShift && canEdit && (
-          <PTOAssignmentDialog
-            open={ptoDialogOpen}
-            onOpenChange={setPtoDialogOpen}
-            officer={selectedOfficer}
-            shift={selectedShift}
-            date={dateStr}
-          />
-        )}
-
-        {/* Add Officer Dialog */}
-        {canEdit && selectedShiftForAdd && (
-          <AddOfficerDialog
-            open={addOfficerDialogOpen}
-            onOpenChange={setAddOfficerDialogOpen}
-            shift={selectedShiftForAdd}
-            date={dateStr}
-            onAddOfficer={addOfficerMutation.mutate}
-            isAdding={addOfficerMutation.isPending}
-          />
+        {scheduleData?.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            No schedule data available for {format(selectedDate, "EEEE, MMMM d, yyyy")}
+          </div>
         )}
       </CardContent>
+
+      {/* PTO Assignment Dialog */}
+      <PTOAssignmentDialog
+        open={ptoDialogOpen}
+        onOpenChange={setPtoDialogOpen}
+        officer={selectedOfficer}
+        shift={selectedShift}
+        selectedDate={selectedDate}
+        onSuccess={() => {
+          setPtoDialogOpen(false);
+          setSelectedOfficer(null);
+          setSelectedShift(null);
+        }}
+      />
+
+      {/* Add Officer Dialog */}
+      <Dialog open={addOfficerDialogOpen} onOpenChange={setAddOfficerDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Officer to Schedule</DialogTitle>
+            <DialogDescription>
+              Add an officer to the {selectedShiftForAdd?.name} shift for {format(selectedDate, "EEEE, MMMM d, yyyy")}
+            </DialogDescription>
+          </DialogHeader>
+          <AddOfficerForm
+            shiftId={selectedShiftForAdd?.id}
+            date={dateStr}
+            onSuccess={() => {
+              setAddOfficerDialogOpen(false);
+              setSelectedShiftForAdd(null);
+            }}
+            onCancel={() => {
+              setAddOfficerDialogOpen(false);
+              setSelectedShiftForAdd(null);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
 
-// Add Officer Dialog Component
-const AddOfficerDialog = ({ open, onOpenChange, shift, date, onAddOfficer, isAdding }: any) => {
-  const [selectedOfficer, setSelectedOfficer] = useState("");
+// Add Officer Form Component (simplified for brevity)
+const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel }: any) => {
+  const [selectedOfficerId, setSelectedOfficerId] = useState("");
   const [position, setPosition] = useState("");
   const [unitNumber, setUnitNumber] = useState("");
   const [notes, setNotes] = useState("");
+  const [customPosition, setCustomPosition] = useState("");
 
-  const { data: officers } = useQuery({
-    queryKey: ["available-officers", date, shift.id],
+  const { data: officers, isLoading } = useQuery({
+    queryKey: ["available-officers", shiftId, date],
     queryFn: async () => {
-      // Get all officers
-      const { data: allOfficers, error } = await supabase
+      // Get all profiles
+      const { data: profiles, error } = await supabase
         .from("profiles")
         .select("id, full_name, badge_number")
         .order("full_name");
 
       if (error) throw error;
-
-      // Get officers already scheduled for this shift and date
-      const dayOfWeek = new Date(date).getDay();
-      
-      // Get recurring schedules
-      const { data: recurringSchedules } = await supabase
-        .from("recurring_schedules")
-        .select("officer_id")
-        .eq("day_of_week", dayOfWeek)
-        .eq("shift_type_id", shift.id)
-        .is("end_date", null);
-
-      // Get exception schedules
-      const { data: exceptionSchedules } = await supabase
-        .from("schedule_exceptions")
-        .select("officer_id")
-        .eq("date", date)
-        .eq("shift_type_id", shift.id);
-
-      const scheduledOfficerIds = [
-        ...(recurringSchedules?.map(s => s.officer_id) || []),
-        ...(exceptionSchedules?.map(s => s.officer_id) || [])
-      ];
-
-      // Filter out already scheduled officers
-      return allOfficers?.filter(officer => !scheduledOfficerIds.includes(officer.id)) || [];
+      return profiles;
     },
-    enabled: open,
   });
 
-  const handleAdd = () => {
-    if (!selectedOfficer || !position) {
-      toast.error("Please select an officer and position");
-      return;
-    }
+  const predefinedPositions = [
+    "Supervisor",
+    "District 1",
+    "District 2", 
+    "District 3",
+    "District 4",
+    "District 5",
+    "District 6",
+    "District 7/8",
+    "District 9",
+    "Other (Custom)",
+  ];
 
-    onAddOfficer({
-      officerId: selectedOfficer,
-      shiftId: shift.id,
-      position: position,
-      unitNumber: unitNumber || undefined,
-      notes: notes || undefined
-    });
-    
-    // Reset form
-    setSelectedOfficer("");
-    setPosition("");
-    setUnitNumber("");
-    setNotes("");
-  };
+  const addOfficerMutation = useMutation({
+    mutationFn: async () => {
+      const finalPosition = position === "Other (Custom)" ? customPosition : position;
+      
+      if (!finalPosition) {
+        throw new Error("Please select or enter a position");
+      }
+
+      const { error } = await supabase
+        .from("schedule_exceptions")
+        .upsert({
+          officer_id: selectedOfficerId,
+          date: date,
+          shift_type_id: shiftId,
+          is_off: false,
+          position_name: finalPosition,
+          unit_number: unitNumber || null,
+          notes: notes || null,
+          custom_start_time: null,
+          custom_end_time: null
+        }, {
+          onConflict: 'officer_id,date,shift_type_id'
+        });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Officer added to schedule");
+      onSuccess();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to add officer");
+    },
+  });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add Officer to {shift.name}</DialogTitle>
-          <DialogDescription>
-            Add an officer to the schedule for {date}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Officer</Label>
-            <Select value={selectedOfficer} onValueChange={setSelectedOfficer}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select officer" />
-              </SelectTrigger>
-              <SelectContent>
-                {officers?.map((officer) => (
-                  <SelectItem key={officer.id} value={officer.id}>
-                    {officer.full_name} (Badge: {officer.badge_number})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Position</Label>
-            <Input
-              placeholder="Enter position (e.g., District 1, Supervisor)"
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Unit Number (Optional)</Label>
-            <Input
-              placeholder="Enter unit number"
-              value={unitNumber}
-              onChange={(e) => setUnitNumber(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Notes (Optional)</Label>
-            <Input
-              placeholder="Enter notes or special assignments"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handleAdd} disabled={isAdding} className="flex-1">
-              {isAdding ? "Adding..." : "Add Officer"}
-            </Button>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};ghost"
-                      onClick={() => {
-                        setEditingUnitNumber(null);
-                        setEditUnitValue("");
-                      }}
-                      className="h-8 w-8"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Badge 
-                    variant={officer.unitNumber ? "default" : "outline"} 
-                    className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
-                    onClick={() => canEdit && handleEditUnitClick(officer)}
-                  >
-                    {officer.unitNumber || (canEdit ? "Add" : "-")}
-                  </Badge>
-                )}
-              </div>
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="officer-select">Select Officer</Label>
+        <Select value={selectedOfficerId} onValueChange={setSelectedOfficerId}>
+          <SelectTrigger>
+            <SelectValue placeholder="Choose an officer" />
+          </SelectTrigger>
+          <SelectContent>
+            {officers?.map((officer) => (
+              <SelectItem key={officer.id} value={officer.id}>
+                {officer.full_name} (Badge #{officer.badge_number})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-              {/* Notes/Assignments */}
-              <div className="text-center min-w-24 flex-1">
-                <Label htmlFor={`notes-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
-                  Notes
-                </Label>
-                {canEdit && editingNotes === `${officer.scheduleId}-${officer.type}` ? (
-                  <div className="flex items-center gap-1">
-                    <Input
-                      id={`notes-${officer.scheduleId}`}
-                      placeholder="Notes..."
-                      value={editNotesValue}
-                      onChange={(e) => setEditNotesValue(e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => handleSaveNotes(officer)}
-                      disabled={updatePositionMutation.isPending}
-                      className="h-8 w-8"
-                    >
-                      <Save className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="
+      <div>
+        <Label htmlFor="position-select">Position</Label>
+        <Select value={position} onValueChange={setPosition}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select position" />
+          </SelectTrigger>
+          <SelectContent>
+            {predefinedPositions.map((pos) => (
+              <SelectItem key={pos} value={pos}>
+                {pos}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {position === "Other (Custom)" && (
+          <Input
+            placeholder="Enter custom position"
+            value={customPosition}
+            onChange={(e) => setCustomPosition(e.target.value)}
+            className="mt-2"
+          />
+        )}
+      </div>
+
+      <div>
+        <Label htmlFor="unit-number">Unit Number (Optional)</Label>
+        <Input
+          id="unit-number"
+          placeholder="Unit #"
+          value={unitNumber}
+          onChange={(e) => setUnitNumber(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <Label htmlFor="notes">Notes (Optional)</Label>
+        <Input
+          id="notes"
+          placeholder="Additional notes..."
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4">
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          onClick={() => addOfficerMutation.mutate()}
+          disabled={!selectedOfficerId || !position || addOfficerMutation.isPending}
+        >
+          {addOfficerMutation.isPending ? "Adding..." : "Add Officer"}
+        </Button>
+      </div>
+    </div>
+  );
+};
