@@ -204,21 +204,19 @@ export const usePDFExport = () => {
       // Draw logo (unchanged)
       drawActualLogo(pdf, 15, 15);
 
-      // Date next to logo
+      // Shift info on the left, same line as logo
       pdf.setFontSize(10);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
-      const dateText = format(selectedDate, "EEE, MMM d, yyyy");
-      pdf.text(dateText, 45, 28);
-
-      // Shift info on the same line, right-aligned
-      pdf.setFontSize(8);
-      pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
-      pdf.setFont("helvetica", "bold");
       
       const shiftInfo = `${shiftName.toUpperCase()} • ${shiftData.shift?.start_time || "N/A"}-${shiftData.shift?.end_time || "N/A"}`;
-      const shiftInfoX = pageWidth - 15 - pdf.getTextWidth(shiftInfo); // Right-aligned
-      pdf.text(shiftInfo, shiftInfoX, 28);
+      pdf.text(shiftInfo, 45, 28);
+
+      // Date with a few spaces after shiftInfo
+      const dateText = format(selectedDate, "EEE, MMM d, yyyy");
+      const shiftInfoWidth = pdf.getTextWidth(shiftInfo);
+      const dateX = 45 + shiftInfoWidth + 15; // 15mm space after shiftInfo
+      pdf.text(dateText, dateX, 28);
 
       // Start content lower to maintain spacing
       yPosition = 40;
@@ -243,6 +241,7 @@ export const usePDFExport = () => {
         yPosition += 4;
       }
 
+      // ... rest of your code remains exactly the same ...
       // SECTION 1: REGULAR OFFICERS TABLE
       const regularOfficersData: any[] = [];
       
