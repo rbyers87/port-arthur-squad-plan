@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
 import { WeeklySchedule } from "@/components/schedule/WeeklySchedule";
 import { DailyScheduleManagement } from "@/components/schedule/DailyScheduleManagement";
+import { DailyScheduleView } from "@/components/schedule/DailyScheduleView"; // ADD THIS IMPORT
 import { TimeOffRequests } from "@/components/time-off/TimeOffRequests";
 import { VacancyAlerts } from "@/components/vacancy/VacancyAlerts";
 import { VacancyManagement } from "@/components/admin/VacancyManagement";
@@ -109,29 +110,29 @@ const Dashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10">
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-  <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-    <div className="flex items-center gap-3">
-      <img 
-        src={logoBase64} 
-        alt="Port Arthur PD Logo" 
-        className="w-16 h-16 object-contain"
-      />
-      <div>
-        <h1 className="text-xl font-bold">Port Arthur PD</h1>
-        <p className="text-sm text-muted-foreground">Shift Scheduler</p>
-      </div>
-    </div>
-    <div className="flex items-center gap-4">
-      <div className="text-right">
-        <p className="font-medium">{profile?.full_name || user?.email}</p>
-        <p className="text-sm text-muted-foreground capitalize">{primaryRole}</p>
-      </div>
-      <Button variant="ghost" size="icon" onClick={handleSignOut}>
-        <LogOut className="h-5 w-5" />
-      </Button>
-    </div>
-  </div>
-</header>
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img 
+              src={logoBase64} 
+              alt="Port Arthur PD Logo" 
+              className="w-16 h-16 object-contain"
+            />
+            <div>
+              <h1 className="text-xl font-bold">Port Arthur PD</h1>
+              <p className="text-sm text-muted-foreground">Shift Scheduler</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="font-medium">{profile?.full_name || user?.email}</p>
+              <p className="text-sm text-muted-foreground capitalize">{primaryRole}</p>
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      </header>
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
@@ -208,63 +209,62 @@ const Dashboard = () => {
         </div>
 
         {/* Main Content */}
-       {isAdminOrSupervisor ? (
-  <Tabs defaultValue="daily" className="space-y-6">
-    <TabsList className="grid w-full grid-cols-6">
-      <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
-      <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
-      <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
-      <TabsTrigger value="staff">Staff</TabsTrigger>
-      <TabsTrigger value="requests">Time Off</TabsTrigger>
-      <TabsTrigger value="pto">PTO</TabsTrigger>
-    </TabsList>
+        {isAdminOrSupervisor ? (
+          <Tabs defaultValue="daily" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-6">
+              <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
+              <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
+              <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
+              <TabsTrigger value="staff">Staff</TabsTrigger>
+              <TabsTrigger value="requests">Time Off</TabsTrigger>
+              <TabsTrigger value="pto">PTO</TabsTrigger>
+            </TabsList>
 
-    <TabsContent value="daily" className="space-y-6">
-      <DailyScheduleManagement />
-    </TabsContent>
+            <TabsContent value="daily" className="space-y-6">
+              <DailyScheduleManagement />
+            </TabsContent>
 
-    <TabsContent value="schedule" className="space-y-6">
-      <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-    </TabsContent>
+            <TabsContent value="schedule" className="space-y-6">
+              <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+            </TabsContent>
 
-    <TabsContent value="vacancies" className="space-y-6">
-      <VacancyManagement />
-    </TabsContent>
+            <TabsContent value="vacancies" className="space-y-6">
+              <VacancyManagement />
+            </TabsContent>
 
-    <TabsContent value="staff" className="space-y-6">
-      <StaffManagement />
-    </TabsContent>
+            <TabsContent value="staff" className="space-y-6">
+              <StaffManagement />
+            </TabsContent>
 
-    <TabsContent value="requests" className="space-y-6">
-      <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-    </TabsContent>
+            <TabsContent value="requests" className="space-y-6">
+              <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+            </TabsContent>
 
-    <TabsContent value="pto" className="space-y-6">
-      <PTOManagement />
-    </TabsContent>
-  </Tabs>
-) : (
-  <Tabs defaultValue="daily" className="space-y-6">
-    <TabsList className="grid w-full grid-cols-3">
-      <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
-      <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
-      <TabsTrigger value="requests">Time Off</TabsTrigger>
-    </TabsList>
+            <TabsContent value="pto" className="space-y-6">
+              <PTOManagement />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <Tabs defaultValue="daily" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
+              <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
+              <TabsTrigger value="requests">Time Off</TabsTrigger>
+            </TabsList>
 
-    <TabsContent value="daily" className="space-y-6">
-      <DailyScheduleView selectedDate={new Date()} isAdminOrSupervisor={false} />
-    </TabsContent>
+            <TabsContent value="daily" className="space-y-6">
+              <DailyScheduleView selectedDate={new Date()} isAdminOrSupervisor={false} userRole="officer" />
+            </TabsContent>
 
-    <TabsContent value="schedule" className="space-y-6">
-      <WeeklySchedule userId={user!.id} isAdminOrSupervisor={false} />
-    </TabsContent>
+            <TabsContent value="schedule" className="space-y-6">
+              <WeeklySchedule userId={user!.id} isAdminOrSupervisor={false} />
+            </TabsContent>
 
-    <TabsContent value="requests" className="space-y-6">
-      <TimeOffRequests userId={user!.id} isAdminOrSupervisor={false} />
-    </TabsContent>
-  </Tabs>
-)}
-
+            <TabsContent value="requests" className="space-y-6">
+              <TimeOffRequests userId={user!.id} isAdminOrSupervisor={false} />
+            </TabsContent>
+          </Tabs>
+        )}
       </main>
     </div>
   );
