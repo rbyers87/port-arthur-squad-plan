@@ -252,6 +252,9 @@ if (shiftData.supervisors && shiftData.supervisors.length > 0) {
 
   // Create a mini-table for supervisors
   const supervisorsData: any[] = [];
+
+   if (shiftData.supervisors && shiftData.supervisors.length > 0) {
+     // REMOVED the section header for supervisors - using table header only
   
   shiftData.supervisors.forEach((supervisor: any) => {
     supervisorsData.push([
@@ -262,6 +265,11 @@ if (shiftData.supervisors && shiftData.supervisors.length > 0) {
       supervisor?.notes || ""
     ]);
   });
+
+      // Replace "OFFICER NAME" with "SUPERVISORS" in headers
+   const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
+  yPosition = drawCompactTable(pdf, officersHeaders, regularOfficersData, yPosition, { left: 15, right: 15 }, COLORS.primary);
+      }
 
   const supervisorsHeaders = ["NAME", "RANK", "BADGE #", "UNIT", "NOTES"];
   yPosition = drawCompactTable(pdf, supervisorsHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
@@ -285,8 +293,8 @@ if (shiftData.supervisors && shiftData.supervisors.length > 0) {
           ]);
         });
 
-        // Replace "OFFICER NAME" with "REGULAR OFFICERS" in headers
-        const officersHeaders = ["REGULAR OFFICERS", "BEAT", "BADGE #", "UNIT", "NOTES"];
+        // Replace "OFFICER NAME" with "OFFICERS" in headers
+        const officersHeaders = ["OFFICERS", "BEAT", "BADGE #", "UNIT", "NOTES"];
         yPosition = drawCompactTable(pdf, officersHeaders, regularOfficersData, yPosition, { left: 15, right: 15 }, COLORS.primary);
       }
 
