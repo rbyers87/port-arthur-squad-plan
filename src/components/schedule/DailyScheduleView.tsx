@@ -795,7 +795,9 @@ export const DailyScheduleView = ({
                 )}
                 {/* Show partial PTO indicator */}
                 {officer.hasPTO && !officer.ptoData?.isFullShift && (
-                  <Badge variant="destructive" className="text-xs">
+                 // <Badge variant="destructive" className="text-xs">
+            // destructive made the badge red and this new code customizes it
+            <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
                     Partial PTO
                   </Badge>
                 )}
