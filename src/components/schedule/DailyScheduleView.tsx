@@ -15,16 +15,6 @@ import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { usePDFExport } from "@/hooks/usePDFExport";
 
-export const DailyScheduleView = ({ 
-  selectedDate, 
-  filterShiftId = "all", 
-  isAdminOrSupervisor = false,
-  userRole = 'officer'
-}: DailyScheduleViewProps) => {
-  console.log("🔄 DailyScheduleView RENDERED - User Role:", userRole);
-  
-  // ... rest of your component
-
 interface DailyScheduleViewProps {
   selectedDate: Date;
   filterShiftId?: string;
@@ -39,6 +29,7 @@ export const DailyScheduleView = ({
   isAdminOrSupervisor = false,
   userRole = 'officer'
 }: DailyScheduleViewProps) => {
+  console.log("🔄 DailyScheduleView RENDERED - User Role:", userRole);
   const queryClient = useQueryClient();
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
   const [editPosition, setEditPosition] = useState("");
