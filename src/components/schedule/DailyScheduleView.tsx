@@ -1300,7 +1300,7 @@ export const DailyScheduleView = ({
                 </div>
               )}
 
-              {/* PTO Section - UPDATED WITH EDITABLE FIELDS */}
+             {/* PTO Section - UPDATED WITH EDITABLE FIELDS */}
 {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
   <div className="space-y-2">
     <div className="flex items-center justify-between border-b pb-2">
@@ -1325,7 +1325,8 @@ export const DailyScheduleView = ({
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <Badge variant="secondary" className="text-xs">
+            {/* Change this badge to green */}
+            <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
               {ptoRecord.ptoType}
             </Badge>
             <span className="text-gray-700">
@@ -1334,6 +1335,8 @@ export const DailyScheduleView = ({
             </span>
           </div>
         </div>
+
+        {/* Rest of your PTO section code remains the same... */}
 
                       {/* Unit & Notes - Middle Section - NOW EDITABLE */}
                       <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
