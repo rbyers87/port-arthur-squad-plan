@@ -1082,18 +1082,14 @@ export const DailyScheduleView = ({
       </CardContent>
 
       {/* PTO Assignment Dialog */}
-      <PTOAssignmentDialog
-        open={ptoDialogOpen}
-        onOpenChange={setPtoDialogOpen}
-        officer={selectedOfficer}
-        shift={selectedShift}
-        selectedDate={selectedDate}
-        onSuccess={() => {
-          setPtoDialogOpen(false);
-          setSelectedOfficer(null);
-          setSelectedShift(null);
-        }}
-      />
+      {/* PTO Assignment Dialog */}
+    <PTOAssignmentDialog
+      open={ptoDialogOpen}
+      onOpenChange={setPtoDialogOpen}
+      officer={selectedOfficer}
+      shift={selectedShift}
+      date={dateStr}  // Change selectedDate to dateStr
+  />
 
       {/* Add Officer Dialog */}
       <Dialog open={addOfficerDialogOpen} onOpenChange={setAddOfficerDialogOpen}>
