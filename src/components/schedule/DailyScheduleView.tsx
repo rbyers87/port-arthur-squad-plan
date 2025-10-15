@@ -93,8 +93,8 @@ export const DailyScheduleView = ({
   // Function to sort supervisors by rank ONLY
   const sortSupervisorsByRank = (supervisors: any[]) => {
     return supervisors.sort((a, b) => {
-      const rankA = a.officer_rank || 'Officer';
-      const rankB = b.officer_rank || 'Officer';
+      const rankA = a.rank || 'Officer';
+      const rankB = b.rank || 'Officer';
       return (rankOrder[rankA as keyof typeof rankOrder] || 99) - (rankOrder[rankB as keyof typeof rankOrder] || 99);
     });
   };
@@ -125,7 +125,7 @@ export const DailyScheduleView = ({
           id, 
           full_name, 
           badge_number, 
-          officer_rank
+          rank
         ),
         shift_types (
           id, 
@@ -151,7 +151,7 @@ export const DailyScheduleView = ({
           id, 
           full_name, 
           badge_number, 
-          officer_rank
+          rank
         ),
         shift_types (
           id, 
@@ -209,7 +209,7 @@ export const DailyScheduleView = ({
               officerId: r.officer_id,
               name: r.profiles?.full_name || "Unknown",
               badge: r.profiles?.badge_number,
-              officer_rank: r.profiles?.officer_rank,
+              rank: r.profiles?.rank,
               position: workingException ? workingException.position_name : r.position_name,
               unitNumber: workingException ? workingException.unit_number : null,
               notes: workingException ? workingException.notes : null,
@@ -257,7 +257,7 @@ export const DailyScheduleView = ({
               officerId: e.officer_id,
               name: e.profiles?.full_name || "Unknown",
               badge: e.profiles?.badge_number,
-              officer_rank: e.profiles?.officer_rank,
+              rank: e.profiles?.rank,
               position: e.position_name,
               unitNumber: e.unit_number,
               notes: e.notes,
@@ -287,7 +287,7 @@ export const DailyScheduleView = ({
           officerId: e.officer_id,
           name: e.profiles?.full_name || "Unknown",
           badge: e.profiles?.badge_number,
-          officer_rank: e.profiles?.officer_rank,
+          rank: e.profiles?.rank,
           ptoType: e.reason || "PTO",
           startTime: e.custom_start_time || shift.start_time,
           endTime: e.custom_end_time || shift.end_time,
@@ -712,7 +712,7 @@ export const DailyScheduleView = ({
                 <div>
                   <p className="font-medium truncate">{officer.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {officer.officer_rank || 'Officer'} • Badge #{officer.badge}
+                    {officer.rank || 'Officer'} • Badge #{officer.badge}
                   </p>
                 </div>
               </div>
@@ -1017,7 +1017,7 @@ export const DailyScheduleView = ({
                           <div>
                             <p className="font-medium truncate">{officer.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {officer.officer_rank || 'Officer'} • Badge #{officer.badge}
+                              {officer.rank || 'Officer'} • Badge #{officer.badge}
                             </p>
                           </div>
                         </div>
@@ -1085,7 +1085,7 @@ export const DailyScheduleView = ({
                           <div>
                             <p className="font-medium truncate text-red-900">{ptoRecord.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {ptoRecord.officer_rank || 'Officer'} • Badge #{ptoRecord.badge}
+                              {ptoRecord.rank || 'Officer'} • Badge #{ptoRecord.badge}
                             </p>
                           </div>
                         </div>
