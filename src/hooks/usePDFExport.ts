@@ -29,7 +29,6 @@ const getLogoBase64 = (): string => {
   return departmentLogo;
 };
 
-
 // Draw actual logo function
 const drawActualLogo = (pdf: jsPDF, x: number, y: number) => {
   const logoBase64 = getLogoBase64();
@@ -222,6 +221,16 @@ export const usePDFExport = () => {
       const shiftInfo = `${shiftName.toUpperCase()} • ${shiftData.shift?.start_time || "N/A"}-${shiftData.shift?.end_time || "N/A"}`;
       pdf.text(shiftInfo, 20, yPosition + 6);
 
+      yPosition += 15;
+
+      // Supervisors section - FIXED: Added missing closing brace
+      if (shiftData.supervisors && shiftData.supervisors.length > 0) {
+        pdf.setFontSize(7);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
+        pdf.text("SUPERVISORS:", 15, yPosition);
+        
+        yPosition += 6;
 
         const supervisorsData: any[] = [];
 
