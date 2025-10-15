@@ -224,14 +224,6 @@ export const usePDFExport = () => {
 
       yPosition += 15;
 
-      // Supervisors section - FIXED: Added missing closing brace
-      if (shiftData.supervisors && shiftData.supervisors.length > 0) {
-        pdf.setFontSize(7);
-        pdf.setFont("helvetica", "bold");
-        pdf.setTextColor(COLORS.dark[0], COLORS.dark[1], COLORS.dark[2]);
-        pdf.text("SUPERVISORS:", 15, yPosition);
-        
-        yPosition += 6;
 
         const supervisorsData: any[] = [];
 
