@@ -83,7 +83,7 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor, userId }: DailySc
  					 filterShiftId={selectedShiftId} 
 					  key={`${selectedDate.toISOString()}-${selectedShiftId}`}
  						 isAdminOrSupervisor={isAdminOrSupervisor}
- 						 userId={userId}
+ 					//	 userId={userId}
 				/>
     </div>
   );
