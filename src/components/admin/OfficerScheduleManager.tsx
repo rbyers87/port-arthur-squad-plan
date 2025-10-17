@@ -1,525 +1,787 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar as CalendarIcon, Trash2, Plus, StopCircle } from "lucide-react";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
+import { Calendar, Plus, Edit2, Clock, Trash2, ChevronLeft, ChevronRight, Grid, Calendar as CalendarIcon } from "lucide-react";
+import { ScheduleManagementDialog } from "./ScheduleManagementDialog";
+import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
+import { PositionEditor } from "./PositionEditor";
+import { usePositionMutation } from "@/hooks/usePositionMutation";
 import { toast } from "sonner";
-import { format, addDays } from "date-fns";
-import { cn } from "@/lib/utils";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
-interface OfficerScheduleManagerProps {
-  officer: {
-    id: string;
-    full_name: string;
-  };
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface WeeklyScheduleProps {
+  userId: string;
+  isAdminOrSupervisor: boolean;
 }
 
-const daysOfWeek = [
-  { value: 0, label: "Sunday" },
-  { value: 1, label: "Monday" },
-  { value: 2, label: "Tuesday" },
-  { value: 3, label: "Wednesday" },
-  { value: 4, label: "Thursday" },
-  { value: 5, label: "Friday" },
-  { value: 6, label: "Saturday" },
-];
-
-export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerScheduleManagerProps) => {
+export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklyScheduleProps) => {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
+  const [selectedOfficerId, setSelectedOfficerId] = useState<string>(userId);
+  const [selectedSchedule, setSelectedSchedule] = useState<{
+    scheduleId: string;
+    type: "recurring" | "exception";
+    date: string;
+    shift: any;
+    existingPTO?: {
+      id: string;
+      ptoType: string;
+      startTime: string;
+      endTime: string;
+      isFullShift: boolean;
+    };
+  } | null>(null);
+  const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [activeView, setActiveView] = useState<"weekly" | "monthly">("weekly");
   const queryClient = useQueryClient();
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedDays, setSelectedDays] = useState<number[]>([]);
-  const [startDate, setStartDate] = useState<Date>(new Date());
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
-  const [shiftTypeId, setShiftTypeId] = useState("");
-  const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
 
-  // Fetch officer's recurring schedules
-  const { data: schedules, isLoading: schedulesLoading } = useQuery({
-    queryKey: ["officer-schedules", officer.id],
+  // Week navigation functions
+  const goToPreviousWeek = () => {
+    setCurrentWeekStart(subWeeks(currentWeekStart, 1));
+  };
+
+  const goToNextWeek = () => {
+    setCurrentWeekStart(addWeeks(currentWeekStart, 1));
+  };
+
+  const goToCurrentWeek = () => {
+    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
+  };
+
+  // Month navigation functions
+  const goToPreviousMonth = () => {
+    setCurrentMonth(subMonths(currentMonth, 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentMonth(addMonths(currentMonth, 1));
+  };
+
+  const goToCurrentMonth = () => {
+    setCurrentMonth(new Date());
+  };
+
+  // Function to extract last name from full name
+  const getLastName = (fullName: string) => {
+    const names = fullName.trim().split(/\s+/);
+    return names[names.length - 1] || fullName;
+  };
+
+  // Fetch all profiles for admin/supervisor selection
+  const { data: profiles, isLoading: profilesLoading } = useQuery({
+    queryKey: ["profiles"],
     queryFn: async () => {
       const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, badge_number")
+        .order("full_name");
+      if (error) throw error;
+      
+      // Sort by last name alphabetically
+      return data.sort((a, b) => {
+        const lastNameA = getLastName(a.full_name || "").toLowerCase();
+        const lastNameB = getLastName(b.full_name || "").toLowerCase();
+        return lastNameA.localeCompare(lastNameB);
+      });
+    },
+    enabled: isAdminOrSupervisor,
+  });
+
+  // Enhanced query to fetch schedule data for both weekly and monthly views
+  const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
+    queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView],
+    queryFn: async () => {
+      const targetUserId = isAdminOrSupervisor ? selectedOfficerId : userId;
+      
+      // Determine date range based on active view
+      let startDate: Date;
+      let endDate: Date;
+      let dates: string[];
+
+      if (activeView === "weekly") {
+        startDate = currentWeekStart;
+        endDate = addDays(currentWeekStart, 6);
+        dates = Array.from({ length: 7 }, (_, i) => 
+          format(addDays(currentWeekStart, i), "yyyy-MM-dd")
+        );
+      } else {
+        // Monthly view
+        startDate = startOfMonth(currentMonth);
+        endDate = endOfMonth(currentMonth);
+        const monthDays = eachDayOfInterval({ start: startDate, end: endDate });
+        dates = monthDays.map(day => format(day, "yyyy-MM-dd"));
+      }
+
+      // Get recurring schedules - filter by active schedules for the current period
+      const { data: recurringData, error: recurringError } = await supabase
         .from("recurring_schedules")
         .select(`
           *,
-          shift_types(id, name, start_time, end_time)
+          shift_types(name, start_time, end_time)
         `)
-        .eq("officer_id", officer.id)
-        .order("start_date", { ascending: false });
+        .eq("officer_id", targetUserId)
+        // Filter recurring schedules that are active during the current period
+        .lte("start_date", format(endDate, "yyyy-MM-dd"))
+        .or(`end_date.is.null,end_date.gte.${format(startDate, "yyyy-MM-dd")}`);
 
-      if (error) throw error;
-      
-      // Sort: Active schedules first (sorted by start_date desc), then ended schedules (sorted by start_date desc)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const active = data.filter(s => !s.end_date || new Date(s.end_date) >= today);
-      const ended = data.filter(s => s.end_date && new Date(s.end_date) < today);
-      
-      return [...active, ...ended];
+      if (recurringError) {
+        console.error("Recurring error:", recurringError);
+        throw recurringError;
+      }
+
+      // Get exceptions for the specific period
+      const { data: exceptionsData, error: exceptionsError } = await supabase
+        .from("schedule_exceptions")
+        .select(`
+          *,
+          shift_types(name, start_time, end_time)
+        `)
+        .eq("officer_id", targetUserId)
+        .in("date", dates);
+
+      if (exceptionsError) {
+        console.error("Exceptions error:", exceptionsError);
+        throw exceptionsError;
+      }
+
+      // Build schedule for each day
+      const dailySchedules = dates.map((date, idx) => {
+        const currentDate = new Date(date);
+        const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const exception = exceptionsData?.find(e => e.date === date);
+        
+        // Find recurring schedule for this day of week that's active on this date
+        const recurring = recurringData?.find(r => {
+          if (r.day_of_week !== dayOfWeek) return false;
+          
+          // Check if the recurring schedule is active on this specific date
+          const scheduleStartDate = new Date(r.start_date);
+          const scheduleEndDate = r.end_date ? new Date(r.end_date) : null;
+          
+          // Schedule is active if:
+          // 1. Current date is on or after start date
+          // 2. AND current date is on or before end date (if end date exists)
+          const isAfterStart = currentDate >= scheduleStartDate;
+          const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
+          
+          return isAfterStart && isBeforeEnd;
+        });
+
+        let shiftInfo = null;
+        
+        if (exception) {
+          shiftInfo = {
+            type: exception.is_off ? "Off" : (exception.shift_types?.name || "Custom"),
+            time: exception.is_off ? "" : (
+              exception.custom_start_time && exception.custom_end_time
+                ? `${exception.custom_start_time} - ${exception.custom_end_time}`
+                : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`
+            ),
+            position: exception.position_name,
+            scheduleId: exception.id,
+            scheduleType: "exception" as const,
+            shift: exception.shift_types,
+            isOff: exception.is_off,
+            reason: exception.reason,
+            // Add PTO detection
+            hasPTO: exception.is_off,
+            ptoData: exception.is_off ? {
+              id: exception.id,
+              ptoType: exception.reason,
+              startTime: exception.custom_start_time || exception.shift_types?.start_time,
+              endTime: exception.custom_end_time || exception.shift_types?.end_time,
+              isFullShift: !exception.custom_start_time && !exception.custom_end_time
+            } : undefined
+          };
+        } else if (recurring) {
+          // For recurring schedules, check if there's a PTO exception for this date
+          const ptoException = exceptionsData?.find(e => 
+            e.officer_id === targetUserId && 
+            e.date === date && 
+            e.is_off
+          );
+          
+          shiftInfo = {
+            type: recurring.shift_types?.name,
+            time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
+            position: recurring.position_name,
+            scheduleId: recurring.id,
+            scheduleType: "recurring" as const,
+            shift: recurring.shift_types,
+            isOff: false,
+            // Add PTO detection
+            hasPTO: !!ptoException,
+            ptoData: ptoException ? {
+              id: ptoException.id,
+              ptoType: ptoException.reason,
+              startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
+              endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
+              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+            } : undefined
+          };
+        }
+
+        return {
+          date,
+          dayOfWeek,
+          shiftInfo,
+          hasSchedule: !!shiftInfo,
+          isCurrentMonth: activeView === "monthly" ? isSameMonth(currentDate, currentMonth) : true
+        };
+      });
+
+      return { 
+        dailySchedules, 
+        dates,
+        recurring: recurringData,
+        exceptions: exceptionsData,
+        startDate: format(startDate, "yyyy-MM-dd"),
+        endDate: format(endDate, "yyyy-MM-dd")
+      };
     },
-    enabled: open,
   });
 
-  // Fetch shift types
-  const { data: shiftTypes } = useQuery({
-    queryKey: ["shift-types"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("shift_types")
-        .select("*")
-        .order("start_time");
-      if (error) throw error;
-      return data;
-    },
-    enabled: open,
-  });
+  const updatePositionMutation = usePositionMutation();
 
-  // Delete schedule mutation
-  const deleteScheduleMutation = useMutation({
-    mutationFn: async (scheduleId: string) => {
-      const { error } = await supabase
-        .from("recurring_schedules")
+  // Add mutation for removing PTO
+  const removePTOMutation = useMutation({
+    mutationFn: async (ptoData: { id: string; officerId: string; date: string; shiftTypeId: string; ptoType: string; startTime: string; endTime: string }) => {
+      // Calculate hours to restore
+      const calculateHours = (start: string, end: string) => {
+        const [startHour, startMin] = start.split(":").map(Number);
+        const [endHour, endMin] = end.split(":").map(Number);
+        const startMinutes = startHour * 60 + startMin;
+        const endMinutes = endHour * 60 + endMin;
+        return (endMinutes - startMinutes) / 60;
+      };
+
+      const hoursUsed = calculateHours(ptoData.startTime, ptoData.endTime);
+
+      // Restore PTO balance
+      const PTO_TYPES = [
+        { value: "vacation", label: "Vacation", column: "vacation_hours" },
+        { value: "holiday", label: "Holiday", column: "holiday_hours" },
+        { value: "sick", label: "Sick", column: "sick_hours" },
+        { value: "comp", label: "Comp", column: "comp_hours" },
+      ];
+
+      const ptoColumn = PTO_TYPES.find((t) => t.value === ptoData.ptoType)?.column;
+      if (ptoColumn) {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", ptoData.officerId)
+          .single();
+
+        if (profileError) throw profileError;
+
+        const currentBalance = profile[ptoColumn as keyof typeof profile] as number;
+        
+        const { error: restoreError } = await supabase
+          .from("profiles")
+          .update({
+            [ptoColumn]: currentBalance + hoursUsed,
+          })
+          .eq("id", ptoData.officerId);
+
+        if (restoreError) throw restoreError;
+      }
+
+      // Delete the PTO exception
+      const { error: deleteError } = await supabase
+        .from("schedule_exceptions")
         .delete()
-        .eq("id", scheduleId);
+        .eq("id", ptoData.id);
 
-      if (error) throw error;
+      if (deleteError) throw deleteError;
+
+      // Also delete any associated working time exception
+      await supabase
+        .from("schedule_exceptions")
+        .delete()
+        .eq("officer_id", ptoData.officerId)
+        .eq("date", ptoData.date)
+        .eq("shift_type_id", ptoData.shiftTypeId)
+        .eq("is_off", false);
     },
     onSuccess: () => {
-      toast.success("Schedule removed");
-      queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
-      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
-      setScheduleToDelete(null);
+      toast.success("PTO removed and balance restored");
+      queryClient.invalidateQueries({ queryKey: ["schedule"] });
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to remove schedule");
-      setScheduleToDelete(null);
+      toast.error(error.message || "Failed to remove PTO");
     },
   });
 
-  // Add schedule mutation (bulk insert multiple days)
-  const addScheduleMutation = useMutation({
-    mutationFn: async (data: { days: number[]; shiftId: string; start: string; end?: string }) => {
-      const schedules = data.days.map(day => ({
-        officer_id: officer.id,
-        day_of_week: day,
-        shift_type_id: data.shiftId,
-        start_date: data.start,
-        end_date: data.end || null,
-      }));
-
-      const { error } = await supabase
-        .from("recurring_schedules")
-        .insert(schedules);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Schedule added successfully");
-      queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
-      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      setShowAddForm(false);
-      setSelectedDays([]);
-      setShiftTypeId("");
-      setStartDate(new Date());
-      setEndDate(undefined);
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to add schedule");
-    },
-  });
-
-  // End schedule mutation
-  const endScheduleMutation = useMutation({
-    mutationFn: async ({ scheduleId, endDate }: { scheduleId: string; endDate: string }) => {
-      const { error } = await supabase
-        .from("recurring_schedules")
-        .update({ end_date: endDate })
-        .eq("id", scheduleId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Schedule ended");
-      queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
-      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to end schedule");
-    },
-  });
-
-  const handleAddSchedule = () => {
-    if (selectedDays.length === 0) {
-      toast.error("Please select at least one day");
-      return;
-    }
-    if (!shiftTypeId) {
-      toast.error("Please select a shift");
-      return;
-    }
-    addScheduleMutation.mutate({
-      days: selectedDays,
-      shiftId: shiftTypeId,
-      start: format(startDate, "yyyy-MM-dd"),
-      end: endDate ? format(endDate, "yyyy-MM-dd") : undefined,
-    });
-  };
-
-  const handleEndSchedule = (scheduleId: string) => {
-    const today = format(new Date(), "yyyy-MM-dd");
-    endScheduleMutation.mutate({ scheduleId, endDate: today });
-  };
-
-  const handleDeleteClick = (scheduleId: string) => {
-    setScheduleToDelete(scheduleId);
-  };
-
-  const confirmDelete = () => {
-    if (scheduleToDelete) {
-      deleteScheduleMutation.mutate(scheduleToDelete);
-    }
-  };
-
-  const cancelDelete = () => {
-    setScheduleToDelete(null);
-  };
-
-  const toggleDay = (day: number) => {
-    setSelectedDays(prev =>
-      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+  const handleSavePosition = (scheduleId: string, type: "recurring" | "exception", positionName: string) => {
+    updatePositionMutation.mutate(
+      { scheduleId, type, positionName },
+      {
+        onSuccess: () => {
+          // Force refresh the schedule data
+          queryClient.invalidateQueries({ 
+            queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView] 
+          });
+          setEditingSchedule(null);
+        }
+      }
     );
   };
 
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Manage Regular Schedule</DialogTitle>
-            <DialogDescription>
-              {officer.full_name}'s recurring work schedule
-            </DialogDescription>
-          </DialogHeader>
+  const handleEditClick = (shiftInfo: any) => {
+    const scheduleKey = `${shiftInfo.scheduleId}-${shiftInfo.scheduleType}`;
+    setEditingSchedule(scheduleKey);
+  };
 
-          <div className="space-y-4">
-            {/* Current Schedules */}
-            <div className="space-y-2">
-              <h3 className="font-medium flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4" />
-                Regular Schedules
-              </h3>
-              {schedulesLoading ? (
-                <p className="text-sm text-muted-foreground">Loading schedules...</p>
-              ) : !schedules || schedules.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic">No regular schedule set</p>
+  const handleAssignPTO = (schedule: any, date: string) => {
+    setSelectedSchedule({
+      scheduleId: schedule.scheduleId,
+      type: schedule.scheduleType,
+      date: date,
+      shift: schedule.shift,
+      // Pass existing PTO data if available
+      ...(schedule.hasPTO && schedule.ptoData ? { existingPTO: schedule.ptoData } : {})
+    });
+    setPtoDialogOpen(true);
+  };
+
+  const handleRemovePTO = (schedule: any, date: string) => {
+    if (!schedule.hasPTO || !schedule.ptoData) return;
+
+    const ptoData = {
+      id: schedule.ptoData.id,
+      officerId: selectedOfficerId,
+      date: date,
+      shiftTypeId: schedule.shift.id,
+      ptoType: schedule.ptoData.ptoType,
+      startTime: schedule.ptoData.startTime,
+      endTime: schedule.ptoData.endTime
+    };
+
+    removePTOMutation.mutate(ptoData);
+  };
+
+  // Function to refresh the schedule data
+  const refreshSchedule = () => {
+    queryClient.invalidateQueries({ 
+      queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView] 
+    });
+  };
+
+  const isLoading = schedulesLoading || (isAdminOrSupervisor && profilesLoading);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Schedule
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Schedule
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-red-500">Error loading schedule: {(error as Error).message}</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Please check the console for more details.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const weekEnd = addDays(currentWeekStart, 6);
+  const isCurrentWeek = startOfWeek(new Date(), { weekStartsOn: 0 }).getTime() === currentWeekStart.getTime();
+  const isCurrentMonth = isSameMonth(currentMonth, new Date());
+
+  // For monthly view - get all days in month
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  
+  // Get days from previous and next month to fill the calendar grid
+  const startDay = monthStart.getDay(); // 0 = Sunday
+  const endDay = monthEnd.getDay(); // 0 = Sunday
+  
+  const previousMonthDays = Array.from({ length: startDay }, (_, i) => 
+    addDays(monthStart, -startDay + i)
+  );
+  
+  const nextMonthDays = Array.from({ length: 6 - endDay }, (_, i) => 
+    addDays(monthEnd, i + 1)
+  );
+
+  const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
+
+  // Render weekly schedule view
+  const renderWeeklyView = () => (
+    <div className="space-y-4">
+      {schedules?.dailySchedules?.map(({ date, dayOfWeek, shiftInfo }) => (
+        <div
+          key={date}
+          className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+        >
+          <div className="space-y-1 flex-1">
+            <p className="font-medium">{daysOfWeek[dayOfWeek]}</p>
+            <p className="text-sm text-muted-foreground">{format(new Date(date), "MMM d")}</p>
+          </div>
+          
+          {shiftInfo ? (
+            <div className="flex items-center gap-4">
+              {editingSchedule === `${shiftInfo.scheduleId}-${shiftInfo.scheduleType}` ? (
+                <PositionEditor
+                  currentPosition={shiftInfo.position || ""}
+                  onSave={(positionName) => handleSavePosition(shiftInfo.scheduleId, shiftInfo.scheduleType, positionName)}
+                  onCancel={() => setEditingSchedule(null)}
+                  isSaving={updatePositionMutation.isPending}
+                />
               ) : (
-                <div className="space-y-4">
-                  {/* Active Schedules Section */}
-                  {schedules.filter(s => !s.end_date || new Date(s.end_date) >= new Date()).length > 0 && (
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-semibold text-green-700 dark:text-green-400">Active Schedules</h4>
-                      {schedules
-                        .filter(s => !s.end_date || new Date(s.end_date) >= new Date())
-                        .map((schedule) => {
-                          return (
-                            <div
-                              key={schedule.id}
-                              className="flex items-center justify-between p-3 border rounded-lg"
-                            >
-                              <div className="space-y-1 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Badge variant="outline">
-                                    {daysOfWeek.find((d) => d.value === schedule.day_of_week)?.label}
-                                  </Badge>
-                                  <span className="font-medium">{schedule.shift_types?.name}</span>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                  {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {format(new Date(schedule.start_date), "MMM d, yyyy")}
-                                  {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
-                                  {!schedule.end_date && " - Ongoing"}
-                                </p>
-                                {schedule.position_name && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {schedule.position_name}
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="flex gap-1">
-                                {!schedule.end_date && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleEndSchedule(schedule.id)}
-                                    disabled={endScheduleMutation.isPending}
-                                    title="End this schedule"
-                                  >
-                                    <StopCircle className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDeleteClick(schedule.id)}
-                                  disabled={deleteScheduleMutation.isPending}
-                                  title="Delete this schedule"
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })}
+                <>
+                  <div className="text-right">
+                    <p className="font-medium">{shiftInfo.type}</p>
+                    {shiftInfo.time && <p className="text-sm text-muted-foreground">{shiftInfo.time}</p>}
+                    {shiftInfo.position && (
+                      <Badge variant="secondary" className="mt-1">
+                        {shiftInfo.position}
+                      </Badge>
+                    )}
+                    {shiftInfo.isOff && (
+                      <Badge variant="destructive" className="mt-1">
+                        {shiftInfo.reason || "Time Off"}
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {isAdminOrSupervisor && (
+                    <div className="flex items-center gap-2">
+                      {!shiftInfo.isOff && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleEditClick(shiftInfo)}
+                          title="Edit Position"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {shiftInfo.hasPTO ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => handleAssignPTO(shiftInfo, date)}
+                            title="Edit PTO"
+                          >
+                            <Clock className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemovePTO(shiftInfo, date)}
+                            disabled={removePTOMutation.isPending}
+                            title="Remove PTO"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleAssignPTO(shiftInfo, date)}
+                          title="Assign PTO"
+                        >
+                          <Clock className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   )}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-muted-foreground">No shift scheduled</p>
+              {isAdminOrSupervisor && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => toast.info("Add schedule feature coming soon")}
+                >
+                  Add Shift
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 
-                  {/* Ended Schedules Section */}
-                  {schedules.filter(s => s.end_date && new Date(s.end_date) < new Date()).length > 0 && (
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-semibold text-muted-foreground">Ended Schedules</h4>
-                      {schedules
-                        .filter(s => s.end_date && new Date(s.end_date) < new Date())
-                        .map((schedule) => {
-                          return (
-                            <div
-                              key={schedule.id}
-                              className="flex items-center justify-between p-3 border rounded-lg opacity-60 bg-muted/50"
-                            >
-                              <div className="space-y-1 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Badge variant="secondary">
-                                    {daysOfWeek.find((d) => d.value === schedule.day_of_week)?.label}
-                                  </Badge>
-                                  <span className="font-medium">{schedule.shift_types?.name}</span>
-                                  <Badge variant="secondary" className="text-xs">
-                                    Ended
-                                  </Badge>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                  {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {format(new Date(schedule.start_date), "MMM d, yyyy")}
-                                  {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
-                                </p>
-                                {schedule.position_name && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {schedule.position_name}
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="flex gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDeleteClick(schedule.id)}
-                                  disabled={deleteScheduleMutation.isPending}
-                                  title="Delete this schedule"
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
+  // Render monthly schedule view
+  const renderMonthlyView = () => (
+    <div className="space-y-4">
+      {/* Calendar header */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {daysOfWeek.map(day => (
+          <div key={day} className="text-center font-medium text-sm py-2">
+            {day}
+          </div>
+        ))}
+      </div>
+      
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {allCalendarDays.map((day, index) => {
+          const dateStr = format(day, "yyyy-MM-dd");
+          const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+          const isCurrentMonthDay = isSameMonth(day, currentMonth);
+          const isToday = isSameDay(day, new Date());
+          
+          return (
+            <div
+              key={day.toISOString()}
+              className={`
+                min-h-24 p-2 border rounded-lg text-sm
+                ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/30 text-muted-foreground'}
+                ${isToday ? 'border-primary ring-1 ring-primary' : 'border-border'}
+                hover:bg-accent/50 transition-colors
+              `}
+            >
+              <div className="flex justify-between items-start mb-1">
+                <span className={`
+                  text-xs font-medium
+                  ${isToday ? 'bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center' : ''}
+                `}>
+                  {format(day, "d")}
+                </span>
+                {isAdminOrSupervisor && daySchedule?.shiftInfo && (
+                  <div className="flex gap-1">
+                    {!daySchedule.shiftInfo.isOff && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5"
+                        onClick={() => handleEditClick(daySchedule.shiftInfo)}
+                        title="Edit Position"
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                    {daySchedule.shiftInfo.hasPTO ? (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="default"
+                          className="h-5 w-5"
+                          onClick={() => handleAssignPTO(daySchedule.shiftInfo, dateStr)}
+                          title="Edit PTO"
+                        >
+                          <Clock className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-5 w-5"
+                          onClick={() => handleRemovePTO(daySchedule.shiftInfo, dateStr)}
+                          disabled={removePTOMutation.isPending}
+                          title="Remove PTO"
+                        >
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5"
+                        onClick={() => handleAssignPTO(daySchedule.shiftInfo, dateStr)}
+                        title="Assign PTO"
+                      >
+                        <Clock className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {daySchedule?.shiftInfo && (
+                <div className="space-y-1 text-xs">
+                  <div className="font-medium truncate">{daySchedule.shiftInfo.type}</div>
+                  {daySchedule.shiftInfo.time && (
+                    <div className="text-muted-foreground truncate">{daySchedule.shiftInfo.time}</div>
+                  )}
+                  {daySchedule.shiftInfo.position && (
+                    <Badge variant="secondary" className="text-xs">
+                      {daySchedule.shiftInfo.position}
+                    </Badge>
+                  )}
+                  {daySchedule.shiftInfo.isOff && (
+                    <Badge variant="destructive" className="text-xs">
+                      {daySchedule.shiftInfo.reason || "Off"}
+                    </Badge>
                   )}
                 </div>
               )}
             </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
-            {/* Add New Schedule */}
-            {!showAddForm ? (
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowAddForm(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Work Schedule
-              </Button>
-            ) : (
-              <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-medium">Create Work Schedule</h3>
-                
-                <div className="space-y-2">
-                  <Label>Work Days (Select Multiple)</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {daysOfWeek.map((day) => (
-                      <div key={day.value} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`day-${day.value}`}
-                          checked={selectedDays.includes(day.value)}
-                          onCheckedChange={() => toggleDay(day.value)}
-                        />
-                        <Label
-                          htmlFor={`day-${day.value}`}
-                          className="text-sm font-normal cursor-pointer"
-                        >
-                          {day.label}
-                        </Label>
-                      </div>
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Schedule
+            </CardTitle>
+            {isAdminOrSupervisor && (
+              <div className="flex items-center gap-3">
+                <Select value={selectedOfficerId} onValueChange={setSelectedOfficerId}>
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder="Select officer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles?.map((profile) => (
+                      <SelectItem key={profile.id} value={profile.id}>
+                        {profile.full_name} (Badge: {profile.badge_number})
+                      </SelectItem>
                     ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Shift</Label>
-                  <Select value={shiftTypeId} onValueChange={setShiftTypeId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select shift" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {shiftTypes?.map((shift) => (
-                        <SelectItem key={shift.id} value={shift.id}>
-                          {shift.name} ({shift.start_time} - {shift.end_time})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Start Date *</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !startDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {startDate ? format(startDate, "PPP") : "Select date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={startDate}
-                          onSelect={(date) => date && setStartDate(date)}
-                          initialFocus
-                          className="pointer-events-auto"
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>End Date (Optional)</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !endDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {endDate ? format(endDate, "PPP") : "Ongoing"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={endDate}
-                          onSelect={setEndDate}
-                          initialFocus
-                          disabled={(date) => date < startDate}
-                          className="pointer-events-auto"
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    {endDate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEndDate(undefined)}
-                        className="w-full"
-                      >
-                        Clear End Date
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  * Leave end date empty for ongoing schedules
-                </p>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowAddForm(false);
-                      setSelectedDays([]);
-                      setShiftTypeId("");
-                      setStartDate(new Date());
-                      setEndDate(undefined);
-                    }}
-                  >
-                    Cancel
-                </Button>
-                <Button
-                  onClick={handleAddSchedule}
-                  disabled={addScheduleMutation.isPending}
-                >
-                  {addScheduleMutation.isPending ? "Creating..." : "Create Schedule"}
+                  </SelectContent>
+                </Select>
+                <Button onClick={() => setDialogOpen(true)} size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Schedule
                 </Button>
               </div>
+            )}
+          </div>
+          
+          <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "weekly" | "monthly")}>
+            <TabsList className="grid w-full max-w-xs grid-cols-2">
+              <TabsTrigger value="weekly" className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4" />
+                Weekly
+              </TabsTrigger>
+              <TabsTrigger value="monthly" className="flex items-center gap-2">
+                <Grid className="h-4 w-4" />
+                Monthly
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          
+          {/* Navigation */}
+          <div className="flex items-center justify-between mt-4">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={activeView === "weekly" ? goToPreviousWeek : goToPreviousMonth}
+                title={activeView === "weekly" ? "Previous Week" : "Previous Month"}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="text-center">
+                <h3 className="text-lg font-semibold">
+                  {activeView === "weekly" 
+                    ? `${format(currentWeekStart, "MMM d")} - ${format(weekEnd, "MMM d, yyyy")}`
+                    : format(currentMonth, "MMMM yyyy")
+                  }
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {activeView === "weekly" 
+                    ? `Week of ${format(currentWeekStart, "MMMM d, yyyy")}`
+                    : `Month of ${format(currentMonth, "MMMM yyyy")}`
+                  }
+                </p>
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={activeView === "weekly" ? goToNextWeek : goToNextMonth}
+                title={activeView === "weekly" ? "Next Week" : "Next Month"}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+            
+            <Button
+              variant={(activeView === "weekly" && isCurrentWeek) || (activeView === "monthly" && isCurrentMonth) ? "outline" : "default"}
+              size="sm"
+              onClick={activeView === "weekly" ? goToCurrentWeek : goToCurrentMonth}
+              disabled={(activeView === "weekly" && isCurrentWeek) || (activeView === "monthly" && isCurrentMonth)}
+            >
+              Today
+            </Button>
+          </div>
 
-    {/* Delete Confirmation Dialog */}
-    <AlertDialog open={!!scheduleToDelete} onOpenChange={(open) => !open && setScheduleToDelete(null)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-          <AlertDialogDescription>
-            Warning, you are deleting the schedule which includes the history.
-            This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={cancelDelete}>Cancel</AlertDialogCancel>
-          <AlertDialogAction 
-            onClick={confirmDelete}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Delete Schedule
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  </>
+          {isAdminOrSupervisor && selectedOfficerId && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Viewing schedule for: {profiles?.find(p => p.id === selectedOfficerId)?.full_name}
+            </p>
+          )}
+        </CardHeader>
+        <CardContent>
+          {activeView === "weekly" ? renderWeeklyView() : renderMonthlyView()}
+        </CardContent>
+      </Card>
+
+      {isAdminOrSupervisor && (
+        <>
+          <ScheduleManagementDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+          {selectedSchedule && (
+            <PTOAssignmentDialog
+              open={ptoDialogOpen}
+              onOpenChange={(open) => {
+                setPtoDialogOpen(open);
+                // Refresh the schedule when the PTO dialog closes
+                if (!open) {
+                  refreshSchedule();
+                }
+              }}
+              officer={{
+                officerId: selectedOfficerId,
+                name: profiles?.find(p => p.id === selectedOfficerId)?.full_name || "Unknown",
+                scheduleId: selectedSchedule.scheduleId,
+                type: selectedSchedule.type,
+                ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
+              }}
+              shift={selectedSchedule.shift}
+              date={selectedSchedule.date}
+            />
+          )}
+        </>
+      )}
+    </>
   );
 };
