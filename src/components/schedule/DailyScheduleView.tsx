@@ -346,28 +346,46 @@ export const DailyScheduleView = ({
   });
 
   const updatePositionMutation = useMutation({
-    mutationFn: async ({ 
-      scheduleId, 
-      type, 
-      positionName, 
-      date, 
-      officerId, 
-      shiftTypeId, 
-      currentPosition,
-      unitNumber,
-      notes
-    }: { 
-      scheduleId: string; 
-      type: "recurring" | "exception";
-      positionName: string;
-      date?: string;
-      officerId?: string;
-      shiftTypeId?: string;
-      currentPosition?: string;
-      unitNumber?: string;
-      notes?: string;
-    }) => {
-      if (type === "recurring") {
+  mutationFn: async ({ 
+    scheduleId, 
+    type, 
+    positionName, 
+    date, 
+    officerId, 
+    shiftTypeId, 
+    currentPosition,
+    unitNumber,
+    notes
+  }: { 
+    scheduleId: string; 
+    type: "recurring" | "exception";
+    positionName: string;
+    date?: string;
+    officerId?: string;
+    shiftTypeId?: string;
+    currentPosition?: string;
+    unitNumber?: string;
+    notes?: string;
+  }) => {
+    if (type === "recurring") {
+      // First, get the original recurring schedule to compare
+      const { data: recurringSchedule, error: recurringError } = await supabase
+        .from("recurring_schedules")
+        .select("position_name, unit_number, notes")
+        .eq("id", scheduleId)
+        .single();
+
+      if (recurringError) throw recurringError;
+
+      // Check if we're actually making changes that warrant an exception
+      const isPositionChanged = positionName !== recurringSchedule?.position_name;
+      const isUnitNumberChanged = unitNumber !== (recurringSchedule?.unit_number || null);
+      const isNotesChanged = notes !== (recurringSchedule?.notes || null);
+      
+      const needsException = isPositionChanged || isUnitNumberChanged || isNotesChanged;
+
+      if (needsException) {
+        // Check if an exception already exists for this officer/date/shift
         const { data: existingExceptions, error: checkError } = await supabase
           .from("schedule_exceptions")
           .select("id, position_name, unit_number, notes")
@@ -379,6 +397,7 @@ export const DailyScheduleView = ({
         if (checkError) throw checkError;
 
         if (existingExceptions && existingExceptions.length > 0) {
+          // Update existing exception
           const { error } = await supabase
             .from("schedule_exceptions")
             .update({ 
@@ -390,61 +409,74 @@ export const DailyScheduleView = ({
           
           if (error) throw error;
         } else {
-          const { data: recurringSchedule, error: recurringError } = await supabase
-            .from("recurring_schedules")
-            .select("position_name")
-            .eq("id", scheduleId)
-            .single();
-
-          if (recurringError) throw recurringError;
-
-          if (positionName !== recurringSchedule?.position_name || unitNumber || notes) {
-            const { error } = await supabase
-              .from("schedule_exceptions")
-              .insert({
-                officer_id: officerId,
-                date: dateStr,
-                shift_type_id: shiftTypeId,
-                is_off: false,
-                position_name: positionName,
-                unit_number: unitNumber,
-                notes: notes,
-                custom_start_time: null,
-                custom_end_time: null
-              });
-            
-            if (error) throw error;
-          }
+          // Create new exception only if changes are made
+          const { error } = await supabase
+            .from("schedule_exceptions")
+            .insert({
+              officer_id: officerId,
+              date: dateStr,
+              shift_type_id: shiftTypeId,
+              is_off: false,
+              position_name: positionName,
+              unit_number: unitNumber,
+              notes: notes,
+              custom_start_time: null,
+              custom_end_time: null
+            });
+          
+          if (error) throw error;
         }
       } else {
-        const { error } = await supabase
+        // No changes needed, or reverting to original values - delete any existing exception
+        const { data: existingExceptions, error: checkError } = await supabase
           .from("schedule_exceptions")
-          .update({ 
-            position_name: positionName,
-            unit_number: unitNumber,
-            notes: notes
-          })
-          .eq("id", scheduleId);
-          
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      toast.success("Position updated");
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      setEditingSchedule(null);
-      setEditPosition("");
-      setCustomPosition("");
-      setEditingUnitNumber(null);
-      setEditUnitValue("");
-      setEditingNotes(null);
-      setEditNotesValue("");
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to update position");
-    },
-  });
+          .select("id")
+          .eq("officer_id", officerId)
+          .eq("date", dateStr)
+          .eq("shift_type_id", shiftTypeId)
+          .eq("is_off", false);
 
+        if (checkError) throw checkError;
+
+        if (existingExceptions && existingExceptions.length > 0) {
+          // Delete the exception since we're back to recurring schedule values
+          const { error } = await supabase
+            .from("schedule_exceptions")
+            .delete()
+            .eq("id", existingExceptions[0].id);
+          
+          if (error) throw error;
+        }
+      }
+    } else {
+      // For existing exceptions, just update them
+      const { error } = await supabase
+        .from("schedule_exceptions")
+        .update({ 
+          position_name: positionName,
+          unit_number: unitNumber,
+          notes: notes
+        })
+        .eq("id", scheduleId);
+        
+      if (error) throw error;
+    }
+  },
+  onSuccess: () => {
+    toast.success("Position updated");
+    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    setEditingSchedule(null);
+    setEditPosition("");
+    setCustomPosition("");
+    setEditingUnitNumber(null);
+    setEditUnitValue("");
+    setEditingNotes(null);
+    setEditNotesValue("");
+  },
+  onError: (error: any) => {
+    toast.error(error.message || "Failed to update position");
+  },
+});
   // NEW: Mutation for updating PTO details
   const updatePTODetailsMutation = useMutation({
     mutationFn: async ({ 
