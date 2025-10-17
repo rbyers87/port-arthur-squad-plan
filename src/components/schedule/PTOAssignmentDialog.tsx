@@ -122,131 +122,33 @@ export const PTOAssignmentDialog = ({
   };
 
   const assignPTOMutation = useMutation({
-    mutationFn: async () => {
-      const ptoStartTime = isFullShift ? shift.start_time : startTime;
-      const ptoEndTime = isFullShift ? shift.end_time : endTime;
-      const hoursUsed = calculateHours(ptoStartTime, ptoEndTime);
+  mutationFn: async () => {
+    // FIX: Ensure the date is handled correctly to prevent timezone issues
+    console.log("📅 Original date prop:", date);
+    
+    // Parse the date and create a local date to avoid timezone shifts
+    const assignmentDate = new Date(date);
+    // Create a date in local timezone by using date components
+    const localDate = new Date(
+      assignmentDate.getFullYear(),
+      assignmentDate.getMonth(), 
+      assignmentDate.getDate()
+    );
+    const formattedDate = localDate.toISOString().split('T')[0];
+    
+    console.log("📅 Assignment date:", assignmentDate);
+    console.log("📅 Local date:", localDate);
+    console.log("📅 Formatted date for DB:", formattedDate);
 
-      // If editing existing PTO, first restore the previous PTO balance
-      if (officer.existingPTO) {
-        await restorePTOCredit(officer.existingPTO);
-        
-        // Delete the existing PTO exception
-        const { error: deleteError } = await supabase
-          .from("schedule_exceptions")
-          .delete()
-          .eq("id", officer.existingPTO.id);
+    const ptoStartTime = isFullShift ? shift.start_time : startTime;
+    const ptoEndTime = isFullShift ? shift.end_time : endTime;
+    const hoursUsed = calculateHours(ptoStartTime, ptoEndTime);
 
-        if (deleteError) throw deleteError;
-
-        // Also delete any associated working time exception for partial shifts
-        await supabase
-          .from("schedule_exceptions")
-          .delete()
-          .eq("officer_id", officer.officerId)
-          .eq("date", date)
-          .eq("shift_type_id", shift.id)
-          .eq("is_off", false);
-      }
-
-      // Get current PTO balance for the new PTO type
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", officer.officerId)
-        .single();
-
-      if (profileError) throw profileError;
-
-      const ptoColumn = PTO_TYPES.find((t) => t.value === ptoType)?.column;
-      if (!ptoColumn) throw new Error("Invalid PTO type");
-
-      const currentBalance = profile[ptoColumn as keyof typeof profile] as number;
-      if (currentBalance < hoursUsed) {
-        throw new Error(`Insufficient ${ptoType} balance. Available: ${currentBalance} hours`);
-      }
-
-      // Create PTO exception
-      const { error: ptoError } = await supabase.from("schedule_exceptions").insert({
-        officer_id: officer.officerId,
-        date: date,
-        shift_type_id: shift.id,
-        is_off: true,
-        reason: ptoType,
-        custom_start_time: isFullShift ? null : ptoStartTime,
-        custom_end_time: isFullShift ? null : ptoEndTime,
-      });
-
-      if (ptoError) throw ptoError;
-
-      // If partial shift, create working time exception for the remaining time
-      if (!isFullShift) {
-        // Calculate the working portion (the part that's NOT PTO)
-        const workStartTime = ptoEndTime;
-        const workEndTime = shift.end_time;
-
-        if (workStartTime !== workEndTime) {
-          // Get the current position name from the original schedule
-          let positionName = "";
-          
-          if (officer.type === "recurring") {
-            const { data: recurringData } = await supabase
-              .from("recurring_schedules")
-              .select("position_name")
-              .eq("id", officer.scheduleId)
-              .single();
-            positionName = recurringData?.position_name || "";
-          } else {
-            const { data: exceptionData } = await supabase
-              .from("schedule_exceptions")
-              .select("position_name")
-              .eq("id", officer.scheduleId)
-              .single();
-            positionName = exceptionData?.position_name || "";
-          }
-
-          const { error: workError } = await supabase.from("schedule_exceptions").insert({
-            officer_id: officer.officerId,
-            date: date,
-            shift_type_id: shift.id,
-            is_off: false,
-            position_name: positionName,
-            custom_start_time: workStartTime,
-            custom_end_time: workEndTime,
-          });
-
-          if (workError) throw workError;
-        }
-      }
-
-      // Deduct PTO from balance
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({
-          [ptoColumn]: currentBalance - hoursUsed,
-        })
-        .eq("id", officer.officerId);
-
-      if (updateError) throw updateError;
-    },
-    onSuccess: () => {
-      toast.success(officer.existingPTO ? "PTO updated successfully" : "PTO assigned successfully");
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
-      onOpenChange(false);
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to assign PTO");
-    },
-  });
-
-  const removePTOMutation = useMutation({
-    mutationFn: async () => {
-      if (!officer.existingPTO) return;
-
+    // If editing existing PTO, first restore the previous PTO balance
+    if (officer.existingPTO) {
       await restorePTOCredit(officer.existingPTO);
-
-      // Delete the PTO exception
+      
+      // Delete the existing PTO exception
       const { error: deleteError } = await supabase
         .from("schedule_exceptions")
         .delete()
@@ -254,25 +156,151 @@ export const PTOAssignmentDialog = ({
 
       if (deleteError) throw deleteError;
 
-      // Also delete any associated working time exception
+      // Also delete any associated working time exception for partial shifts
       await supabase
         .from("schedule_exceptions")
         .delete()
         .eq("officer_id", officer.officerId)
-        .eq("date", date)
+        .eq("date", formattedDate) // Use formatted date here too
         .eq("shift_type_id", shift.id)
         .eq("is_off", false);
-    },
-    onSuccess: () => {
-      toast.success("PTO removed and balance restored");
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
-      onOpenChange(false);
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to remove PTO");
-    },
-  });
+    }
+
+    // Get current PTO balance for the new PTO type
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", officer.officerId)
+      .single();
+
+    if (profileError) throw profileError;
+
+    const ptoColumn = PTO_TYPES.find((t) => t.value === ptoType)?.column;
+    if (!ptoColumn) throw new Error("Invalid PTO type");
+
+    const currentBalance = profile[ptoColumn as keyof typeof profile] as number;
+    if (currentBalance < hoursUsed) {
+      throw new Error(`Insufficient ${ptoType} balance. Available: ${currentBalance} hours`);
+    }
+
+    // Create PTO exception - USE FORMATTED DATE
+    const { error: ptoError } = await supabase.from("schedule_exceptions").insert({
+      officer_id: officer.officerId,
+      date: formattedDate, // ← CRITICAL FIX: Use the properly formatted date
+      shift_type_id: shift.id,
+      is_off: true,
+      reason: ptoType,
+      custom_start_time: isFullShift ? null : ptoStartTime,
+      custom_end_time: isFullShift ? null : ptoEndTime,
+    });
+
+    if (ptoError) throw ptoError;
+
+    // If partial shift, create working time exception for the remaining time
+    if (!isFullShift) {
+      // Calculate the working portion (the part that's NOT PTO)
+      const workStartTime = ptoEndTime;
+      const workEndTime = shift.end_time;
+
+      if (workStartTime !== workEndTime) {
+        // Get the current position name from the original schedule
+        let positionName = "";
+        
+        if (officer.type === "recurring") {
+          const { data: recurringData } = await supabase
+            .from("recurring_schedules")
+            .select("position_name")
+            .eq("id", officer.scheduleId)
+            .single();
+          positionName = recurringData?.position_name || "";
+        } else {
+          const { data: exceptionData } = await supabase
+            .from("schedule_exceptions")
+            .select("position_name")
+            .eq("id", officer.scheduleId)
+            .single();
+          positionName = exceptionData?.position_name || "";
+        }
+
+        const { error: workError } = await supabase.from("schedule_exceptions").insert({
+          officer_id: officer.officerId,
+          date: formattedDate, // ← CRITICAL FIX: Use the properly formatted date
+          shift_type_id: shift.id,
+          is_off: false,
+          position_name: positionName,
+          custom_start_time: workStartTime,
+          custom_end_time: workEndTime,
+        });
+
+        if (workError) throw workError;
+      }
+    }
+
+    // Deduct PTO from balance
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({
+        [ptoColumn]: currentBalance - hoursUsed,
+      })
+      .eq("id", officer.officerId);
+
+    if (updateError) throw updateError;
+  },
+  onSuccess: () => {
+    toast.success(officer.existingPTO ? "PTO updated successfully" : "PTO assigned successfully");
+    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+    queryClient.invalidateQueries({ queryKey: ["schedule"] }); // Add this for monthly view
+    onOpenChange(false);
+  },
+  onError: (error: any) => {
+    toast.error(error.message || "Failed to assign PTO");
+  },
+});
+
+  const removePTOMutation = useMutation({
+  mutationFn: async () => {
+    if (!officer.existingPTO) return;
+
+    // FIX: Use the same date formatting for consistency
+    const assignmentDate = new Date(date);
+    const localDate = new Date(
+      assignmentDate.getFullYear(),
+      assignmentDate.getMonth(), 
+      assignmentDate.getDate()
+    );
+    const formattedDate = localDate.toISOString().split('T')[0];
+
+    await restorePTOCredit(officer.existingPTO);
+
+    // Delete the PTO exception
+    const { error: deleteError } = await supabase
+      .from("schedule_exceptions")
+      .delete()
+      .eq("id", officer.existingPTO.id);
+
+    if (deleteError) throw deleteError;
+
+    // Also delete any associated working time exception
+    await supabase
+      .from("schedule_exceptions")
+      .delete()
+      .eq("officer_id", officer.officerId)
+      .eq("date", formattedDate) // Use formatted date
+      .eq("shift_type_id", shift.id)
+      .eq("is_off", false);
+  },
+  onSuccess: () => {
+    toast.success("PTO removed and balance restored");
+    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+    queryClient.invalidateQueries({ queryKey: ["schedule"] }); // Add this for monthly view
+    onOpenChange(false);
+  },
+  onError: (error: any) => {
+    toast.error(error.message || "Failed to remove PTO");
+  },
+});
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
