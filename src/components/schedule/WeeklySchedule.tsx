@@ -353,27 +353,56 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     setPtoDialogOpen(true);
   };
 
-  const handleRemovePTO = (schedule: any, date: string) => {
+  const handleRemovePTO = async (schedule: any, date: string) => {
   if (!schedule.hasPTO || !schedule.ptoData) return;
 
-  // ADD THIS SAFETY CHECK:
-  if (!schedule.shift || !schedule.shift.id) {
-    console.error("Missing shift data for PTO removal:", schedule);
-    toast.error("Cannot remove PTO: Missing shift information");
-    return;
+  try {
+    // FIRST: Try to get shift ID from the schedule data
+    let shiftTypeId = schedule.shift?.id;
+    
+    // SECOND: If shift data is missing, fetch it from the PTO exception in the database
+    if (!shiftTypeId) {
+      console.log("🔄 Fetching shift data for PTO removal...");
+      
+      const { data: ptoException, error } = await supabase
+        .from("schedule_exceptions")
+        .select("shift_type_id")
+        .eq("id", schedule.ptoData.id)
+        .single();
+
+      if (error) {
+        console.error("Error fetching PTO exception:", error);
+        toast.error("Failed to fetch PTO information");
+        return;
+      }
+
+      if (!ptoException?.shift_type_id) {
+        console.error("No shift_type_id found for PTO:", schedule.ptoData.id);
+        toast.error("Cannot remove PTO: Missing shift information");
+        return;
+      }
+
+      shiftTypeId = ptoException.shift_type_id;
+      console.log("📊 Found shift_type_id:", shiftTypeId);
+    }
+
+    const ptoData = {
+      id: schedule.ptoData.id,
+      officerId: selectedOfficerId,
+      date: date,
+      shiftTypeId: shiftTypeId,
+      ptoType: schedule.ptoData.ptoType,
+      startTime: schedule.ptoData.startTime,
+      endTime: schedule.ptoData.endTime
+    };
+
+    console.log("🔄 Removing PTO with data:", ptoData);
+    removePTOMutation.mutate(ptoData);
+    
+  } catch (error) {
+    console.error("Error in handleRemovePTO:", error);
+    toast.error("Failed to remove PTO");
   }
-
-  const ptoData = {
-    id: schedule.ptoData.id,
-    officerId: selectedOfficerId,
-    date: date,
-    shiftTypeId: schedule.shift.id, // This was causing the error
-    ptoType: schedule.ptoData.ptoType,
-    startTime: schedule.ptoData.startTime,
-    endTime: schedule.ptoData.endTime
-  };
-
-  removePTOMutation.mutate(ptoData);
 };
 
   // Function to refresh the schedule data
