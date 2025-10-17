@@ -52,10 +52,18 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
           shift_types(id, name, start_time, end_time)
         `)
         .eq("officer_id", officer.id)
-        .order("day_of_week");
+        .order("start_date", { ascending: false });
 
       if (error) throw error;
-      return data;
+      
+      // Sort: Active schedules first (sorted by start_date desc), then ended schedules (sorted by start_date desc)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const active = data.filter(s => !s.end_date || new Date(s.end_date) >= today);
+      const ended = data.filter(s => s.end_date && new Date(s.end_date) < today);
+      
+      return [...active, ...ended];
     },
     enabled: open,
   });
@@ -165,8 +173,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     });
   };
 
-//new code from claude.ai to end schedule when button pressed
-    const handleEndSchedule = (scheduleId: string) => {
+  const handleEndSchedule = (scheduleId: string) => {
     const today = format(new Date(), "yyyy-MM-dd");
     endScheduleMutation.mutate({ scheduleId, endDate: today });
   };
@@ -199,68 +206,119 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
             ) : !schedules || schedules.length === 0 ? (
               <p className="text-sm text-muted-foreground italic">No regular schedule set</p>
             ) : (
-              <div className="space-y-2">
-                {schedules.map((schedule) => {
-                  const isActive = !schedule.end_date || new Date(schedule.end_date) >= new Date();
-                  return (
-                    <div
-                      key={schedule.id}
-                      className={cn(
-                        "flex items-center justify-between p-3 border rounded-lg",
-                        !isActive && "opacity-60 bg-muted/50"
-                      )}
-                    >
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant={isActive ? "outline" : "secondary"}>
-                            {daysOfWeek.find((d) => d.value === schedule.day_of_week)?.label}
-                          </Badge>
-                          <span className="font-medium">{schedule.shift_types?.name}</span>
-                          {!isActive && (
-                            <Badge variant="secondary" className="text-xs">
-                              Ended
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(schedule.start_date), "MMM d, yyyy")}
-                          {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
-                          {!schedule.end_date && " - Ongoing"}
-                        </p>
-                        {schedule.position_name && (
-                          <Badge variant="secondary" className="text-xs">
-                            {schedule.position_name}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex gap-1">
-                        {isActive && !schedule.end_date && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleEndSchedule(schedule.id)}
-                            disabled={endScheduleMutation.isPending}
-                            title="End this schedule"
+              <div className="space-y-4">
+                {/* Active Schedules Section */}
+                {schedules.filter(s => !s.end_date || new Date(s.end_date) >= new Date()).length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-green-700 dark:text-green-400">Active Schedules</h4>
+                    {schedules
+                      .filter(s => !s.end_date || new Date(s.end_date) >= new Date())
+                      .map((schedule) => {
+                        return (
+                          <div
+                            key={schedule.id}
+                            className="flex items-center justify-between p-3 border rounded-lg"
                           >
-                            <StopCircle className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteScheduleMutation.mutate(schedule.id)}
-                          disabled={deleteScheduleMutation.isPending}
-                          title="Delete this schedule"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
+                            <div className="space-y-1 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="outline">
+                                  {daysOfWeek.find((d) => d.value === schedule.day_of_week)?.label}
+                                </Badge>
+                                <span className="font-medium">{schedule.shift_types?.name}</span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(schedule.start_date), "MMM d, yyyy")}
+                                {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
+                                {!schedule.end_date && " - Ongoing"}
+                              </p>
+                              {schedule.position_name && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {schedule.position_name}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              {!schedule.end_date && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleEndSchedule(schedule.id)}
+                                  disabled={endScheduleMutation.isPending}
+                                  title="End this schedule"
+                                >
+                                  <StopCircle className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => deleteScheduleMutation.mutate(schedule.id)}
+                                disabled={deleteScheduleMutation.isPending}
+                                title="Delete this schedule"
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+
+                {/* Ended Schedules Section */}
+                {schedules.filter(s => s.end_date && new Date(s.end_date) < new Date()).length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-muted-foreground">Ended Schedules</h4>
+                    {schedules
+                      .filter(s => s.end_date && new Date(s.end_date) < new Date())
+                      .map((schedule) => {
+                        return (
+                          <div
+                            key={schedule.id}
+                            className="flex items-center justify-between p-3 border rounded-lg opacity-60 bg-muted/50"
+                          >
+                            <div className="space-y-1 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="secondary">
+                                  {daysOfWeek.find((d) => d.value === schedule.day_of_week)?.label}
+                                </Badge>
+                                <span className="font-medium">{schedule.shift_types?.name}</span>
+                                <Badge variant="secondary" className="text-xs">
+                                  Ended
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(schedule.start_date), "MMM d, yyyy")}
+                                {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
+                              </p>
+                              {schedule.position_name && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {schedule.position_name}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => deleteScheduleMutation.mutate(schedule.id)}
+                                disabled={deleteScheduleMutation.isPending}
+                                title="Delete this schedule"
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
             )}
           </div>
