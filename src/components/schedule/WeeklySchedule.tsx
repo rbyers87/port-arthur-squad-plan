@@ -178,36 +178,31 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
         let shiftInfo = null;
         
         if (exception) {
-          shiftInfo = {
-            type: exception.is_off ? "Off" : (exception.shift_types?.name || "Custom"),
-            time: exception.is_off ? "" : (
-              exception.custom_start_time && exception.custom_end_time
-                ? `${exception.custom_start_time} - ${exception.custom_end_time}`
-                : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`
-            ),
-            position: exception.position_name,
-            scheduleId: exception.id,
-            scheduleType: "exception" as const,
-            shift: exception.shift_types,
-            isOff: exception.is_off,
-            reason: exception.reason,
-            // Add PTO detection
-            hasPTO: exception.is_off,
-            ptoData: exception.is_off ? {
-              id: exception.id,
-              ptoType: exception.reason,
-              startTime: exception.custom_start_time || exception.shift_types?.start_time,
-              endTime: exception.custom_end_time || exception.shift_types?.end_time,
-              isFullShift: !exception.custom_start_time && !exception.custom_end_time
-            } : undefined
-          };
-        } else if (recurring) {
-          // For recurring schedules, check if there's a PTO exception for this date
-          const ptoException = exceptionsData?.find(e => 
-            e.officer_id === targetUserId && 
-            e.date === date && 
-            e.is_off
-          );
+  shiftInfo = {
+    type: exception.is_off ? "Off" : (exception.shift_types?.name || "Custom"),
+    time: exception.is_off ? "" : (
+      exception.custom_start_time && exception.custom_end_time
+        ? `${exception.custom_start_time} - ${exception.custom_end_time}`
+        : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`
+    ),
+    position: exception.position_name,
+    scheduleId: exception.id,
+    scheduleType: "exception" as const,
+    shift: exception.shift_types,
+    isOff: exception.is_off,
+    reason: exception.reason,
+    // Add PTO detection
+    hasPTO: exception.is_off,
+    ptoData: exception.is_off ? {
+      id: exception.id,
+      ptoType: exception.reason,
+      startTime: exception.custom_start_time || exception.shift_types?.start_time,
+      endTime: exception.custom_end_time || exception.shift_types?.end_time,
+      isFullShift: !exception.custom_start_time && !exception.custom_end_time,
+      shiftTypeId: exception.shift_type_id // ← ADD THIS CRITICAL LINE
+    } : undefined
+  };
+}
           
           shiftInfo = {
             type: recurring.shift_types?.name,
