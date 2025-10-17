@@ -166,7 +166,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   };
 
 //new code from claude.ai to end schedule when button pressed
-  const handleEndSchedule = (scheduleId: string) => {
+    const handleEndSchedule = (scheduleId: string) => {
     const today = format(new Date(), "yyyy-MM-dd");
     endScheduleMutation.mutate({ scheduleId, endDate: today });
   };
