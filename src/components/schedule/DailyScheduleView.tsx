@@ -380,89 +380,50 @@ const recurringOfficers = recurringData
     notes?: string;
   }) => {
     if (type === "recurring") {
-      // First, get the original recurring schedule to compare (only position_name exists here)
-      const { data: recurringSchedule, error: recurringError } = await supabase
-        .from("recurring_schedules")
-        .select("position_name")
-        .eq("id", scheduleId)
-        .single();
+      // For recurring officers, always update via exceptions table to preserve changes
+      // but they will still be displayed as "recurring" type
+      const { data: existingExceptions, error: checkError } = await supabase
+        .from("schedule_exceptions")
+        .select("id, position_name, unit_number, notes")
+        .eq("officer_id", officerId)
+        .eq("date", dateStr)
+        .eq("shift_type_id", shiftTypeId)
+        .eq("is_off", false);
 
-      if (recurringError) throw recurringError;
+      if (checkError) throw checkError;
 
-      // Check if we're actually making changes that warrant an exception
-      // Only position_name exists in recurring_schedules, unit_number and notes are exception-only fields
-      const isPositionChanged = positionName !== recurringSchedule?.position_name;
-      
-      // For recurring officers, unitNumber and notes changes always create exceptions
-      // since these fields don't exist in their recurring schedule
-      const needsException = isPositionChanged || unitNumber || notes;
-
-      if (needsException) {
-        // Check if an exception already exists for this officer/date/shift
-        const { data: existingExceptions, error: checkError } = await supabase
+      if (existingExceptions && existingExceptions.length > 0) {
+        // Update existing exception
+        const { error } = await supabase
           .from("schedule_exceptions")
-          .select("id, position_name, unit_number, notes")
-          .eq("officer_id", officerId)
-          .eq("date", dateStr)
-          .eq("shift_type_id", shiftTypeId)
-          .eq("is_off", false);
-
-        if (checkError) throw checkError;
-
-        if (existingExceptions && existingExceptions.length > 0) {
-          // Update existing exception
-          const { error } = await supabase
-            .from("schedule_exceptions")
-            .update({ 
-              position_name: positionName,
-              unit_number: unitNumber,
-              notes: notes
-            })
-            .eq("id", existingExceptions[0].id);
-          
-          if (error) throw error;
-        } else {
-          // Create new exception only if changes are made
-          const { error } = await supabase
-            .from("schedule_exceptions")
-            .insert({
-              officer_id: officerId,
-              date: dateStr,
-              shift_type_id: shiftTypeId,
-              is_off: false,
-              position_name: positionName,
-              unit_number: unitNumber,
-              notes: notes,
-              custom_start_time: null,
-              custom_end_time: null
-            });
-          
-          if (error) throw error;
-        }
+          .update({ 
+            position_name: positionName,
+            unit_number: unitNumber,
+            notes: notes
+          })
+          .eq("id", existingExceptions[0].id);
+        
+        if (error) throw error;
       } else {
-        // No changes needed - delete any existing exception
-        const { data: existingExceptions, error: checkError } = await supabase
+        // Create new exception to store the changes, but officer remains "recurring" type
+        const { error } = await supabase
           .from("schedule_exceptions")
-          .select("id")
-          .eq("officer_id", officerId)
-          .eq("date", dateStr)
-          .eq("shift_type_id", shiftTypeId)
-          .eq("is_off", false);
-
-        if (checkError) throw checkError;
-
-        if (existingExceptions && existingExceptions.length > 0) {
-          // Delete the exception since we're back to recurring schedule values
-          const { error } = await supabase
-            .from("schedule_exceptions")
-            .delete()
-            .eq("id", existingExceptions[0].id);
-          
-          if (error) throw error;
-        }
+          .insert({
+            officer_id: officerId,
+            date: dateStr,
+            shift_type_id: shiftTypeId,
+            is_off: false,
+            position_name: positionName,
+            unit_number: unitNumber,
+            notes: notes,
+            custom_start_time: null,
+            custom_end_time: null
+          });
+        
+        if (error) throw error;
       }
     } else {
-      // For existing exceptions, just update them
+      // For exception officers (manually added), just update them
       const { error } = await supabase
         .from("schedule_exceptions")
         .update({ 
@@ -490,6 +451,7 @@ const recurringOfficers = recurringData
     toast.error(error.message || "Failed to update position");
   },
 });
+  
   // NEW: Mutation for updating PTO details
   const updatePTODetailsMutation = useMutation({
     mutationFn: async ({ 
