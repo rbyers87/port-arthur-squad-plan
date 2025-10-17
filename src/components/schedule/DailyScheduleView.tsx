@@ -176,58 +176,67 @@ export const DailyScheduleView = ({
         const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
 
         // Get recurring officers for this shift
-        const recurringOfficers = recurringData
-          ?.filter(r => r.shift_types?.id === shift.id)
-          .map(r => {
-            // Check if this officer has PTO for today
-            const ptoException = ptoExceptions?.find(e => 
-              e.officer_id === r.officer_id && e.shift_types?.id === shift.id
-            );
+const recurringOfficers = recurringData
+  ?.filter(r => r.shift_types?.id === shift.id)
+  .map(r => {
+    // Check if this officer has PTO for today
+    const ptoException = ptoExceptions?.find(e => 
+      e.officer_id === r.officer_id && e.shift_types?.id === shift.id
+    );
 
-            // FIXED: Only exclude if FULL DAY PTO (no custom start/end times)
-            const hasFullDayPTO = ptoException && !ptoException.custom_start_time && !ptoException.custom_end_time;
-            if (hasFullDayPTO) {
-              return null; // Exclude from regular schedule
-            }
+    // Check if this officer has a working exception for today
+    const workingException = workingExceptions?.find(e => 
+      e.officer_id === r.officer_id && e.shift_types?.id === shift.id
+    );
 
-            // Check if this officer has a working exception for today
-            const workingException = workingExceptions?.find(e => 
-              e.officer_id === r.officer_id && e.shift_types?.id === shift.id
-            );
+    // Determine if this should be treated as an exception
+    // Only mark as exception if there are actual changes from recurring schedule
+    const hasSubstantialChanges = workingException && 
+      (workingException.position_name !== r.position_name ||
+       workingException.unit_number !== (r.unit_number || null) ||
+       workingException.notes !== (r.notes || null));
 
-            // FIXED: Calculate custom time for partial PTO
-            let customTime = undefined;
-            if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
-              // Show their actual working hours when they have partial PTO
-              customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
-            } else if (workingException?.custom_start_time && workingException?.custom_end_time) {
-              customTime = `${workingException.custom_start_time} - ${workingException.custom_end_time}`;
-            }
+    const shouldShowAsException = workingException && hasSubstantialChanges;
 
-            return {
-              scheduleId: workingException ? workingException.id : r.id,
-              officerId: r.officer_id,
-              name: r.profiles?.full_name || "Unknown",
-              badge: r.profiles?.badge_number,
-              rank: r.profiles?.rank,
-              position: workingException ? workingException.position_name : r.position_name,
-              unitNumber: workingException ? workingException.unit_number : null,
-              notes: workingException ? workingException.notes : null,
-              type: workingException ? "exception" as const : "recurring" as const,
-              originalScheduleId: r.id,
-              customTime: customTime,
-              hasPTO: !!ptoException,
-              ptoData: ptoException ? {
-                id: ptoException.id,
-                ptoType: ptoException.reason,
-                startTime: ptoException.custom_start_time || shift.start_time,
-                endTime: ptoException.custom_end_time || shift.end_time,
-                isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-              } : undefined,
-              shift: shift
-            };
-          })
-          .filter(officer => officer !== null) || [];
+    // FIXED: Only exclude if FULL DAY PTO (no custom start/end times)
+    const hasFullDayPTO = ptoException && !ptoException.custom_start_time && !ptoException.custom_end_time;
+    if (hasFullDayPTO) {
+      return null; // Exclude from regular schedule
+    }
+
+    // FIXED: Calculate custom time for partial PTO
+    let customTime = undefined;
+    if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
+      // Show their actual working hours when they have partial PTO
+      customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
+    } else if (workingException?.custom_start_time && workingException?.custom_end_time) {
+      customTime = `${workingException.custom_start_time} - ${workingException.custom_end_time}`;
+    }
+
+    return {
+      scheduleId: shouldShowAsException ? workingException.id : r.id,
+      officerId: r.officer_id,
+      name: r.profiles?.full_name || "Unknown",
+      badge: r.profiles?.badge_number,
+      rank: r.profiles?.rank,
+      position: shouldShowAsException ? workingException.position_name : r.position_name,
+      unitNumber: shouldShowAsException ? workingException.unit_number : r.unit_number,
+      notes: shouldShowAsException ? workingException.notes : r.notes,
+      type: shouldShowAsException ? "exception" as const : "recurring" as const,
+      originalScheduleId: r.id,
+      customTime: customTime,
+      hasPTO: !!ptoException,
+      ptoData: ptoException ? {
+        id: ptoException.id,
+        ptoType: ptoException.reason,
+        startTime: ptoException.custom_start_time || shift.start_time,
+        endTime: ptoException.custom_end_time || shift.end_time,
+        isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+      } : undefined,
+      shift: shift
+    };
+  })
+  .filter(officer => officer !== null) || [];
 
         // Get additional officers from working exceptions
         const additionalOfficers = workingExceptions
