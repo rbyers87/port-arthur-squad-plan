@@ -176,7 +176,9 @@ export const DailyScheduleView = ({
         const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
 
         // Get recurring officers for this shift
-// In your data fetching query, update the officer mapping logic:
+
+
+        // In your data fetching query, update the officer mapping logic:
 const recurringOfficers = recurringData
   ?.filter(r => r.shift_types?.id === shift.id)
   .map(r => {
@@ -189,17 +191,6 @@ const recurringOfficers = recurringData
     const workingException = workingExceptions?.find(e => 
       e.officer_id === r.officer_id && e.shift_types?.id === shift.id
     );
-
-    // Determine if this should be treated as an exception
-    // Only mark as exception if there are actual changes from recurring schedule
-    // Since unit_number and notes don't exist in recurring_schedules, 
-    // any unit_number or notes in workingException means it's an exception
-    const hasSubstantialChanges = workingException && 
-      (workingException.position_name !== r.position_name ||
-       workingException.unit_number !== null ||
-       workingException.notes !== null);
-
-    const shouldShowAsException = workingException && hasSubstantialChanges;
 
     // FIXED: Only exclude if FULL DAY PTO (no custom start/end times)
     const hasFullDayPTO = ptoException && !ptoException.custom_start_time && !ptoException.custom_end_time;
@@ -216,16 +207,18 @@ const recurringOfficers = recurringData
       customTime = `${workingException.custom_start_time} - ${workingException.custom_end_time}`;
     }
 
+    // ALWAYS show as "recurring" if they have a recurring schedule for this shift/day
+    // Use exception data if it exists, otherwise use recurring data
     return {
-      scheduleId: shouldShowAsException ? workingException.id : r.id,
+      scheduleId: workingException ? workingException.id : r.id,
       officerId: r.officer_id,
       name: r.profiles?.full_name || "Unknown",
       badge: r.profiles?.badge_number,
       rank: r.profiles?.rank,
-      position: shouldShowAsException ? workingException.position_name : r.position_name,
-      unitNumber: shouldShowAsException ? workingException.unit_number : null, // unit_number doesn't exist in recurring
-      notes: shouldShowAsException ? workingException.notes : null, // notes doesn't exist in recurring
-      type: shouldShowAsException ? "exception" as const : "recurring" as const,
+      position: workingException ? workingException.position_name : r.position_name,
+      unitNumber: workingException ? workingException.unit_number : null,
+      notes: workingException ? workingException.notes : null,
+      type: "recurring" as const, // Always recurring if they have a recurring schedule
       originalScheduleId: r.id,
       customTime: customTime,
       hasPTO: !!ptoException,
@@ -241,53 +234,54 @@ const recurringOfficers = recurringData
   })
   .filter(officer => officer !== null) || [];
 
-        // Get additional officers from working exceptions
-        const additionalOfficers = workingExceptions
-          ?.filter(e => 
-            e.shift_types?.id === shift.id &&
-            !recurringData?.some(r => r.officer_id === e.officer_id)
-          )
-          .map(e => {
-            const ptoException = ptoExceptions?.find(p => 
-              p.officer_id === e.officer_id && p.shift_types?.id === shift.id
-            );
-            
-            const hasFullDayPTO = ptoException && !ptoException.custom_start_time && !ptoException.custom_end_time;
-            if (hasFullDayPTO) {
-              return null;
-            }
+// Get additional officers from working exceptions - THESE are the manually added ones
+const additionalOfficers = workingExceptions
+  ?.filter(e => 
+    e.shift_types?.id === shift.id &&
+    !recurringData?.some(r => r.officer_id === e.officer_id) // No recurring schedule = manually added
+  )
+  .map(e => {
+    const ptoException = ptoExceptions?.find(p => 
+      p.officer_id === e.officer_id && p.shift_types?.id === shift.id
+    );
+    
+    const hasFullDayPTO = ptoException && !ptoException.custom_start_time && !ptoException.custom_end_time;
+    if (hasFullDayPTO) {
+      return null;
+    }
 
-            let customTime = undefined;
-            if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
-              customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
-            } else if (e.custom_start_time && e.custom_end_time) {
-              customTime = `${e.custom_start_time} - ${e.custom_end_time}`;
-            }
+    let customTime = undefined;
+    if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
+      customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
+    } else if (e.custom_start_time && e.custom_end_time) {
+      customTime = `${e.custom_start_time} - ${e.custom_end_time}`;
+    }
 
-            return {
-              scheduleId: e.id,
-              officerId: e.officer_id,
-              name: e.profiles?.full_name || "Unknown",
-              badge: e.profiles?.badge_number,
-              rank: e.profiles?.rank,
-              position: e.position_name,
-              unitNumber: e.unit_number,
-              notes: e.notes,
-              type: "exception" as const,
-              originalScheduleId: null,
-              customTime: customTime,
-              hasPTO: !!ptoException,
-              ptoData: ptoException ? {
-                id: ptoException.id,
-                ptoType: ptoException.reason,
-                startTime: ptoException.custom_start_time || shift.start_time,
-                endTime: ptoException.custom_end_time || shift.end_time,
-                isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-              } : undefined,
-              shift: shift
-            };
-          })
-          .filter(officer => officer !== null) || [];
+    // These are manually added officers (no recurring schedule)
+    return {
+      scheduleId: e.id,
+      officerId: e.officer_id,
+      name: e.profiles?.full_name || "Unknown",
+      badge: e.profiles?.badge_number,
+      rank: e.profiles?.rank,
+      position: e.position_name,
+      unitNumber: e.unit_number,
+      notes: e.notes,
+      type: "exception" as const, // Manually added = exception type
+      originalScheduleId: null,
+      customTime: customTime,
+      hasPTO: !!ptoException,
+      ptoData: ptoException ? {
+        id: ptoException.id,
+        ptoType: ptoException.reason,
+        startTime: ptoException.custom_start_time || shift.start_time,
+        endTime: ptoException.custom_end_time || shift.end_time,
+        isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+      } : undefined,
+      shift: shift
+    };
+  })
+  .filter(officer => officer !== null) || [];
 
         const allOfficers = [...recurringOfficers, ...additionalOfficers];
 
