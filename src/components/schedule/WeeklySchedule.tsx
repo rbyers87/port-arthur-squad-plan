@@ -194,13 +194,13 @@ if (exception) {
     // Add PTO detection
     hasPTO: exception.is_off,
     ptoData: exception.is_off ? {
-      id: exception.id,
-      ptoType: exception.reason,
-      startTime: exception.custom_start_time || exception.shift_types?.start_time,
-      endTime: exception.custom_end_time || exception.shift_types?.end_time,
-      isFullShift: !exception.custom_start_time && !exception.custom_end_time,
-      shiftTypeId: exception.shift_type_id // ← ADDED THIS LINE
-    } : undefined
+  id: exception.id,
+  ptoType: exception.reason,
+  startTime: exception.custom_start_time || exception.shift_types?.start_time || '00:00',
+  endTime: exception.custom_end_time || exception.shift_types?.end_time || '23:59',
+  isFullShift: !exception.custom_start_time && !exception.custom_end_time,
+  shiftTypeId: exception.shift_type_id
+} : undefined
   };
 } else if (recurring) {
   // For recurring schedules, check if there's a PTO exception for this date
