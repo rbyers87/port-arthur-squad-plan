@@ -767,10 +767,10 @@ export const DailyScheduleView = ({
     setPtoDialogOpen(true);
   };
 
-  const handleAddOfficer = (shift: any) => {
-    setSelectedShiftForAdd(shift);
-    setAddOfficerDialogOpen(true);
-  };
+  const handleAddOfficer = (shiftData: any) => {
+  setSelectedShiftForAdd(shiftData.shift); // Pass the entire shift object, not just the ID
+  setAddOfficerDialogOpen(true);
+};
 
   const handleExportShiftToPDF = async (shiftData: any) => {
     try {
@@ -1085,13 +1085,13 @@ export const DailyScheduleView = ({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleAddOfficer(shiftData.shift)}
+                       onClick={() => handleAddOfficer(shiftData)} // Pass shiftData, not just shiftData.shift
                       title="Add Officer"
-                    >
-                      <UserPlus className="h-4 w-4 mr-1" />
-                      Add Officer
+                      >
+                  <UserPlus className="h-4 w-4 mr-1" />
+                    Add Officer
                     </Button>
-                  )}
+                    )}
                   <Button
                     size="sm"
                     variant="outline"
@@ -1524,34 +1524,35 @@ export const DailyScheduleView = ({
       )}
 
       {/* Add Officer Dialog */}
-      <Dialog open={addOfficerDialogOpen} onOpenChange={setAddOfficerDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Officer to Schedule</DialogTitle>
-            <DialogDescription>
-              Add an officer to the {selectedShiftForAdd?.name} shift for {format(selectedDate, "EEEE, MMMM d, yyyy")}
-            </DialogDescription>
-          </DialogHeader>
-          <AddOfficerForm
-            shiftId={selectedShiftForAdd?.id}
-            date={dateStr}
-            onSuccess={() => {
-              setAddOfficerDialogOpen(false);
-              setSelectedShiftForAdd(null);
-            }}
-            onCancel={() => {
-              setAddOfficerDialogOpen(false);
-              setSelectedShiftForAdd(null);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+<Dialog open={addOfficerDialogOpen} onOpenChange={setAddOfficerDialogOpen}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Add Officer to Schedule</DialogTitle>
+      <DialogDescription>
+        Add an officer to the {selectedShiftForAdd?.name} shift for {format(selectedDate, "EEEE, MMMM d, yyyy")}
+      </DialogDescription>
+    </DialogHeader>
+    <AddOfficerForm
+      shiftId={selectedShiftForAdd?.id}
+      shift={selectedShiftForAdd} // Pass the entire shift object
+      date={dateStr}
+      onSuccess={() => {
+        setAddOfficerDialogOpen(false);
+        setSelectedShiftForAdd(null);
+      }}
+      onCancel={() => {
+        setAddOfficerDialogOpen(false);
+        setSelectedShiftForAdd(null);
+      }}
+    />
+  </DialogContent>
+</Dialog>
     </Card>
   );
 };
 
 // Add Officer Form Component
-const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel }: any) => {
+const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel, shift }: any) => {
   const [selectedOfficerId, setSelectedOfficerId] = useState("");
   const [position, setPosition] = useState("");
   const [unitNumber, setUnitNumber] = useState("");
@@ -1586,66 +1587,66 @@ const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel }: any) => {
   ];
 
   const addOfficerMutation = useMutation({
-  mutationFn: async () => {
-    const finalPosition = position === "Other (Custom)" ? customPosition : position;
-    
-    if (!finalPosition) {
-      throw new Error("Please select or enter a position");
-    }
-
-    // Check for existing exceptions (including duplicates)
-    const { data: existingExceptions, error: checkError } = await supabase
-      .from("schedule_exceptions")
-      .select("id, is_off")
-      .eq("officer_id", selectedOfficerId)
-      .eq("date", date)
-      .eq("shift_type_id", shiftId)
-      .eq("is_off", false);
-
-    if (checkError) throw checkError;
-
-    if (existingExceptions && existingExceptions.length > 0) {
-      // Handle duplicates by keeping first and deleting others
-      if (existingExceptions.length > 1) {
-        const recordsToDelete = existingExceptions.slice(1);
-        for (const record of recordsToDelete) {
-          await supabase
-            .from("schedule_exceptions")
-            .delete()
-            .eq("id", record.id);
-        }
-      }
+    mutationFn: async () => {
+      const finalPosition = position === "Other (Custom)" ? customPosition : position;
       
-      // Update the remaining record
-      const { error } = await supabase
-        .from("schedule_exceptions")
-        .update({
-          position_name: finalPosition,
-          unit_number: unitNumber || null,
-          notes: notes || null
-        })
-        .eq("id", existingExceptions[0].id);
+      if (!finalPosition) {
+        throw new Error("Please select or enter a position");
+      }
 
-      if (error) throw error;
-    } else {
-      // Insert new
-      const { error } = await supabase
+      // Check for existing exceptions (including duplicates)
+      const { data: existingExceptions, error: checkError } = await supabase
         .from("schedule_exceptions")
-        .insert({
-          officer_id: selectedOfficerId,
-          date: date,
-          shift_type_id: shiftId,
-          is_off: false,
-          position_name: finalPosition,
-          unit_number: unitNumber || null,
-          notes: notes || null,
-          custom_start_time: null,
-          custom_end_time: null
-        });
+        .select("id, is_off")
+        .eq("officer_id", selectedOfficerId)
+        .eq("date", date)
+        .eq("shift_type_id", shiftId)
+        .eq("is_off", false);
 
-      if (error) throw error;
-    }
-  },
+      if (checkError) throw checkError;
+
+      if (existingExceptions && existingExceptions.length > 0) {
+        // Handle duplicates by keeping first and deleting others
+        if (existingExceptions.length > 1) {
+          const recordsToDelete = existingExceptions.slice(1);
+          for (const record of recordsToDelete) {
+            await supabase
+              .from("schedule_exceptions")
+              .delete()
+              .eq("id", record.id);
+          }
+        }
+        
+        // Update the remaining record
+        const { error } = await supabase
+          .from("schedule_exceptions")
+          .update({
+            position_name: finalPosition,
+            unit_number: unitNumber || null,
+            notes: notes || null
+          })
+          .eq("id", existingExceptions[0].id);
+
+        if (error) throw error;
+      } else {
+        // Insert new
+        const { error } = await supabase
+          .from("schedule_exceptions")
+          .insert({
+            officer_id: selectedOfficerId,
+            date: date,
+            shift_type_id: shiftId,
+            is_off: false,
+            position_name: finalPosition,
+            unit_number: unitNumber || null,
+            notes: notes || null,
+            custom_start_time: null,
+            custom_end_time: null
+          });
+
+        if (error) throw error;
+      }
+    },
     onSuccess: () => {
       toast.success("Officer added to schedule");
       onSuccess();
@@ -1657,8 +1658,16 @@ const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel }: any) => {
 
   return (
     <div className="space-y-4">
+      {/* Show which shift the officer is being added to */}
+      <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
+        <h4 className="font-semibold text-blue-900">Adding to Shift:</h4>
+        <p className="text-blue-700">
+          {shift?.name} ({shift?.start_time} - {shift?.end_time})
+        </p>
+      </div>
+
       <div>
-        <Label htmlFor="officer-select">Select Officer</Label>
+        <Label htmlFor="officer-select">Select Officer *</Label>
         <Select value={selectedOfficerId} onValueChange={setSelectedOfficerId}>
           <SelectTrigger>
             <SelectValue placeholder="Choose an officer" />
@@ -1674,7 +1683,7 @@ const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel }: any) => {
       </div>
 
       <div>
-        <Label htmlFor="position-select">Position</Label>
+        <Label htmlFor="position-select">Position *</Label>
         <Select value={position} onValueChange={setPosition}>
           <SelectTrigger>
             <SelectValue placeholder="Select position" />
