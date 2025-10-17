@@ -177,7 +177,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
 
         let shiftInfo = null;
         
-        if (exception) {
+if (exception) {
   shiftInfo = {
     type: exception.is_off ? "Off" : (exception.shift_types?.name || "Custom"),
     time: exception.is_off ? "" : (
@@ -199,30 +199,37 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
       startTime: exception.custom_start_time || exception.shift_types?.start_time,
       endTime: exception.custom_end_time || exception.shift_types?.end_time,
       isFullShift: !exception.custom_start_time && !exception.custom_end_time,
-      shiftTypeId: exception.shift_type_id // ← ADD THIS CRITICAL LINE
+      shiftTypeId: exception.shift_type_id // ← ADDED THIS LINE
+    } : undefined
+  };
+} else if (recurring) {
+  // For recurring schedules, check if there's a PTO exception for this date
+  const ptoException = exceptionsData?.find(e => 
+    e.officer_id === targetUserId && 
+    e.date === date && 
+    e.is_off
+  );
+          
+  shiftInfo = {
+    type: recurring.shift_types?.name,
+    time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
+    position: recurring.position_name,
+    scheduleId: recurring.id,
+    scheduleType: "recurring" as const,
+    shift: recurring.shift_types,
+    isOff: false,
+    // Add PTO detection
+    hasPTO: !!ptoException,
+    ptoData: ptoException ? {
+      id: ptoException.id,
+      ptoType: ptoException.reason,
+      startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
+      endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
+      isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+      shiftTypeId: ptoException.shift_type_id // ← ADDED THIS LINE
     } : undefined
   };
 }
-          
-          shiftInfo = {
-            type: recurring.shift_types?.name,
-            time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
-            position: recurring.position_name,
-            scheduleId: recurring.id,
-            scheduleType: "recurring" as const,
-            shift: recurring.shift_types,
-            isOff: false,
-            // Add PTO detection
-            hasPTO: !!ptoException,
-            ptoData: ptoException ? {
-              id: ptoException.id,
-              ptoType: ptoException.reason,
-              startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
-              endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
-              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-            } : undefined
-          };
-        }
 
         return {
           date,
