@@ -153,27 +153,36 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
       }
 
       // Build schedule for each day
-      const dailySchedules = dates.map((date, idx) => {
-        const currentDate = new Date(date);
-        const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
-        const exception = exceptionsData?.find(e => e.date === date);
-        
-        // Find recurring schedule for this day of week that's active on this date
-        const recurring = recurringData?.find(r => {
-          if (r.day_of_week !== dayOfWeek) return false;
-          
-          // Check if the recurring schedule is active on this specific date
-          const scheduleStartDate = new Date(r.start_date);
-          const scheduleEndDate = r.end_date ? new Date(r.end_date) : null;
-          
-          // Schedule is active if:
-          // 1. Current date is on or after start date
-          // 2. AND current date is on or before end date (if end date exists)
-          const isAfterStart = currentDate >= scheduleStartDate;
-          const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
-          
-          return isAfterStart && isBeforeEnd;
-        });
+      // Build schedule for each day
+const dailySchedules = dates.map((date, idx) => {
+  const currentDate = new Date(date);
+  const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  
+  // ADD MONTHLY VIEW DEBUGGING
+  if (activeView === "monthly") {
+    console.log(`📅 MONTHLY VIEW - Date: ${date}, Day of Week: ${dayOfWeek} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]}), Recurring check for day: ${dayOfWeek}`);
+  }
+  
+  const exception = exceptionsData?.find(e => e.date === date);
+  
+  // Find recurring schedule for this day of week that's active on this date
+  const recurring = recurringData?.find(r => {
+    if (r.day_of_week !== dayOfWeek) return false;
+    
+    // Check if the recurring schedule is active on this specific date
+    const scheduleStartDate = new Date(r.start_date);
+    const scheduleEndDate = r.end_date ? new Date(r.end_date) : null;
+    
+    const isAfterStart = currentDate >= scheduleStartDate;
+    const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
+    
+    // ADD DEBUGGING FOR RECURRING MATCH
+    if (activeView === "monthly" && r.day_of_week === dayOfWeek) {
+      console.log(`   🔍 Recurring schedule: ${r.shift_types?.name}, DB day_of_week: ${r.day_of_week}, Matches: ${r.day_of_week === dayOfWeek}, Active: ${isAfterStart && isBeforeEnd}`);
+    }
+    
+    return isAfterStart && isBeforeEnd;
+  });
 
         let shiftInfo = null;
         
