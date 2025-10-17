@@ -1343,26 +1343,27 @@ export const DailyScheduleView = ({
       <Clock className="h-3 w-3" />
     </Button>
     {/* DELETE BUTTON for Special Assignment exception officers */}
-    {officer.type === "exception" && (
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => removeOfficerMutation.mutate(officer)}
-        disabled={removeOfficerMutation.isPending}
-        title="Remove Added Shift"
-        className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
-      >
-        <Trash2 className="h-3 w-3" />
-      </Button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                  {officer.type === "exception" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => removeOfficerMutation.mutate(officer)}
+                      disabled={removeOfficerMutation.isPending}
+                      title="Remove Added Shift"
+                      className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      </div>
+    ))}
+  </div>
+)}
 
              {/* PTO Section - UPDATED WITH EDITABLE FIELDS */}
 {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
