@@ -45,16 +45,16 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
 
   // Week navigation functions
   const goToPreviousWeek = () => {
-    setCurrentWeekStart(subWeeks(currentWeekStart, 1));
-  };
+  setCurrentWeekStart(subWeeks(currentWeekStart, 1));
+};
 
-  const goToNextWeek = () => {
-    setCurrentWeekStart(addWeeks(currentWeekStart, 1));
-  };
+const goToNextWeek = () => {
+  setCurrentWeekStart(addWeeks(currentWeekStart, 1));
+};
 
-  const goToCurrentWeek = () => {
-    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
-  };
+const goToCurrentWeek = () => {
+  setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
+};
 
   // Month navigation functions
   const goToPreviousMonth = () => {
@@ -101,41 +101,50 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     queryFn: async () => {
       const targetUserId = isAdminOrSupervisor ? selectedOfficerId : userId;
       
-      // Determine date range based on active view
-      let startDate: Date;
-      let endDate: Date;
-      let dates: string[];
+  // Determine date range based on active view
+let startDate: Date;
+let endDate: Date;
+let dates: string[];
 
-      if (activeView === "weekly") {
-        startDate = currentWeekStart;
-        endDate = addDays(currentWeekStart, 6);
-        dates = Array.from({ length: 7 }, (_, i) => 
-          format(addDays(currentWeekStart, i), "yyyy-MM-dd")
-        );
-      } else {
-        // Monthly view
-        startDate = startOfMonth(currentMonth);
-        endDate = endOfMonth(currentMonth);
-        const monthDays = eachDayOfInterval({ start: startDate, end: endDate });
-        dates = monthDays.map(day => format(day, "yyyy-MM-dd"));
-      }
+if (activeView === "weekly") {
+  // FIX: Ensure we're always starting from Sunday
+  const weekStart = startOfWeek(currentWeekStart, { weekStartsOn: 0 });
+  startDate = weekStart;
+  endDate = addDays(weekStart, 6);
+  dates = Array.from({ length: 7 }, (_, i) => 
+    format(addDays(weekStart, i), "yyyy-MM-dd")
+  );
+  
+  console.log("📅 WEEKLY - Start:", format(startDate, "EEE yyyy-MM-dd"), 
+              "End:", format(endDate, "EEE yyyy-MM-dd"));
+} else {
+  // Monthly view
+  startDate = startOfMonth(currentMonth);
+  endDate = endOfMonth(currentMonth);
+  const monthDays = eachDayOfInterval({ start: startDate, end: endDate });
+  dates = monthDays.map(day => format(day, "yyyy-MM-dd"));
+  
+  console.log("📅 MONTHLY - Start:", format(startDate, "EEE yyyy-MM-dd"), 
+              "End:", format(endDate, "EEE yyyy-MM-dd"),
+              "Days:", dates.length);
+}
 
-      // Get recurring schedules - filter by active schedules for the current period
-      const { data: recurringData, error: recurringError } = await supabase
-        .from("recurring_schedules")
-        .select(`
-          *,
-          shift_types(name, start_time, end_time)
-        `)
-        .eq("officer_id", targetUserId)
-        // Filter recurring schedules that are active during the current period
-        .lte("start_date", format(endDate, "yyyy-MM-dd"))
-        .or(`end_date.is.null,end_date.gte.${format(startDate, "yyyy-MM-dd")}`);
+// Get recurring schedules - filter by active schedules for the current period
+const { data: recurringData, error: recurringError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    shift_types(name, start_time, end_time)
+  `)
+  .eq("officer_id", targetUserId)
+  // Filter recurring schedules that are active during the current period
+  .lte("start_date", format(endDate, "yyyy-MM-dd"))
+  .or(`end_date.is.null,end_date.gte.${format(startDate, "yyyy-MM-dd")}`);
 
-      if (recurringError) {
-        console.error("Recurring error:", recurringError);
-        throw recurringError;
-      }
+if (recurringError) {
+  console.error("Recurring error:", recurringError);
+  throw recurringError;
+}
 
       // Get exceptions for the specific period
       const { data: exceptionsData, error: exceptionsError } = await supabase
