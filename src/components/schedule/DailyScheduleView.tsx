@@ -176,6 +176,7 @@ export const DailyScheduleView = ({
         const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
 
         // Get recurring officers for this shift
+// In your data fetching query, update the officer mapping logic:
 const recurringOfficers = recurringData
   ?.filter(r => r.shift_types?.id === shift.id)
   .map(r => {
@@ -191,10 +192,12 @@ const recurringOfficers = recurringData
 
     // Determine if this should be treated as an exception
     // Only mark as exception if there are actual changes from recurring schedule
+    // Since unit_number and notes don't exist in recurring_schedules, 
+    // any unit_number or notes in workingException means it's an exception
     const hasSubstantialChanges = workingException && 
       (workingException.position_name !== r.position_name ||
-       workingException.unit_number !== (r.unit_number || null) ||
-       workingException.notes !== (r.notes || null));
+       workingException.unit_number !== null ||
+       workingException.notes !== null);
 
     const shouldShowAsException = workingException && hasSubstantialChanges;
 
@@ -220,8 +223,8 @@ const recurringOfficers = recurringData
       badge: r.profiles?.badge_number,
       rank: r.profiles?.rank,
       position: shouldShowAsException ? workingException.position_name : r.position_name,
-      unitNumber: shouldShowAsException ? workingException.unit_number : r.unit_number,
-      notes: shouldShowAsException ? workingException.notes : r.notes,
+      unitNumber: shouldShowAsException ? workingException.unit_number : null, // unit_number doesn't exist in recurring
+      notes: shouldShowAsException ? workingException.notes : null, // notes doesn't exist in recurring
       type: shouldShowAsException ? "exception" as const : "recurring" as const,
       originalScheduleId: r.id,
       customTime: customTime,
