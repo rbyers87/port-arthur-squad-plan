@@ -794,241 +794,248 @@ export const DailyScheduleView = ({
     {officers.length === 0 ? (
       <p className="text-sm text-muted-foreground italic">No {title.toLowerCase()} scheduled</p>
     ) : (
-      officers.map((officer) => (
-        <div
-          key={`${officer.scheduleId}-${officer.type}`}
-          className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
-        >
-          {/* Officer Info - Left Side */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-1">
-              <div>
-                <p className="font-medium truncate">{officer.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {officer.rank || 'Officer'} • Badge #{officer.badge}
-                  {officer.type === "exception" && (
-                    <span className="ml-2 text-orange-600 font-medium">(Added Shift)</span>
-                  )}
-                </p>
+      officers.map((officer) => {
+        // Skip officers with full-day PTO - they should only appear in PTO section
+        if (officer.hasPTO && officer.ptoData?.isFullShift) {
+          return null;
+        }
+        
+        return (
+          <div
+            key={`${officer.scheduleId}-${officer.type}`}
+            className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+          >
+            {/* Officer Info - Left Side */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-1">
+                <div>
+                  <p className="font-medium truncate">{officer.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {officer.rank || 'Officer'} • Badge #{officer.badge}
+                    {officer.type === "exception" && (
+                      <span className="ml-2 text-orange-600 font-medium">(Added Shift)</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {officer.customTime && (
+                  <Badge variant="secondary" className="text-xs">
+                    {officer.customTime}
+                  </Badge>
+                )}
+                {officer.type === "recurring" && (
+                  <Badge variant="secondary" className="text-xs">
+                    Recurring
+                  </Badge>
+                )}
+                {officer.type === "exception" && (
+                  <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                    Extra Shift
+                  </Badge>
+                )}
+                {/* Show partial PTO indicator */}
+                {officer.hasPTO && !officer.ptoData?.isFullShift && (
+                  <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
+                    Partial PTO
+                  </Badge>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {officer.customTime && (
-                <Badge variant="secondary" className="text-xs">
-                  {officer.customTime}
-                </Badge>
-              )}
-              {officer.type === "recurring" && (
-                <Badge variant="secondary" className="text-xs">
-                  Recurring
-                </Badge>
-              )}
-              {officer.type === "exception" && (
-                <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-                  Extra Shift
-                </Badge>
-              )}
-              {/* Show partial PTO indicator */}
-              {officer.hasPTO && !officer.ptoData?.isFullShift && (
-                <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
-                  Partial PTO
-                </Badge>
-              )}
-            </div>
-          </div>
 
-          {/* Unit & Notes - Middle Section */}
-          <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
-            {/* Unit Number */}
-            <div className="text-center min-w-16">
-              <Label htmlFor={`unit-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
-                Unit
-              </Label>
-              {canEdit && editingUnitNumber === `${officer.scheduleId}-${officer.type}` ? (
-                <div className="flex items-center gap-1">
-                  <Input
-                    id={`unit-${officer.scheduleId}`}
-                    placeholder="Unit #"
-                    value={editUnitValue}
-                    onChange={(e) => setEditUnitValue(e.target.value)}
-                    className="w-16 h-8 text-sm"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => handleSaveUnitNumber(officer)}
-                    disabled={updatePositionMutation.isPending}
-                    className="h-8 w-8"
-                  >
-                    <Save className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setEditingUnitNumber(null);
-                      setEditUnitValue("");
-                    }}
-                    className="h-8 w-8"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
-                <Badge 
-                  variant={officer.unitNumber ? "default" : "outline"} 
-                  className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
-                  onClick={() => canEdit && handleEditUnitClick(officer)}
-                >
-                  {officer.unitNumber || (canEdit ? "Add" : "-")}
-                </Badge>
-              )}
-            </div>
-
-            {/* Notes/Assignments */}
-            <div className="text-center min-w-24 flex-1">
-              <Label htmlFor={`notes-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
-                Notes
-              </Label>
-              {canEdit && editingNotes === `${officer.scheduleId}-${officer.type}` ? (
-                <div className="flex items-center gap-1">
-                  <Input
-                    id={`notes-${officer.scheduleId}`}
-                    placeholder="Notes..."
-                    value={editNotesValue}
-                    onChange={(e) => setEditNotesValue(e.target.value)}
-                    className="h-8 text-sm"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => handleSaveNotes(officer)}
-                    disabled={updatePositionMutation.isPending}
-                    className="h-8 w-8"
-                  >
-                    <Save className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setEditingNotes(null);
-                      setEditNotesValue("");
-                    }}
-                    className="h-8 w-8"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
-                <div 
-                  className={`text-xs p-2 rounded border border-dashed border-muted-foreground/30 ${canEdit ? 'cursor-pointer hover:bg-muted' : ''} transition-colors min-h-8 flex items-center justify-center`}
-                  onClick={() => canEdit && handleEditNotesClick(officer)}
-                >
-                  {officer.notes || (canEdit ? "Add notes" : "-")}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Position & Actions - Right Side */}
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Position Display/Edit */}
-            {canEdit && editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
-              <div className="flex items-center gap-2">
-                <div className="space-y-2">
-                  <Select value={editPosition} onValueChange={setEditPosition}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue placeholder="Select position" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {predefinedPositions.map((pos) => (
-                        <SelectItem key={pos} value={pos}>
-                          {pos}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {editPosition === "Other (Custom)" && (
+            {/* Unit & Notes - Middle Section */}
+            <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
+              {/* Unit Number */}
+              <div className="text-center min-w-16">
+                <Label htmlFor={`unit-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
+                  Unit
+                </Label>
+                {canEdit && editingUnitNumber === `${officer.scheduleId}-${officer.type}` ? (
+                  <div className="flex items-center gap-1">
                     <Input
-                      placeholder="Custom position"
-                      value={customPosition}
-                      onChange={(e) => setCustomPosition(e.target.value)}
-                      className="w-32"
+                      id={`unit-${officer.scheduleId}`}
+                      placeholder="Unit #"
+                      value={editUnitValue}
+                      onChange={(e) => setEditUnitValue(e.target.value)}
+                      className="w-16 h-8 text-sm"
                     />
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => handleSavePosition(officer)}
-                  disabled={updatePositionMutation.isPending}
-                >
-                  <Save className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setEditingSchedule(null);
-                    setEditPosition("");
-                    setCustomPosition("");
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <div className="text-right min-w-24">
-                <Badge variant="secondary" className="mb-1 w-full justify-center">
-                  {officer.position || "No Position"}
-                </Badge>
-                {canEdit && (
-                  <div className="flex gap-1 justify-center">
                     <Button
                       size="sm"
-                      variant="ghost"
-                      onClick={() => handleEditClick(officer)}
-                      title="Edit Position"
-                      className="h-6 w-6"
+                      onClick={() => handleSaveUnitNumber(officer)}
+                      disabled={updatePositionMutation.isPending}
+                      className="h-8 w-8"
                     >
-                      <Edit2 className="h-3 w-3" />
+                      <Save className="h-3 w-3" />
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => {
-                        setSelectedOfficer({
-                          officerId: officer.officerId,
-                          name: officer.name,
-                          scheduleId: officer.scheduleId,
-                          type: officer.type,
-                        });
-                        setSelectedShift(officer.shift);
-                        setPtoDialogOpen(true);
+                        setEditingUnitNumber(null);
+                        setEditUnitValue("");
                       }}
-                      title="Assign PTO"
-                      className="h-6 w-6"
+                      className="h-8 w-8"
                     >
-                      <Clock className="h-3 w-3" />
+                      <X className="h-3 w-3" />
                     </Button>
-                    {/* DELETE BUTTON - Only show for exception officers (added shifts) */}
-                    {officer.type === "exception" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => removeOfficerMutation.mutate(officer)}
-                        disabled={removeOfficerMutation.isPending}
-                        title="Remove Added Shift"
-                        className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
+                  </div>
+                ) : (
+                  <Badge 
+                    variant={officer.unitNumber ? "default" : "outline"} 
+                    className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
+                    onClick={() => canEdit && handleEditUnitClick(officer)}
+                  >
+                    {officer.unitNumber || (canEdit ? "Add" : "-")}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Notes/Assignments */}
+              <div className="text-center min-w-24 flex-1">
+                <Label htmlFor={`notes-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
+                  Notes
+                </Label>
+                {canEdit && editingNotes === `${officer.scheduleId}-${officer.type}` ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      id={`notes-${officer.scheduleId}`}
+                      placeholder="Notes..."
+                      value={editNotesValue}
+                      onChange={(e) => setEditNotesValue(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => handleSaveNotes(officer)}
+                      disabled={updatePositionMutation.isPending}
+                      className="h-8 w-8"
+                    >
+                      <Save className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingNotes(null);
+                        setEditNotesValue("");
+                      }}
+                      className="h-8 w-8"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div 
+                    className={`text-xs p-2 rounded border border-dashed border-muted-foreground/30 ${canEdit ? 'cursor-pointer hover:bg-muted' : ''} transition-colors min-h-8 flex items-center justify-center`}
+                    onClick={() => canEdit && handleEditNotesClick(officer)}
+                  >
+                    {officer.notes || (canEdit ? "Add notes" : "-")}
                   </div>
                 )}
               </div>
-            )}
+            </div>
+
+            {/* Position & Actions - Right Side */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Position Display/Edit */}
+              {canEdit && editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
+                <div className="flex items-center gap-2">
+                  <div className="space-y-2">
+                    <Select value={editPosition} onValueChange={setEditPosition}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue placeholder="Select position" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {predefinedPositions.map((pos) => (
+                          <SelectItem key={pos} value={pos}>
+                            {pos}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {editPosition === "Other (Custom)" && (
+                      <Input
+                        placeholder="Custom position"
+                        value={customPosition}
+                        onChange={(e) => setCustomPosition(e.target.value)}
+                        className="w-32"
+                      />
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleSavePosition(officer)}
+                    disabled={updatePositionMutation.isPending}
+                  >
+                    <Save className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditingSchedule(null);
+                      setEditPosition("");
+                      setCustomPosition("");
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-right min-w-24">
+                  <Badge variant="secondary" className="mb-1 w-full justify-center">
+                    {officer.position || "No Position"}
+                  </Badge>
+                  {canEdit && (
+                    <div className="flex gap-1 justify-center">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleEditClick(officer)}
+                        title="Edit Position"
+                        className="h-6 w-6"
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setSelectedOfficer({
+                            officerId: officer.officerId,
+                            name: officer.name,
+                            scheduleId: officer.scheduleId,
+                            type: officer.type,
+                          });
+                          setSelectedShift(officer.shift);
+                          setPtoDialogOpen(true);
+                        }}
+                        title="Assign PTO"
+                        className="h-6 w-6"
+                      >
+                        <Clock className="h-3 w-3" />
+                      </Button>
+                      {/* DELETE BUTTON - Only show for exception officers (added shifts) */}
+                      {officer.type === "exception" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removeOfficerMutation.mutate(officer)}
+                          disabled={removeOfficerMutation.isPending}
+                          title="Remove Added Shift"
+                          className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))
+        );
+      }).filter(Boolean) // This removes any null values from the array
     )}
   </div>
 );
