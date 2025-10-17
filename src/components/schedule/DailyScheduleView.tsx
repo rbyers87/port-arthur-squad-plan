@@ -167,188 +167,174 @@ export const DailyScheduleView = ({
       throw exceptionsError;
     }
 
-      // Separate PTO exceptions from regular exceptions
-      const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
-      const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
+    // Separate PTO exceptions from regular exceptions
+    const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
+    const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
 
-      // Build schedule by shift
-      const scheduleByShift = shiftTypes?.map((shift) => {
-        const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
+    // Build schedule by shift
+    const scheduleByShift = shiftTypes?.map((shift) => {
+      const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
 
-        // Get recurring officers for this shift
-       // In your data fetching query, update the officer mapping logic:
-const recurringOfficers = recurringData
-  ?.filter(r => r.shift_types?.id === shift.id)
-  .map(r => {
-    // Check if this officer has PTO for today
-    const ptoException = ptoExceptions?.find(e => 
-      e.officer_id === r.officer_id && e.shift_types?.id === shift.id
-    );
+      // Get recurring officers for this shift
+      const recurringOfficers = recurringData
+        ?.filter(r => r.shift_types?.id === shift.id)
+        .map(r => {
+          // Check if this officer has PTO for today
+          const ptoException = ptoExceptions?.find(e => 
+            e.officer_id === r.officer_id && e.shift_types?.id === shift.id
+          );
 
-    // Check if this officer has a working exception for today
-    const workingException = workingExceptions?.find(e => 
-      e.officer_id === r.officer_id && e.shift_types?.id === shift.id
-    );
+          // Check if this officer has a working exception for today
+          const workingException = workingExceptions?.find(e => 
+            e.officer_id === r.officer_id && e.shift_types?.id === shift.id
+          );
 
-    // FIXED: Only exclude if FULL DAY PTO (no custom start/end times)
-    const hasFullDayPTO = ptoException && !ptoException.custom_start_time && !ptoException.custom_end_time;
-    if (hasFullDayPTO) {
-      return null; // Exclude from regular schedule
-    }
-
-    // FIXED: Calculate custom time for partial PTO
-    let customTime = undefined;
-    if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
-      // Show their actual working hours when they have partial PTO
-      customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
-    } else if (workingException?.custom_start_time && workingException?.custom_end_time) {
-      customTime = `${workingException.custom_start_time} - ${workingException.custom_end_time}`;
-    }
-
-    // ALWAYS show as "recurring" if they have a recurring schedule for this shift/day
-    // Use exception data if it exists, otherwise use recurring data
-    return {
-      scheduleId: workingException ? workingException.id : r.id,
-      officerId: r.officer_id,
-      name: r.profiles?.full_name || "Unknown",
-      badge: r.profiles?.badge_number,
-      rank: r.profiles?.rank,
-      position: workingException ? workingException.position_name : r.position_name,
-      unitNumber: workingException ? workingException.unit_number : null,
-      notes: workingException ? workingException.notes : null,
-      type: "recurring" as const, // Always recurring if they have a recurring schedule
-      originalScheduleId: r.id,
-      customTime: customTime,
-      hasPTO: !!ptoException,
-      ptoData: ptoException ? {
-        id: ptoException.id,
-        ptoType: ptoException.reason,
-        startTime: ptoException.custom_start_time || shift.start_time,
-        endTime: ptoException.custom_end_time || shift.end_time,
-        isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-      } : undefined,
-      shift: shift
-    };
-  })
-  .filter(officer => officer !== null) || [];
-
-// Get additional officers from working exceptions - THESE are the manually added ones
-const additionalOfficers = workingExceptions
-  ?.filter(e => 
-    e.shift_types?.id === shift.id &&
-    !recurringData?.some(r => r.officer_id === e.officer_id) // No recurring schedule = manually added
-  )
-  .map(e => {
-    const ptoException = ptoExceptions?.find(p => 
-      p.officer_id === e.officer_id && p.shift_types?.id === shift.id
-    );
-    
-    const hasFullDayPTO = ptoException && !ptoException.custom_start_time && !ptoException.custom_end_time;
-    if (hasFullDayPTO) {
-      return null;
-    }
-
-    let customTime = undefined;
-    if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
-      customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
-    } else if (e.custom_start_time && e.custom_end_time) {
-      customTime = `${e.custom_start_time} - ${e.custom_end_time}`;
-    }
-
-    // These are manually added officers (no recurring schedule)
-    return {
-      scheduleId: e.id,
-      officerId: e.officer_id,
-      name: e.profiles?.full_name || "Unknown",
-      badge: e.profiles?.badge_number,
-      rank: e.profiles?.rank,
-      position: e.position_name,
-      unitNumber: e.unit_number,
-      notes: e.notes,
-      type: "exception" as const, // Manually added = exception type
-      originalScheduleId: null,
-      customTime: customTime,
-      hasPTO: !!ptoException,
-      ptoData: ptoException ? {
-        id: ptoException.id,
-        ptoType: ptoException.reason,
-        startTime: ptoException.custom_start_time || shift.start_time,
-        endTime: ptoException.custom_end_time || shift.end_time,
-        isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-      } : undefined,
-      shift: shift
-    };
-  })
-  .filter(officer => officer !== null) || [];
-        
-
-        const allOfficers = [...recurringOfficers, ...additionalOfficers];
-
-        // Get PTO records for this shift - UPDATED TO INCLUDE unitNumber and notes
-        const shiftPTORecords = ptoExceptions?.filter(e => 
-          e.shift_types?.id === shift.id
-        ).map(e => ({
-          id: e.id,
-          officerId: e.officer_id,
-          name: e.profiles?.full_name || "Unknown",
-          badge: e.profiles?.badge_number,
-          rank: e.profiles?.rank,
-          ptoType: e.reason || "PTO",
-          startTime: e.custom_start_time || shift.start_time,
-          endTime: e.custom_end_time || shift.end_time,
-          isFullShift: !e.custom_start_time && !e.custom_end_time,
-          shiftTypeId: shift.id,
-          unitNumber: e.unit_number, // Added
-          notes: e.notes // Added
-        })) || [];
-
-        // Categorize officers - ONLY SUPERVISORS GET SORTED BY RANK
-        const supervisors = sortSupervisorsByRank(
-          allOfficers.filter(o => 
-            o.position?.toLowerCase().includes('supervisor')
-          )
-        );
-
-        const specialAssignmentOfficers = allOfficers.filter(o => {
-          const position = o.position?.toLowerCase() || '';
-          return position.includes('other') || 
-                 (o.position && !predefinedPositions.includes(o.position));
-        }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
-        const regularOfficers = allOfficers.filter(o => 
-          !o.position?.toLowerCase().includes('supervisor') && 
-          !specialAssignmentOfficers.includes(o)
-        ).sort((a, b) => {
-          const aMatch = a.position?.match(/district\s*(\d+)/i);
-          const bMatch = b.position?.match(/district\s*(\d+)/i);
-          
-          if (aMatch && bMatch) {
-            return parseInt(aMatch[1]) - parseInt(bMatch[1]);
+          // FIXED: Calculate custom time for partial PTO
+          let customTime = undefined;
+          if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
+            // Show their actual working hours when they have partial PTO
+            customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
+          } else if (workingException?.custom_start_time && workingException?.custom_end_time) {
+            customTime = `${workingException.custom_start_time} - ${workingException.custom_end_time}`;
           }
-          
-          return (a.position || '').localeCompare(b.position || '');
-        });
 
-        return {
-          shift,
-          minSupervisors: minStaff?.minimum_supervisors || 1,
-          minOfficers: minStaff?.minimum_officers || 0,
-          currentSupervisors: supervisors.length,
-          currentOfficers: regularOfficers.length,
-          supervisors,
-          officers: regularOfficers,
-          specialAssignmentOfficers,
-          ptoRecords: shiftPTORecords,
-        };
+          // ALWAYS show as "recurring" if they have a recurring schedule for this shift/day
+          return {
+            scheduleId: workingException ? workingException.id : r.id,
+            officerId: r.officer_id,
+            name: r.profiles?.full_name || "Unknown",
+            badge: r.profiles?.badge_number,
+            rank: r.profiles?.rank,
+            position: workingException ? workingException.position_name : r.position_name,
+            unitNumber: workingException ? workingException.unit_number : null,
+            notes: workingException ? workingException.notes : null,
+            type: "recurring" as const,
+            originalScheduleId: r.id,
+            customTime: customTime,
+            hasPTO: !!ptoException,
+            ptoData: ptoException ? {
+              id: ptoException.id,
+              ptoType: ptoException.reason,
+              startTime: ptoException.custom_start_time || shift.start_time,
+              endTime: ptoException.custom_end_time || shift.end_time,
+              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+            } : undefined,
+            shift: shift
+          };
+        })
+        .filter(officer => officer !== null) || [];
+
+      // Get additional officers from working exceptions - THESE are the manually added ones
+      const additionalOfficers = workingExceptions
+        ?.filter(e => 
+          e.shift_types?.id === shift.id &&
+          !recurringData?.some(r => r.officer_id === e.officer_id)
+        )
+        .map(e => {
+          const ptoException = ptoExceptions?.find(p => 
+            p.officer_id === e.officer_id && p.shift_types?.id === shift.id
+          );
+
+          let customTime = undefined;
+          if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
+            customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
+          } else if (e.custom_start_time && e.custom_end_time) {
+            customTime = `${e.custom_start_time} - ${e.custom_end_time}`;
+          }
+
+          // These are manually added officers (no recurring schedule)
+          return {
+            scheduleId: e.id,
+            officerId: e.officer_id,
+            name: e.profiles?.full_name || "Unknown",
+            badge: e.profiles?.badge_number,
+            rank: e.profiles?.rank,
+            position: e.position_name,
+            unitNumber: e.unit_number,
+            notes: e.notes,
+            type: "exception" as const,
+            originalScheduleId: null,
+            customTime: customTime,
+            hasPTO: !!ptoException,
+            ptoData: ptoException ? {
+              id: ptoException.id,
+              ptoType: ptoException.reason,
+              startTime: ptoException.custom_start_time || shift.start_time,
+              endTime: ptoException.custom_end_time || shift.end_time,
+              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+            } : undefined,
+            shift: shift
+          };
+        })
+        .filter(officer => officer !== null) || [];
+
+      const allOfficers = [...recurringOfficers, ...additionalOfficers];
+
+      // Get PTO records for this shift - UPDATED TO INCLUDE unitNumber and notes
+      const shiftPTORecords = ptoExceptions?.filter(e => 
+        e.shift_types?.id === shift.id
+      ).map(e => ({
+        id: e.id,
+        officerId: e.officer_id,
+        name: e.profiles?.full_name || "Unknown",
+        badge: e.profiles?.badge_number,
+        rank: e.profiles?.rank,
+        ptoType: e.reason || "PTO",
+        startTime: e.custom_start_time || shift.start_time,
+        endTime: e.custom_end_time || shift.end_time,
+        isFullShift: !e.custom_start_time && !e.custom_end_time,
+        shiftTypeId: shift.id,
+        unitNumber: e.unit_number,
+        notes: e.notes
+      })) || [];
+
+      // Categorize officers - ONLY SUPERVISORS GET SORTED BY RANK
+      const supervisors = sortSupervisorsByRank(
+        allOfficers.filter(o => 
+          o.position?.toLowerCase().includes('supervisor')
+        )
+      );
+
+      const specialAssignmentOfficers = allOfficers.filter(o => {
+        const position = o.position?.toLowerCase() || '';
+        return position.includes('other') || 
+               (o.position && !predefinedPositions.includes(o.position));
+      }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+      const regularOfficers = allOfficers.filter(o => 
+        !o.position?.toLowerCase().includes('supervisor') && 
+        !specialAssignmentOfficers.includes(o)
+      ).sort((a, b) => {
+        const aMatch = a.position?.match(/district\s*(\d+)/i);
+        const bMatch = b.position?.match(/district\s*(\d+)/i);
+        
+        if (aMatch && bMatch) {
+          return parseInt(aMatch[1]) - parseInt(bMatch[1]);
+        }
+        
+        return (a.position || '').localeCompare(b.position || '');
       });
 
-      const filteredSchedule = filterShiftId === "all" 
-        ? scheduleByShift 
-        : scheduleByShift?.filter(s => s.shift.id === filterShiftId);
+      return {
+        shift,
+        minSupervisors: minStaff?.minimum_supervisors || 1,
+        minOfficers: minStaff?.minimum_officers || 0,
+        currentSupervisors: supervisors.length,
+        currentOfficers: regularOfficers.length,
+        supervisors,
+        officers: regularOfficers,
+        specialAssignmentOfficers,
+        ptoRecords: shiftPTORecords,
+      };
+    });
 
-      return filteredSchedule;
-    },
-  });
+    const filteredSchedule = filterShiftId === "all" 
+      ? scheduleByShift 
+      : scheduleByShift?.filter(s => s.shift.id === filterShiftId);
+
+    return filteredSchedule;
+  },
+});
 
   const updatePositionMutation = useMutation({
   mutationFn: async ({ 
