@@ -357,33 +357,56 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   if (!schedule.hasPTO || !schedule.ptoData) return;
 
   try {
-    // FIRST: Try to get shift ID from the schedule data
-    let shiftTypeId = schedule.shift?.id;
+    console.log("🔄 Attempting to remove PTO:", schedule.ptoData);
     
-    // SECOND: If shift data is missing, fetch it from the PTO exception in the database
+    // STRATEGY 1: Try to get shift ID from multiple possible sources
+    let shiftTypeId = schedule.shift?.id || 
+                     schedule.ptoData.shiftTypeId || 
+                     schedule.originalShiftId;
+    
+    // STRATEGY 2: If we still don't have a shift ID, try to infer it from the officer's schedule
     if (!shiftTypeId) {
-      console.log("🔄 Fetching shift data for PTO removal...");
+      console.log("🔍 No direct shift ID found, inferring from officer's schedule...");
       
-      const { data: ptoException, error } = await supabase
+      // Get the officer's schedule for this date to find their shift
+      const { data: officerSchedule, error } = await supabase
         .from("schedule_exceptions")
         .select("shift_type_id")
-        .eq("id", schedule.ptoData.id)
+        .eq("officer_id", selectedOfficerId)
+        .eq("date", date)
+        .eq("is_off", false)
         .single();
 
-      if (error) {
-        console.error("Error fetching PTO exception:", error);
-        toast.error("Failed to fetch PTO information");
-        return;
-      }
+      if (!error && officerSchedule?.shift_type_id) {
+        shiftTypeId = officerSchedule.shift_type_id;
+        console.log("📊 Found shift_type_id from working schedule:", shiftTypeId);
+      } else {
+        // STRATEGY 3: Try to get from recurring schedule
+        const dayOfWeek = new Date(date).getDay();
+        const { data: recurringSchedule, error: recurringError } = await supabase
+          .from("recurring_schedules")
+          .select("shift_type_id")
+          .eq("officer_id", selectedOfficerId)
+          .eq("day_of_week", dayOfWeek)
+          .is("end_date", null)
+          .single();
 
-      if (!ptoException?.shift_type_id) {
-        console.error("No shift_type_id found for PTO:", schedule.ptoData.id);
-        toast.error("Cannot remove PTO: Missing shift information");
-        return;
+        if (!recurringError && recurringSchedule?.shift_type_id) {
+          shiftTypeId = recurringSchedule.shift_type_id;
+          console.log("📊 Found shift_type_id from recurring schedule:", shiftTypeId);
+        }
       }
+    }
 
-      shiftTypeId = ptoException.shift_type_id;
-      console.log("📊 Found shift_type_id:", shiftTypeId);
+    // STRATEGY 4: If we still don't have a shift ID, use a default or show specific error
+    if (!shiftTypeId) {
+      console.error("No shift_type_id found after all attempts for PTO:", schedule.ptoData.id);
+      
+      // Show a more helpful error message
+      toast.error(`Cannot remove PTO: Unable to determine shift. 
+        This PTO might be assigned to a specific shift that no longer exists. 
+        Please contact support.`);
+      return;
     }
 
     const ptoData = {
@@ -396,12 +419,12 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
       endTime: schedule.ptoData.endTime
     };
 
-    console.log("🔄 Removing PTO with data:", ptoData);
+    console.log("✅ Removing PTO with final data:", ptoData);
     removePTOMutation.mutate(ptoData);
     
   } catch (error) {
     console.error("Error in handleRemovePTO:", error);
-    toast.error("Failed to remove PTO");
+    toast.error("Unexpected error while removing PTO");
   }
 };
 
