@@ -377,21 +377,22 @@ const recurringOfficers = recurringData
     notes?: string;
   }) => {
     if (type === "recurring") {
-      // First, get the original recurring schedule to compare
+      // First, get the original recurring schedule to compare (only position_name exists here)
       const { data: recurringSchedule, error: recurringError } = await supabase
         .from("recurring_schedules")
-        .select("position_name, unit_number, notes")
+        .select("position_name")
         .eq("id", scheduleId)
         .single();
 
       if (recurringError) throw recurringError;
 
       // Check if we're actually making changes that warrant an exception
+      // Only position_name exists in recurring_schedules, unit_number and notes are exception-only fields
       const isPositionChanged = positionName !== recurringSchedule?.position_name;
-      const isUnitNumberChanged = unitNumber !== (recurringSchedule?.unit_number || null);
-      const isNotesChanged = notes !== (recurringSchedule?.notes || null);
       
-      const needsException = isPositionChanged || isUnitNumberChanged || isNotesChanged;
+      // For recurring officers, unitNumber and notes changes always create exceptions
+      // since these fields don't exist in their recurring schedule
+      const needsException = isPositionChanged || unitNumber || notes;
 
       if (needsException) {
         // Check if an exception already exists for this officer/date/shift
@@ -436,7 +437,7 @@ const recurringOfficers = recurringData
           if (error) throw error;
         }
       } else {
-        // No changes needed, or reverting to original values - delete any existing exception
+        // No changes needed - delete any existing exception
         const { data: existingExceptions, error: checkError } = await supabase
           .from("schedule_exceptions")
           .select("id")
