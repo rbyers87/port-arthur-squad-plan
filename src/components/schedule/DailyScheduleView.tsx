@@ -1314,44 +1314,46 @@ export const DailyScheduleView = ({
                               {officer.position || "Special Assignment"}
                             </Badge>
                             {canEdit && (
-                              <div className="flex gap-1 justify-center">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleEditClick(officer)}
-                                  title="Edit Position"
-                                  className="h-6 w-6"
-                                >
-                                  <Edit2 className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setSelectedOfficer({
-                                      officerId: officer.officerId,
-                                      name: officer.name,
-                                      scheduleId: officer.scheduleId,
-                                      type: officer.type,
-                                    });
-                                    setSelectedShift(officer.shift);
-                                    setPtoDialogOpen(true);
-                                  }}
-                                  title="Assign PTO"
-                                  className="h-6 w-6"
-                                >
-                                  <Clock className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => removeOfficerMutation.mutate(officer)}
-                                  disabled={removeOfficerMutation.isPending}
-                                  title="Remove Officer"
-                                  className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
+  <div className="flex gap-1 justify-center">
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => handleEditClick(officer)}
+      title="Edit Position"
+      className="h-6 w-6"
+    >
+      <Edit2 className="h-3 w-3" />
+    </Button>
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => {
+        setSelectedOfficer({
+          officerId: officer.officerId,
+          name: officer.name,
+          scheduleId: officer.scheduleId,
+          type: officer.type,
+        });
+        setSelectedShift(officer.shift);
+        setPtoDialogOpen(true);
+      }}
+      title="Assign PTO"
+      className="h-6 w-6"
+    >
+      <Clock className="h-3 w-3" />
+    </Button>
+    {/* DELETE BUTTON for Special Assignment exception officers */}
+    {officer.type === "exception" && (
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => removeOfficerMutation.mutate(officer)}
+        disabled={removeOfficerMutation.isPending}
+        title="Remove Added Shift"
+        className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+      >
+        <Trash2 className="h-3 w-3" />
+      </Button>
                               </div>
                             )}
                           </div>
