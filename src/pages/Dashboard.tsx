@@ -252,8 +252,8 @@ const Dashboard = () => {
             </TabsList>
 
             <TabsContent value="daily" className="space-y-6">
-              <div className="p-4 border rounded-lg bg-yellow-50">
-                <h3 className="text-lg font-semibold mb-4 text-yellow-800">Daily Schedule - Debug View</h3>
+            //  <div className="p-4 border rounded-lg bg-yellow-50">
+            //    <h3 className="text-lg font-semibold mb-4 text-yellow-800">Daily Schedule - Debug View</h3>
                 <DailyScheduleView 
                   selectedDate={new Date()} 
                   isAdminOrSupervisor={false} 
