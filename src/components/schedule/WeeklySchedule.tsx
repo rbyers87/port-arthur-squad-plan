@@ -401,7 +401,7 @@ if (exception) {
         console.log("📊 Found shift_type_id from working schedule:", shiftTypeId);
       } else {
         // STRATEGY 3: Try to get from recurring schedule
-        const dayOfWeek = new Date(date).getDay();
+        const dayOfWeek = parseISO(date).getDay();
         const { data: recurringSchedule, error: recurringError } = await supabase
           .from("recurring_schedules")
           .select("shift_type_id")
@@ -525,7 +525,7 @@ if (exception) {
         >
           <div className="space-y-1 flex-1">
             <p className="font-medium">{daysOfWeek[dayOfWeek]}</p>
-            <p className="text-sm text-muted-foreground">{format(new Date(date), "MMM d")}</p>
+            <p className="text-sm text-muted-foreground">{format(parseISO(date), "MMM d")}</p>
           </div>
           
           {shiftInfo ? (
