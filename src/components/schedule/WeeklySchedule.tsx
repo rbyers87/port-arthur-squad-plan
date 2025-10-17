@@ -166,10 +166,7 @@ const dailySchedules = dates.map((date, idx) => {
   const currentDate = parseISO(date);        // parse ISO (yyyy-MM-dd) safely
   const dayOfWeek = currentDate.getDay();
   
-  // ADD MONTHLY VIEW DEBUGGING
-  if (activeView === "monthly") {
-    console.log(`📅 MONTHLY VIEW - Date: ${date}, Day of Week: ${dayOfWeek} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]}), Recurring check for day: ${dayOfWeek}`);
-  }
+
   
   const exception = exceptionsData?.find(e => e.date === date);
   
@@ -183,11 +180,6 @@ const dailySchedules = dates.map((date, idx) => {
     
     const isAfterStart = currentDate >= scheduleStartDate;
     const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
-    
-    // ADD DEBUGGING FOR RECURRING MATCH
-    if (activeView === "monthly" && r.day_of_week === dayOfWeek) {
-      console.log(`   🔍 Recurring schedule: ${r.shift_types?.name}, DB day_of_week: ${r.day_of_week}, Matches: ${r.day_of_week === dayOfWeek}, Active: ${isAfterStart && isBeforeEnd}`);
-    }
     
     return isAfterStart && isBeforeEnd;
   });
