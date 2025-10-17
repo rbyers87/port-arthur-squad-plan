@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
+import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO } from "date-fns";
 import { Calendar, Plus, Edit2, Clock, Trash2, ChevronLeft, ChevronRight, Grid, Calendar as CalendarIcon } from "lucide-react";
 import { ScheduleManagementDialog } from "./ScheduleManagementDialog";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
@@ -162,10 +162,9 @@ if (recurringError) {
       }
 
       // Build schedule for each day
-      // Build schedule for each day
 const dailySchedules = dates.map((date, idx) => {
-  const currentDate = new Date(date);
-  const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const currentDate = parseISO(date);        // parse ISO (yyyy-MM-dd) safely
+  const dayOfWeek = currentDate.getDay();
   
   // ADD MONTHLY VIEW DEBUGGING
   if (activeView === "monthly") {
@@ -179,8 +178,8 @@ const dailySchedules = dates.map((date, idx) => {
     if (r.day_of_week !== dayOfWeek) return false;
     
     // Check if the recurring schedule is active on this specific date
-    const scheduleStartDate = new Date(r.start_date);
-    const scheduleEndDate = r.end_date ? new Date(r.end_date) : null;
+    const scheduleStartDate = parseISO(r.start_date);
+    const scheduleEndDate = r.end_date ? parseISO(r.end_date) : null;
     
     const isAfterStart = currentDate >= scheduleStartDate;
     const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
