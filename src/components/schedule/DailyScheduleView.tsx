@@ -500,10 +500,52 @@ export const DailyScheduleView = ({
   });
 
   const addOfficerMutation = useMutation({
-    mutationFn: async ({ officerId, shiftId, position, unitNumber, notes }: { officerId: string; shiftId: string; position: string; unitNumber?: string; notes?: string }) => {
+  mutationFn: async ({ officerId, shiftId, position, unitNumber, notes }: { officerId: string; shiftId: string; position: string; unitNumber?: string; notes?: string }) => {
+    // First, check ALL exceptions for this officer/date/shift (including duplicates)
+    const { data: existingExceptions, error: checkError } = await supabase
+      .from("schedule_exceptions")
+      .select("id, position_name, unit_number, notes, is_off")
+      .eq("officer_id", officerId)
+      .eq("date", dateStr)
+      .eq("shift_type_id", shiftId)
+      .eq("is_off", false);
+
+    if (checkError) throw checkError;
+
+    if (existingExceptions && existingExceptions.length > 0) {
+      // If multiple duplicates exist, update the first one and delete others
+      if (existingExceptions.length > 1) {
+        // Keep the first record, delete the rest
+        const recordsToDelete = existingExceptions.slice(1);
+        
+        for (const record of recordsToDelete) {
+          const { error: deleteError } = await supabase
+            .from("schedule_exceptions")
+            .delete()
+            .eq("id", record.id);
+          
+          if (deleteError) throw deleteError;
+        }
+      }
+      
+      // Update the remaining record
       const { error } = await supabase
         .from("schedule_exceptions")
-        .upsert({
+        .update({
+          position_name: position,
+          unit_number: unitNumber,
+          notes: notes,
+          custom_start_time: null,
+          custom_end_time: null
+        })
+        .eq("id", existingExceptions[0].id);
+      
+      if (error) throw error;
+    } else {
+      // Insert new exception
+      const { error } = await supabase
+        .from("schedule_exceptions")
+        .insert({
           officer_id: officerId,
           date: dateStr,
           shift_type_id: shiftId,
@@ -513,21 +555,20 @@ export const DailyScheduleView = ({
           notes: notes,
           custom_start_time: null,
           custom_end_time: null
-        }, {
-          onConflict: 'officer_id,date,shift_type_id'
         });
-
+      
       if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Officer added to schedule");
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      setAddOfficerDialogOpen(false);
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to add officer");
-    },
-  });
+    }
+  },
+  onSuccess: () => {
+    toast.success("Officer added to schedule");
+    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    setAddOfficerDialogOpen(false);
+  },
+  onError: (error: any) => {
+    toast.error(error.message || "Failed to add officer");
+  },
+});
 
   const removePTOMutation = useMutation({
     mutationFn: async (ptoRecord: any) => {
@@ -1545,16 +1586,52 @@ const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel }: any) => {
   ];
 
   const addOfficerMutation = useMutation({
-    mutationFn: async () => {
-      const finalPosition = position === "Other (Custom)" ? customPosition : position;
-      
-      if (!finalPosition) {
-        throw new Error("Please select or enter a position");
-      }
+  mutationFn: async () => {
+    const finalPosition = position === "Other (Custom)" ? customPosition : position;
+    
+    if (!finalPosition) {
+      throw new Error("Please select or enter a position");
+    }
 
+    // Check for existing exceptions (including duplicates)
+    const { data: existingExceptions, error: checkError } = await supabase
+      .from("schedule_exceptions")
+      .select("id, is_off")
+      .eq("officer_id", selectedOfficerId)
+      .eq("date", date)
+      .eq("shift_type_id", shiftId)
+      .eq("is_off", false);
+
+    if (checkError) throw checkError;
+
+    if (existingExceptions && existingExceptions.length > 0) {
+      // Handle duplicates by keeping first and deleting others
+      if (existingExceptions.length > 1) {
+        const recordsToDelete = existingExceptions.slice(1);
+        for (const record of recordsToDelete) {
+          await supabase
+            .from("schedule_exceptions")
+            .delete()
+            .eq("id", record.id);
+        }
+      }
+      
+      // Update the remaining record
       const { error } = await supabase
         .from("schedule_exceptions")
-        .upsert({
+        .update({
+          position_name: finalPosition,
+          unit_number: unitNumber || null,
+          notes: notes || null
+        })
+        .eq("id", existingExceptions[0].id);
+
+      if (error) throw error;
+    } else {
+      // Insert new
+      const { error } = await supabase
+        .from("schedule_exceptions")
+        .insert({
           officer_id: selectedOfficerId,
           date: date,
           shift_type_id: shiftId,
@@ -1564,12 +1641,11 @@ const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel }: any) => {
           notes: notes || null,
           custom_start_time: null,
           custom_end_time: null
-        }, {
-          onConflict: 'officer_id,date,shift_type_id'
         });
 
       if (error) throw error;
-    },
+    }
+  },
     onSuccess: () => {
       toast.success("Officer added to schedule");
       onSuccess();
