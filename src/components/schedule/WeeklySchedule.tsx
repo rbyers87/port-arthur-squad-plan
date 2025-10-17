@@ -354,20 +354,27 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   };
 
   const handleRemovePTO = (schedule: any, date: string) => {
-    if (!schedule.hasPTO || !schedule.ptoData) return;
+  if (!schedule.hasPTO || !schedule.ptoData) return;
 
-    const ptoData = {
-      id: schedule.ptoData.id,
-      officerId: selectedOfficerId,
-      date: date,
-      shiftTypeId: schedule.shift.id,
-      ptoType: schedule.ptoData.ptoType,
-      startTime: schedule.ptoData.startTime,
-      endTime: schedule.ptoData.endTime
-    };
+  // ADD THIS SAFETY CHECK:
+  if (!schedule.shift || !schedule.shift.id) {
+    console.error("Missing shift data for PTO removal:", schedule);
+    toast.error("Cannot remove PTO: Missing shift information");
+    return;
+  }
 
-    removePTOMutation.mutate(ptoData);
+  const ptoData = {
+    id: schedule.ptoData.id,
+    officerId: selectedOfficerId,
+    date: date,
+    shiftTypeId: schedule.shift.id, // This was causing the error
+    ptoType: schedule.ptoData.ptoType,
+    startTime: schedule.ptoData.startTime,
+    endTime: schedule.ptoData.endTime
   };
+
+  removePTOMutation.mutate(ptoData);
+};
 
   // Function to refresh the schedule data
   const refreshSchedule = () => {
