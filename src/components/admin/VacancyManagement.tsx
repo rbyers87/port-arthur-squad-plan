@@ -13,6 +13,7 @@ import { Calendar as CalendarIcon, Plus, Users } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { UnderstaffedDetection } from "./UnderstaffedDetection";
 
 export const VacancyManagement = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
