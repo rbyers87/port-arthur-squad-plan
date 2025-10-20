@@ -102,100 +102,102 @@ export const DailyScheduleView = ({
   };
 
   // Auto-assign defaults function
-  const handleApplyDefaults = async () => {
-    if (!scheduleData) return;
+  // In your handleApplyDefaults function in DailyScheduleView.tsx, update the data mapping:
+
+const handleApplyDefaults = async () => {
+  if (!scheduleData) return;
+  
+  setIsApplyingDefaults(true);
+  try {
+    // Combine all shifts from the schedule data with proper table references
+    const allShifts: ScheduleShift[] = [];
     
-    setIsApplyingDefaults(true);
-    try {
-      // Combine all shifts from the schedule data
-      const allShifts: ScheduleShift[] = [];
-      
-      scheduleData.forEach((shiftData: any) => {
-        // Add supervisors
-        shiftData.supervisors.forEach((officer: any) => {
-          allShifts.push({
-            id: officer.scheduleId,
-            officer_id: officer.officerId,
-            date: dateStr,
-            position: officer.position || '',
-            unit: officer.unitNumber || '',
-            notes: officer.notes,
-            profiles: {
-              id: officer.officerId,
-              full_name: officer.name,
-              badge_number: officer.badge,
-              rank: officer.rank
-            },
-            shift_types: {
-              id: shiftData.shift.id,
-              name: shiftData.shift.name,
-              start_time: shiftData.shift.start_time,
-              end_time: shiftData.shift.end_time
-            }
-          });
-        });
-        
-        // Add regular officers
-        shiftData.officers.forEach((officer: any) => {
-          allShifts.push({
-            id: officer.scheduleId,
-            officer_id: officer.officerId,
-            date: dateStr,
-            position: officer.position || '',
-            unit: officer.unitNumber || '',
-            notes: officer.notes,
-            profiles: {
-              id: officer.officerId,
-              full_name: officer.name,
-              badge_number: officer.badge,
-              rank: officer.rank
-            },
-            shift_types: {
-              id: shiftData.shift.id,
-              name: shiftData.shift.name,
-              start_time: shiftData.shift.start_time,
-              end_time: shiftData.shift.end_time
-            }
-          });
-        });
-        
-        // Add special assignment officers
-        shiftData.specialAssignmentOfficers.forEach((officer: any) => {
-          allShifts.push({
-            id: officer.scheduleId,
-            officer_id: officer.officerId,
-            date: dateStr,
-            position: officer.position || '',
-            unit: officer.unitNumber || '',
-            notes: officer.notes,
-            profiles: {
-              id: officer.officerId,
-              full_name: officer.name,
-              badge_number: officer.badge,
-              rank: officer.rank
-            },
-            shift_types: {
-              id: shiftData.shift.id,
-              name: shiftData.shift.name,
-              start_time: shiftData.shift.start_time,
-              end_time: shiftData.shift.end_time
-            }
-          });
+    scheduleData.forEach((shiftData: any) => {
+      // Process supervisors
+      shiftData.supervisors.forEach((officer: any) => {
+        allShifts.push({
+          id: officer.scheduleId,
+          officer_id: officer.officerId,
+          date: dateStr,
+          position: officer.position || '',
+          unit: officer.unitNumber || '',
+          notes: officer.notes,
+          profiles: {
+            id: officer.officerId,
+            full_name: officer.name,
+            badge_number: officer.badge,
+            rank: officer.rank
+          },
+          shift_types: {
+            id: shiftData.shift.id,
+            name: shiftData.shift.name,
+            start_time: shiftData.shift.start_time,
+            end_time: shiftData.shift.end_time
+          }
         });
       });
-
-      await bulkApplyDefaults(allShifts, dateStr);
       
-      // Invalidate and refetch the schedule data
-      await queryClient.invalidateQueries({ queryKey: ["daily-schedule", dateStr] });
-      toast.success("Default assignments applied successfully");
-    } catch (error) {
-      toast.error("Failed to apply default assignments");
-      console.error(error);
-    } finally {
-      setIsApplyingDefaults(false);
-    }
-  };
+      // Process regular officers
+      shiftData.officers.forEach((officer: any) => {
+        allShifts.push({
+          id: officer.scheduleId,
+          officer_id: officer.officerId,
+          date: dateStr,
+          position: officer.position || '',
+          unit: officer.unitNumber || '',
+          notes: officer.notes,
+          profiles: {
+            id: officer.officerId,
+            full_name: officer.name,
+            badge_number: officer.badge,
+            rank: officer.rank
+          },
+          shift_types: {
+            id: shiftData.shift.id,
+            name: shiftData.shift.name,
+            start_time: shiftData.shift.start_time,
+            end_time: shiftData.shift.end_time
+          }
+        });
+      });
+      
+      // Process special assignment officers
+      shiftData.specialAssignmentOfficers.forEach((officer: any) => {
+        allShifts.push({
+          id: officer.scheduleId,
+          officer_id: officer.officerId,
+          date: dateStr,
+          position: officer.position || '',
+          unit: officer.unitNumber || '',
+          notes: officer.notes,
+          profiles: {
+            id: officer.officerId,
+            full_name: officer.name,
+            badge_number: officer.badge,
+            rank: officer.rank
+          },
+          shift_types: {
+            id: shiftData.shift.id,
+            name: shiftData.shift.name,
+            start_time: shiftData.shift.start_time,
+            end_time: shiftData.shift.end_time
+          }
+        });
+      });
+    });
+
+    await bulkApplyDefaults(allShifts, dateStr);
+    
+    // Invalidate and refetch the schedule data
+    await queryClient.invalidateQueries({ queryKey: ["daily-schedule", dateStr] });
+    toast.success("Default assignments applied successfully");
+  } catch (error) {
+    toast.error("Failed to apply default assignments");
+    console.error(error);
+  } finally {
+    setIsApplyingDefaults(false);
+  }
+};
 
   const { data: scheduleData, isLoading } = useQuery({
   queryKey: ["daily-schedule", dateStr],
