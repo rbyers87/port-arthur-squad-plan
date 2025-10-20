@@ -186,6 +186,8 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
 
   const createProfileMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      const defaultPosition = data.default_position === "none" ? null : data.default_position;
+      
       const response = await fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/create-user', {
         method: 'POST',
         headers: {
