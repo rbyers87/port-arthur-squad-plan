@@ -227,107 +227,103 @@ const UnderstaffedDetection = () => {
   });
 
   const createAlertMutation = useMutation({
-    mutationFn: async (shiftData: any) => {
-      // Check if alert already exists
-      const existingAlert = existingAlerts?.find(alert => 
-        alert.date === shiftData.date && 
-        alert.shift_type_id === shiftData.shift_type_id
-      );
+  mutationFn: async (shiftData: any) => {
+    // Check if alert already exists
+    const existingAlert = existingAlerts?.find(alert => 
+      alert.date === shiftData.date && 
+      alert.shift_type_id === shiftData.shift_type_id
+    );
 
-      if (existingAlert) {
-        throw new Error("Alert already exists for this shift");
-      }
+    if (existingAlert) {
+      throw new Error("Alert already exists for this shift");
+    }
 
-      const { data, error } = await supabase
-        .from("vacancy_alerts")
-        .insert({
-          date: shiftData.date,
-          shift_type_id: shiftData.shift_type_id,
-          current_staffing: shiftData.current_staffing,
-          minimum_required: shiftData.minimum_required,
-          current_supervisors: shiftData.current_supervisors,
-          current_officers: shiftData.current_officers,
-          min_supervisors: shiftData.min_supervisors,
-          min_officers: shiftData.min_officers,
-          status: "open",
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from("vacancy_alerts")
+      .insert({
+        date: shiftData.date,
+        shift_type_id: shiftData.shift_type_id,
+        current_staffing: shiftData.current_staffing,
+        minimum_required: shiftData.minimum_required,
+        status: "open",
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
-      queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
-      toast.success("Vacancy alert created successfully");
-    },
-    onError: (error) => {
-      toast.error("Failed to create alert: " + error.message);
-    },
-  });
+    if (error) throw error;
+    return data;
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+    queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+    toast.success("Vacancy alert created successfully");
+  },
+  onError: (error) => {
+    toast.error("Failed to create alert: " + error.message);
+  },
+});
 
   const sendAlertMutation = useMutation({
-    mutationFn: async (alertData: any) => {
-      // Get all officers who have text notifications enabled
-      const { data: officers, error: officersError } = await supabase
-        .from("profiles")
-        .select("id, email, phone, notification_preferences")
-        .eq("notification_preferences->>receiveTexts", "true");
+  mutationFn: async (alertData: any) => {
+    // Get all officers who have text notifications enabled
+    const { data: officers, error: officersError } = await supabase
+      .from("profiles")
+      .select("id, email, phone, notification_preferences")
+      .eq("notification_preferences->>receiveTexts", "true");
 
-      if (officersError) throw officersError;
+    if (officersError) throw officersError;
 
-      // Send email notifications to all officers
-      const emailPromises = officers?.map(async (officer) => {
-        return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+    // Send email notifications to all officers
+    const emailPromises = officers?.map(async (officer) => {
+      return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: officer.email,
+          subject: `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
+          message: `A shift vacancy has been identified:\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}\n\nPlease sign up if available.`,
+          alertId: alertData.alertId
+        }),
+      });
+    }) || [];
+
+    // Send text notifications to officers with phone numbers and text preferences
+    const textPromises = officers
+      ?.filter(officer => officer.phone && officer.notification_preferences?.receiveTexts)
+      .map(async (officer) => {
+        return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            to: officer.email,
-            subject: `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
-            message: `A shift vacancy has been identified:\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_supervisors} supervisors, ${alertData.current_officers} officers\nRequired: ${alertData.min_supervisors} supervisors, ${alertData.min_officers} officers\n\nPlease sign up if available.`,
-            alertId: alertData.alertId
+            to: officer.phone,
+            message: `Vacancy Alert: ${format(new Date(alertData.date), "MMM d")} - ${alertData.shift_types.name}. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Sign up if available.`
           }),
         });
       }) || [];
 
-      // Send text notifications to officers with phone numbers and text preferences
-      const textPromises = officers
-        ?.filter(officer => officer.phone && officer.notification_preferences?.receiveTexts)
-        .map(async (officer) => {
-          return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: officer.phone,
-              message: `Vacancy Alert: ${format(new Date(alertData.date), "MMM d")} - ${alertData.shift_types.name}. Staffing: ${alertData.current_supervisors}/${alertData.min_supervisors} supervisors, ${alertData.current_officers}/${alertData.min_officers} officers. Sign up if available.`
-            }),
-          });
-        }) || [];
+    await Promise.all([...emailPromises, ...textPromises]);
+    
+    // Update alert status to indicate notification was sent
+    const { error } = await supabase
+      .from("vacancy_alerts")
+      .update({ notification_sent: true })
+      .eq("id", alertData.alertId);
 
-      await Promise.all([...emailPromises, ...textPromises]);
-      
-      // Update alert status to indicate notification was sent
-      const { error } = await supabase
-        .from("vacancy_alerts")
-        .update({ notification_sent: true })
-        .eq("id", alertData.alertId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Alerts sent successfully to all officers");
-      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
-    },
-    onError: (error) => {
-      toast.error("Failed to send alerts: " + error.message);
-    },
-  });
+    if (error) throw error;
+  },
+  onSuccess: () => {
+    toast.success("Alerts sent successfully to all officers");
+    queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+  },
+  onError: (error) => {
+    toast.error("Failed to send alerts: " + error.message);
+  },
+});
 
   const isAlertCreated = (shift: any) => {
     return existingAlerts?.some(alert => 
