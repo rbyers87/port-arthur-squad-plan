@@ -234,11 +234,23 @@ export const usePDFExport = () => {
       // Start content lower to maintain spacing
       yPosition = 40;
 
-      // Supervisors section - removed the SUPERVISOR table title and space
+      // Supervisors section - FIXED: Filter out full-day PTO supervisors
       if (shiftData.supervisors && shiftData.supervisors.length > 0) {
         const supervisorsData: any[] = [];
 
         shiftData.supervisors.forEach((supervisor: any) => {
+          // Skip supervisors with full-day PTO
+          const hasFullDayPTO = supervisor.hasPTO && 
+            (supervisor.ptoData?.isFullShift === true || 
+             (!supervisor.ptoData?.startTime && !supervisor.ptoData?.endTime) ||
+             (supervisor.ptoData?.startTime === supervisor.shift?.start_time && 
+              supervisor.ptoData?.endTime === supervisor.shift?.end_time));
+          
+          if (hasFullDayPTO) {
+            console.log(`PDF Export - Filtering out supervisor ${supervisor.name} - full day PTO`);
+            return; // Skip this supervisor
+          }
+          
           supervisorsData.push([
             supervisor?.name ? supervisor.name.toUpperCase() : "UNKNOWN",
             supervisor?.rank || "",
@@ -248,18 +260,31 @@ export const usePDFExport = () => {
           ]);
         });
 
-        const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
-        yPosition = drawCompactTable(pdf, officersHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
-        
-        yPosition += 4;
+        // Only draw the table if there are supervisors after filtering
+        if (supervisorsData.length > 0) {
+          const officersHeaders = ["SUPERVISORS", "BEAT", "BADGE #", "UNIT", "NOTES"];
+          yPosition = drawCompactTable(pdf, officersHeaders, supervisorsData, yPosition, { left: 15, right: 15 }, COLORS.primary);
+          yPosition += 4;
+        }
       }
 
-      // ... rest of your code remains exactly the same ...
-      // SECTION 1: REGULAR OFFICERS TABLE
+      // SECTION 1: REGULAR OFFICERS TABLE - FIXED: Filter out full-day PTO officers
       const regularOfficersData: any[] = [];
       
       if (shiftData.officers && shiftData.officers.length > 0) {
         shiftData.officers.forEach((officer: any) => {
+          // Skip officers with full-day PTO
+          const hasFullDayPTO = officer.hasPTO && 
+            (officer.ptoData?.isFullShift === true || 
+             (!officer.ptoData?.startTime && !officer.ptoData?.endTime) ||
+             (officer.ptoData?.startTime === officer.shift?.start_time && 
+              officer.ptoData?.endTime === officer.shift?.end_time));
+          
+          if (hasFullDayPTO) {
+            console.log(`PDF Export - Filtering out officer ${officer.name} - full day PTO`);
+            return; // Skip this officer
+          }
+          
           regularOfficersData.push([
             officer?.name ? officer.name.toUpperCase() : "UNKNOWN",
             officer?.position || "",
@@ -269,15 +294,30 @@ export const usePDFExport = () => {
           ]);
         });
 
-        const officersHeaders = ["OFFICERS", "BEAT", "BADGE #", "UNIT", "NOTES"];
-        yPosition = drawCompactTable(pdf, officersHeaders, regularOfficersData, yPosition, { left: 15, right: 15 }, COLORS.primary);
+        // Only draw the table if there are officers after filtering
+        if (regularOfficersData.length > 0) {
+          const officersHeaders = ["OFFICERS", "BEAT", "BADGE #", "UNIT", "NOTES"];
+          yPosition = drawCompactTable(pdf, officersHeaders, regularOfficersData, yPosition, { left: 15, right: 15 }, COLORS.primary);
+        }
       }
 
-      // SECTION 2: SPECIAL ASSIGNMENT OFFICERS TABLE
+      // SECTION 2: SPECIAL ASSIGNMENT OFFICERS TABLE - FIXED: Filter out full-day PTO officers
       const specialAssignmentData: any[] = [];
       
       if (shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0) {
         shiftData.specialAssignmentOfficers.forEach((officer: any) => {
+          // Skip officers with full-day PTO
+          const hasFullDayPTO = officer.hasPTO && 
+            (officer.ptoData?.isFullShift === true || 
+             (!officer.ptoData?.startTime && !officer.ptoData?.endTime) ||
+             (officer.ptoData?.startTime === officer.shift?.start_time && 
+              officer.ptoData?.endTime === officer.shift?.end_time));
+          
+          if (hasFullDayPTO) {
+            console.log(`PDF Export - Filtering out special assignment ${officer.name} - full day PTO`);
+            return; // Skip this officer
+          }
+          
           specialAssignmentData.push([
             officer?.name ? officer.name.toUpperCase() : "UNKNOWN",
             officer?.position || "Special",
@@ -287,8 +327,11 @@ export const usePDFExport = () => {
           ]);
         });
 
-        const specialHeaders = ["SPECIAL ASSIGNMENT OFFICERS", "ASSIGNMENT", "BADGE #", "UNIT", "NOTES"];
-        yPosition = drawCompactTable(pdf, specialHeaders, specialAssignmentData, yPosition, { left: 15, right: 15 }, COLORS.accent);
+        // Only draw the table if there are officers after filtering
+        if (specialAssignmentData.length > 0) {
+          const specialHeaders = ["SPECIAL ASSIGNMENT OFFICERS", "ASSIGNMENT", "BADGE #", "UNIT", "NOTES"];
+          yPosition = drawCompactTable(pdf, specialHeaders, specialAssignmentData, yPosition, { left: 15, right: 15 }, COLORS.accent);
+        }
       }
 
       // SECTION 3: PTO/OFF DUTY TABLE
@@ -311,11 +354,31 @@ export const usePDFExport = () => {
         yPosition = drawCompactTable(pdf, ptoHeaders, ptoData, yPosition, { left: 15, right: 15 }, COLORS.warning);
       }
 
-      // Compact staffing summary at bottom
+      // Compact staffing summary at bottom - FIXED: Update counts after filtering
       yPosition += 5;
-      const currentSupervisors = shiftData.currentSupervisors || 0;
+      
+      // Recalculate counts after filtering out full-day PTO officers
+      const filteredSupervisors = shiftData.supervisors?.filter((supervisor: any) => {
+        const hasFullDayPTO = supervisor.hasPTO && 
+          (supervisor.ptoData?.isFullShift === true || 
+           (!supervisor.ptoData?.startTime && !supervisor.ptoData?.endTime) ||
+           (supervisor.ptoData?.startTime === supervisor.shift?.start_time && 
+            supervisor.ptoData?.endTime === supervisor.shift?.end_time));
+        return !hasFullDayPTO;
+      }) || [];
+      
+      const filteredOfficers = shiftData.officers?.filter((officer: any) => {
+        const hasFullDayPTO = officer.hasPTO && 
+          (officer.ptoData?.isFullShift === true || 
+           (!officer.ptoData?.startTime && !officer.ptoData?.endTime) ||
+           (officer.ptoData?.startTime === officer.shift?.start_time && 
+            officer.ptoData?.endTime === officer.shift?.end_time));
+        return !hasFullDayPTO;
+      }) || [];
+
+      const currentSupervisors = filteredSupervisors.length;
       const minSupervisors = shiftData.minSupervisors || 0;
-      const currentOfficers = shiftData.currentOfficers || 0;
+      const currentOfficers = filteredOfficers.length;
       const minOfficers = shiftData.minOfficers || 0;
       
       pdf.setFontSize(7);

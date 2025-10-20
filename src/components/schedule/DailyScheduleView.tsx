@@ -231,12 +231,12 @@ export const DailyScheduleView = ({
             customTime: customTime,
             hasPTO: !!ptoException,
             ptoData: ptoException ? {
-              id: ptoException.id,
-              ptoType: ptoException.reason,
-              startTime: ptoException.custom_start_time || shift.start_time,
-              endTime: ptoException.custom_end_time || shift.end_time,
-              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-            } : undefined,
+ 						 id: ptoException.id,
+ 							ptoType: ptoException.reason,
+ 						 startTime: ptoException.custom_start_time || shift.start_time,
+ 						 endTime: ptoException.custom_end_time || shift.end_time,
+ 						 isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+							} : undefined,
             shift: shift
           };
         })
@@ -295,12 +295,12 @@ export const DailyScheduleView = ({
             customTime: customTime,
             hasPTO: !!ptoException,
             ptoData: ptoException ? {
-              id: ptoException.id,
-              ptoType: ptoException.reason,
-              startTime: ptoException.custom_start_time || shift.start_time,
-              endTime: ptoException.custom_end_time || shift.end_time,
-              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-            } : undefined,
+ 						 id: ptoException.id,
+						  ptoType: ptoException.reason,
+						  startTime: ptoException.custom_start_time || shift.start_time,
+						  endTime: ptoException.custom_end_time || shift.end_time,
+						  isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+							} : undefined,
             shift: shift
           };
         })
