@@ -4,15 +4,37 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Mail, Plus } from "lucide-react";
+import { AlertTriangle, Mail, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { useState } from "react";
 
 export const UnderstaffedDetection = () => {
   const queryClient = useQueryClient();
+  const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
 
-  const { data: understaffedShifts, isLoading, error } = useQuery({
-    queryKey: ["understaffed-shifts-detection"],
+  // Get all shift types for the dropdown
+  const { data: shiftTypes } = useQuery({
+    queryKey: ["shift-types-for-detection"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shift_types")
+        .select("*")
+        .order("start_time");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { 
+    data: understaffedShifts, 
+    isLoading, 
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ["understaffed-shifts-detection", selectedShiftId],
     queryFn: async () => {
       console.log("Starting understaffed shift detection...");
       
@@ -29,7 +51,7 @@ export const UnderstaffedDetection = () => {
         });
       }
 
-      console.log("Checking dates:", dates);
+      console.log("Checking dates:", dates, "for shift:", selectedShiftId);
 
       try {
         const allUnderstaffedShifts = [];
@@ -38,12 +60,23 @@ export const UnderstaffedDetection = () => {
         for (const { date, dayOfWeek } of dates) {
           console.log(`Checking date: ${date}, dayOfWeek: ${dayOfWeek}`);
 
-          // Get all shift types
-          const { data: shiftTypes, error: shiftError } = await supabase
-            .from("shift_types")
-            .select("*")
-            .order("start_time");
-          if (shiftError) throw shiftError;
+          // Get all shift types or just the selected one
+          let shiftTypesToCheck;
+          if (selectedShiftId === "all") {
+            const { data, error: shiftError } = await supabase
+              .from("shift_types")
+              .select("*")
+              .order("start_time");
+            if (shiftError) throw shiftError;
+            shiftTypesToCheck = data;
+          } else {
+            const { data, error: shiftError } = await supabase
+              .from("shift_types")
+              .select("*")
+              .eq("id", selectedShiftId);
+            if (shiftError) throw shiftError;
+            shiftTypesToCheck = data;
+          }
 
           // Get minimum staffing requirements for this day of week
           const { data: minimumStaffing, error: minError } = await supabase
@@ -108,7 +141,7 @@ export const UnderstaffedDetection = () => {
           const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
 
           // Check each shift type for understaffing
-          for (const shift of shiftTypes) {
+          for (const shift of shiftTypesToCheck || []) {
             const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
             const minSupervisors = minStaff?.minimum_supervisors || 1;
             const minOfficers = minStaff?.minimum_officers || 0;
@@ -317,6 +350,18 @@ export const UnderstaffedDetection = () => {
     },
   });
 
+  const refreshMutation = useMutation({
+    mutationFn: async () => {
+      await refetch();
+    },
+    onSuccess: () => {
+      toast.success("Rescanned for understaffed shifts");
+    },
+    onError: (error) => {
+      toast.error("Failed to refresh: " + error.message);
+    },
+  });
+
   const isAlertCreated = (shift: any) => {
     return existingAlerts?.some(alert => 
       alert.date === shift.date && 
@@ -360,6 +405,10 @@ export const UnderstaffedDetection = () => {
     });
   };
 
+  const handleRefresh = () => {
+    refreshMutation.mutate();
+  };
+
   if (error) {
     console.error("Query error:", error);
     return (
@@ -399,19 +448,61 @@ export const UnderstaffedDetection = () => {
               Automatically detect shifts with insufficient staffing based on minimum staffing requirements
             </CardDescription>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleCreateAllAlerts}
-            disabled={createAlertMutation.isPending || !understaffedShifts?.length}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Create All Alerts
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={refreshMutation.isPending || isLoading}
+              title="Rescan for understaffed shifts"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshMutation.isPending ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleCreateAllAlerts}
+              disabled={createAlertMutation.isPending || !understaffedShifts?.length}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create All Alerts
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
+        {/* Shift Selection Dropdown */}
+        <div className="mb-6">
+          <Label htmlFor="shift-select" className="text-sm font-medium mb-2 block">
+            Select Shift to Scan
+          </Label>
+          <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a shift to scan" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Shifts</SelectItem>
+              {shiftTypes?.map((shift) => (
+                <SelectItem key={shift.id} value={shift.id}>
+                  {shift.name} ({shift.start_time} - {shift.end_time})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Scanning next 7 days for {selectedShiftId === "all" ? "all shifts" : shiftTypes?.find(s => s.id === selectedShiftId)?.name}
+          </p>
+        </div>
+
         {!understaffedShifts || understaffedShifts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No understaffed shifts found in the next 7 days.</p>
+          <div className="text-center py-8">
+            <p className="text-sm text-muted-foreground">
+              No understaffed shifts found in the next 7 days for{" "}
+              {selectedShiftId === "all" 
+                ? "all shifts" 
+                : shiftTypes?.find(s => s.id === selectedShiftId)?.name
+              }.
+            </p>
+          </div>
         ) : (
           <div className="space-y-4">
             {understaffedShifts.map((shift, index) => {
