@@ -857,13 +857,13 @@ export const DailyScheduleView = ({
                     </p>
                   </div>
                 </div>
+                //This section changes the badges on the roster, I changed recurring to regular
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   {officer.customTime && (
                     <Badge variant="secondary" className="text-xs">
                       {officer.customTime}
                     </Badge>
                   )}
-                  //changed the Recurring badge to read as Regular
                   {officer.type === "recurring" && (
                     <Badge variant="secondary" className="text-xs">
                       Regular
