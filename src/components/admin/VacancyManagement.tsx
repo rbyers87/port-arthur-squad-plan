@@ -440,24 +440,25 @@ const UnderstaffedDetection = () => {
                         {shift.shift_types?.start_time} - {shift.shift_types?.end_time}
                       </p>
                       <div className="flex items-center gap-2 mt-2">
-                    <div className="space-y-1">
-                      {shift.isSupervisorsUnderstaffed && (
-                    <Badge variant="destructive" className="block">
-                    Supervisors: {shift.current_supervisors} / {shift.min_supervisors}
-                    </Badge>
-                    )}
-                {shift.isOfficersUnderstaffed && (
                   <Badge variant="destructive" className="block">
-                  Officers: {shift.current_officers} / {shift.min_officers}
-                  </Badge>
-                  )}
-              </div>
-                  {alertExists && (
-                  <Badge variant="outline" className="bg-green-500/10 text-green-700">
-                  Alert Created
+                    Total Staffing: {shift.current_staffing} / {shift.minimum_required}
                 </Badge>
-                  )}
-                  </div>
+                {shift.isSupervisorsUnderstaffed && (
+                <Badge variant="destructive" className="block">
+                  Needs {shift.min_supervisors - shift.current_supervisors} more supervisor(s)
+              </Badge>
+                )}
+            {shift.isOfficersUnderstaffed && (
+              <Badge variant="destructive" className="block">
+                Needs {shift.min_officers - shift.current_officers} more officer(s)
+            </Badge>
+              )}
+            {alertExists && (
+            <Badge variant="outline" className="bg-green-500/10 text-green-700">
+              Alert Created
+          </Badge>
+            )}
+              </div>
                     </div>
                     <div className="flex flex-col gap-2">
                       {!alertExists ? (
