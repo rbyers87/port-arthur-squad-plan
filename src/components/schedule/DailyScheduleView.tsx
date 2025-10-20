@@ -8,13 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2, UserPlus, Download } from "lucide-react";
+import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2, UserPlus, Download, Users, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { usePDFExport } from "@/hooks/usePDFExport";
-import { Users, Loader2 } from "lucide-react";
 import { bulkApplyDefaults, ScheduleShift } from "@/lib/assignment-utils";
 
 interface DailyScheduleViewProps {
@@ -62,6 +61,7 @@ export const DailyScheduleView = ({
   } | null>(null);
   const [addOfficerDialogOpen, setAddOfficerDialogOpen] = useState(false);
   const [selectedShiftForAdd, setSelectedShiftForAdd] = useState<any>(null);
+  const [isApplyingDefaults, setIsApplyingDefaults] = useState(false);
   const { exportToPDF } = usePDFExport();
 
   // Determine if user can edit based on role
@@ -99,6 +99,102 @@ export const DailyScheduleView = ({
       const rankB = b.rank || 'Officer';
       return (rankOrder[rankA as keyof typeof rankOrder] || 99) - (rankOrder[rankB as keyof typeof rankOrder] || 99);
     });
+  };
+
+  // Auto-assign defaults function
+  const handleApplyDefaults = async () => {
+    if (!scheduleData) return;
+    
+    setIsApplyingDefaults(true);
+    try {
+      // Combine all shifts from the schedule data
+      const allShifts: ScheduleShift[] = [];
+      
+      scheduleData.forEach((shiftData: any) => {
+        // Add supervisors
+        shiftData.supervisors.forEach((officer: any) => {
+          allShifts.push({
+            id: officer.scheduleId,
+            officer_id: officer.officerId,
+            date: dateStr,
+            position: officer.position || '',
+            unit: officer.unitNumber || '',
+            notes: officer.notes,
+            profiles: {
+              id: officer.officerId,
+              full_name: officer.name,
+              badge_number: officer.badge,
+              rank: officer.rank
+            },
+            shift_types: {
+              id: shiftData.shift.id,
+              name: shiftData.shift.name,
+              start_time: shiftData.shift.start_time,
+              end_time: shiftData.shift.end_time
+            }
+          });
+        });
+        
+        // Add regular officers
+        shiftData.officers.forEach((officer: any) => {
+          allShifts.push({
+            id: officer.scheduleId,
+            officer_id: officer.officerId,
+            date: dateStr,
+            position: officer.position || '',
+            unit: officer.unitNumber || '',
+            notes: officer.notes,
+            profiles: {
+              id: officer.officerId,
+              full_name: officer.name,
+              badge_number: officer.badge,
+              rank: officer.rank
+            },
+            shift_types: {
+              id: shiftData.shift.id,
+              name: shiftData.shift.name,
+              start_time: shiftData.shift.start_time,
+              end_time: shiftData.shift.end_time
+            }
+          });
+        });
+        
+        // Add special assignment officers
+        shiftData.specialAssignmentOfficers.forEach((officer: any) => {
+          allShifts.push({
+            id: officer.scheduleId,
+            officer_id: officer.officerId,
+            date: dateStr,
+            position: officer.position || '',
+            unit: officer.unitNumber || '',
+            notes: officer.notes,
+            profiles: {
+              id: officer.officerId,
+              full_name: officer.name,
+              badge_number: officer.badge,
+              rank: officer.rank
+            },
+            shift_types: {
+              id: shiftData.shift.id,
+              name: shiftData.shift.name,
+              start_time: shiftData.shift.start_time,
+              end_time: shiftData.shift.end_time
+            }
+          });
+        });
+      });
+
+      await bulkApplyDefaults(allShifts, dateStr);
+      
+      // Invalidate and refetch the schedule data
+      await queryClient.invalidateQueries({ queryKey: ["daily-schedule", dateStr] });
+      toast.success("Default assignments applied successfully");
+    } catch (error) {
+      toast.error("Failed to apply default assignments");
+      console.error(error);
+    } finally {
+      setIsApplyingDefaults(false);
+    }
   };
 
   const { data: scheduleData, isLoading } = useQuery({
@@ -1101,10 +1197,27 @@ export const DailyScheduleView = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5" />
-          Schedule for {format(selectedDate, "EEEE, MMMM d, yyyy")}
-        </CardTitle>
+        <div className="flex justify-between items-center">
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Schedule for {format(selectedDate, "EEEE, MMMM d, yyyy")}
+          </CardTitle>
+          {canEdit && (
+            <Button 
+              onClick={handleApplyDefaults}
+              disabled={isApplyingDefaults}
+              className="flex items-center gap-2"
+              variant="outline"
+            >
+              {isApplyingDefaults ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Users className="h-4 w-4" />
+              )}
+              {isApplyingDefaults ? "Applying..." : "Apply Defaults"}
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {scheduleData?.map((shiftData) => {
