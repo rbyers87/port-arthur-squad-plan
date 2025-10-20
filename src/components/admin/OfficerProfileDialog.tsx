@@ -129,6 +129,9 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
   const updateProfileMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (!officer?.id) throw new Error("No officer ID provided");
+
+       // Convert "none" back to null for database
+    const defaultPosition = data.default_position === "none" ? null : data.default_position;
       
       // Update profile with new fields
       const { error } = await supabase
