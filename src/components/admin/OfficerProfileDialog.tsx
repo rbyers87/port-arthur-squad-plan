@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Award, KeyRound } from "lucide-react";
+import { CalendarIcon, Award, KeyRound, Building, MapPin } from "lucide-react"; // ADDED Building and MapPin icons
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +27,10 @@ interface OfficerProfileDialogProps {
     comp_hours?: number | null;
     holiday_hours?: number | null;
     rank?: string | null;
-  } | null; // Allow null for new officer creation
+    // NEW FIELDS FOR DEFAULT ASSIGNMENTS
+    default_unit?: string | null;
+    default_position?: string | null;
+  } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -54,6 +57,9 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     sick_hours: officer?.sick_hours?.toString() || "0",
     comp_hours: officer?.comp_hours?.toString() || "0",
     holiday_hours: officer?.holiday_hours?.toString() || "0",
+    // NEW FIELDS - ADD THESE TWO LINES
+    default_unit: officer?.default_unit || "",
+    default_position: officer?.default_position || "",
   });
   const [newPassword, setNewPassword] = useState("");
 
@@ -72,10 +78,12 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
         sick_hours: officer?.sick_hours?.toString() || "0",
         comp_hours: officer?.comp_hours?.toString() || "0",
         holiday_hours: officer?.holiday_hours?.toString() || "0",
+        // NEW FIELDS - ADD THESE TWO LINES
+        default_unit: officer?.default_unit || "",
+        default_position: officer?.default_position || "",
       });
       setNewPassword("");
       
-      // Only fetch service credit for existing officers
       if (officer?.id) {
         fetchServiceCredit();
       } else {
@@ -97,7 +105,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     mutationFn: async (data: typeof formData) => {
       if (!officer?.id) throw new Error("No officer ID provided");
       
-      // Update profile first
+      // Update profile with new fields - ADD default_unit and default_position to the update
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -112,6 +120,9 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
           sick_hours: Number(data.sick_hours) || 0,
           comp_hours: Number(data.comp_hours) || 0,
           holiday_hours: Number(data.holiday_hours) || 0,
+          // NEW FIELDS - ADD THESE TWO LINES
+          default_unit: data.default_unit || null,
+          default_position: data.default_position || null,
         })
         .eq("id", officer.id);
 
@@ -127,7 +138,6 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
 
       const newRole = getRoleFromRank(data.rank);
       
-      // Update the user_roles table
       const { error: roleError } = await supabase
         .from('user_roles')
         .update({ role: newRole })
@@ -135,7 +145,6 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
 
       if (roleError) {
         console.error('Failed to update role:', roleError);
-        // Don't throw - the profile was updated successfully, just role update failed
       }
     },
     onSuccess: () => {
@@ -167,6 +176,9 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
           sick_hours: Number(data.sick_hours) || 0,
           comp_hours: Number(data.comp_hours) || 0,
           holiday_hours: Number(data.holiday_hours) || 0,
+          // NEW FIELDS - ADD THESE TWO LINES
+          default_unit: data.default_unit,
+          default_position: data.default_position,
         }),
       })
 
@@ -189,49 +201,49 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
   })
 
   const updatePasswordMutation = useMutation({
-  mutationFn: async () => {
-    if (!officer?.id) throw new Error("No officer ID provided");
-    if (!newPassword) throw new Error("New password is required");
+    mutationFn: async () => {
+      if (!officer?.id) throw new Error("No officer ID provided");
+      if (!newPassword) throw new Error("New password is required");
 
-    if (newPassword.length < 6) {
-      throw new Error("Password must be at least 6 characters");
-    }
+      if (newPassword.length < 6) {
+        throw new Error("Password must be at least 6 characters");
+      }
 
-    // Get the current user's session
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      throw new Error("You must be logged in to update passwords");
-    }
+      // Get the current user's session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error("You must be logged in to update passwords");
+      }
 
-    const response = await fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/update-password', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`
-      },
-      body: JSON.stringify({
-        userId: officer.id,
-        newPassword: newPassword
-      }),
-    });
+      const response = await fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/update-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          userId: officer.id,
+          newPassword: newPassword
+        }),
+      });
 
-    const result = await response.json();
+      const result = await response.json();
 
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to update password');
-    }
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update password');
+      }
 
-    return result;
-  },
-  onSuccess: () => {
-    toast.success("Password updated successfully");
-    setNewPassword("");
-  },
-  onError: (error: any) => {
-    toast.error(error.message || "Failed to update password");
-  },
-});
+      return result;
+    },
+    onSuccess: () => {
+      toast.success("Password updated successfully");
+      setNewPassword("");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update password");
+    },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,6 +301,43 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
             />
           </div>
 
+          {/* NEW: DEFAULT ASSIGNMENT SECTION - ADD THIS ENTIRE SECTION */}
+          <div className="space-y-4 p-4 border rounded-lg bg-blue-50/30">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <Building className="h-4 w-4" />
+              Default Assignment (For Recurring Schedule)
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="default_unit" className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  Default Unit
+                </Label>
+                <Input
+                  id="default_unit"
+                  placeholder="e.g., Unit 1, Patrol, Traffic"
+                  value={formData.default_unit}
+                  onChange={(e) => setFormData({ ...formData, default_unit: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Primary unit assignment
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="default_position">Default Position</Label>
+                <Input
+                  id="default_position"
+                  placeholder="e.g., Patrol Officer, Supervisor, K9"
+                  value={formData.default_position}
+                  onChange={(e) => setFormData({ ...formData, default_position: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Primary position/role
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="badge_number">Badge Number</Label>
             <Input
@@ -336,7 +385,6 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
                 onChange={(e) => {
                   const value = e.target.value;
                   if (value) {
-                    // Parse date as local time to avoid timezone issues
                     const [year, month, day] = value.split('-').map(Number);
                     setHireDate(new Date(year, month - 1, day));
                   } else {
