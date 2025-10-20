@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { usePDFExport } from "@/hooks/usePDFExport";
+import { Users, Loader2 } from "lucide-react";
+import { bulkApplyDefaults, ScheduleShift } from "@/lib/assignment-utils";
 
 interface DailyScheduleViewProps {
   selectedDate: Date;
