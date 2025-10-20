@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Award, KeyRound, Building, MapPin } from "lucide-react"; // ADDED Building and MapPin icons
+import { CalendarIcon, Award, KeyRound, Building, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -27,12 +27,17 @@ interface OfficerProfileDialogProps {
     comp_hours?: number | null;
     holiday_hours?: number | null;
     rank?: string | null;
-    // NEW FIELDS FOR DEFAULT ASSIGNMENTS
     default_unit?: string | null;
     default_position?: string | null;
   } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface ShiftPosition {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerProfileDialogProps) => {
@@ -47,6 +52,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     officer?.service_credit_override?.toString() || ""
   );
   const [calculatedCredit, setCalculatedCredit] = useState<number>(0);
+  const [shiftPositions, setShiftPositions] = useState<ShiftPosition[]>([]);
   const [formData, setFormData] = useState({
     full_name: officer?.full_name || "",
     email: officer?.email || "",
@@ -57,11 +63,31 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     sick_hours: officer?.sick_hours?.toString() || "0",
     comp_hours: officer?.comp_hours?.toString() || "0",
     holiday_hours: officer?.holiday_hours?.toString() || "0",
-    // NEW FIELDS - ADD THESE TWO LINES
     default_unit: officer?.default_unit || "",
     default_position: officer?.default_position || "",
   });
   const [newPassword, setNewPassword] = useState("");
+
+  // Fetch shift positions when dialog opens
+  useEffect(() => {
+    const fetchShiftPositions = async () => {
+      const { data, error } = await supabase
+        .from('shift_positions')
+        .select('id, name, description')
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching shift positions:', error);
+        toast.error('Failed to load positions');
+      } else {
+        setShiftPositions(data || []);
+      }
+    };
+
+    if (open) {
+      fetchShiftPositions();
+    }
+  }, [open]);
 
   // Reset form when dialog opens/closes or officer changes
   useEffect(() => {
@@ -78,7 +104,6 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
         sick_hours: officer?.sick_hours?.toString() || "0",
         comp_hours: officer?.comp_hours?.toString() || "0",
         holiday_hours: officer?.holiday_hours?.toString() || "0",
-        // NEW FIELDS - ADD THESE TWO LINES
         default_unit: officer?.default_unit || "",
         default_position: officer?.default_position || "",
       });
@@ -105,7 +130,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     mutationFn: async (data: typeof formData) => {
       if (!officer?.id) throw new Error("No officer ID provided");
       
-      // Update profile with new fields - ADD default_unit and default_position to the update
+      // Update profile with new fields
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -120,7 +145,6 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
           sick_hours: Number(data.sick_hours) || 0,
           comp_hours: Number(data.comp_hours) || 0,
           holiday_hours: Number(data.holiday_hours) || 0,
-          // NEW FIELDS - ADD THESE TWO LINES
           default_unit: data.default_unit || null,
           default_position: data.default_position || null,
         })
@@ -176,7 +200,6 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
           sick_hours: Number(data.sick_hours) || 0,
           comp_hours: Number(data.comp_hours) || 0,
           holiday_hours: Number(data.holiday_hours) || 0,
-          // NEW FIELDS - ADD THESE TWO LINES
           default_unit: data.default_unit,
           default_position: data.default_position,
         }),
@@ -209,7 +232,6 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
         throw new Error("Password must be at least 6 characters");
       }
 
-      // Get the current user's session
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
@@ -301,7 +323,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
             />
           </div>
 
-          {/* NEW: DEFAULT ASSIGNMENT SECTION - ADD THIS ENTIRE SECTION */}
+          {/* UPDATED: DEFAULT ASSIGNMENT SECTION WITH DROPDOWN FOR POSITIONS */}
           <div className="space-y-4 p-4 border rounded-lg bg-blue-50/30">
             <h3 className="font-semibold text-sm flex items-center gap-2">
               <Building className="h-4 w-4" />
@@ -325,14 +347,24 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
               </div>
               <div className="space-y-2">
                 <Label htmlFor="default_position">Default Position</Label>
-                <Input
-                  id="default_position"
-                  placeholder="e.g., Patrol Officer, Supervisor, K9"
+                <Select
                   value={formData.default_position}
-                  onChange={(e) => setFormData({ ...formData, default_position: e.target.value })}
-                />
+                  onValueChange={(value) => setFormData({ ...formData, default_position: value })}
+                >
+                  <SelectTrigger id="default_position">
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No default position</SelectItem>
+                    {shiftPositions.map((position) => (
+                      <SelectItem key={position.id} value={position.name}>
+                        {position.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground">
-                  Primary position/role
+                  Primary position from available shifts
                 </p>
               </div>
             </div>
