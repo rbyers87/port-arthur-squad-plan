@@ -64,7 +64,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     comp_hours: officer?.comp_hours?.toString() || "0",
     holiday_hours: officer?.holiday_hours?.toString() || "0",
     default_unit: officer?.default_unit || "",
-    default_position: officer?.default_position || "",
+    default_position: officer?.default_position || "none",
   });
   const [newPassword, setNewPassword] = useState("");
 
