@@ -1,3 +1,4 @@
+// lib/assignment-utils.ts
 import { supabase } from "@/integrations/supabase/client";
 
 export interface ScheduleShift {
@@ -6,7 +7,19 @@ export interface ScheduleShift {
   date: string;
   position: string;
   unit: string;
-  // ... other shift fields
+  notes?: string;
+  profiles: {
+    id: string;
+    full_name: string;
+    badge_number?: string;
+    rank?: string;
+  };
+  shift_types: {
+    id: string;
+    name: string;
+    start_time: string;
+    end_time: string;
+  };
 }
 
 export interface OfficerWithDefaults {
@@ -39,7 +52,7 @@ export const applyDefaultAssignments = async (scheduleShifts: ScheduleShift[], d
     
     // Only apply defaults if the shift doesn't already have an assignment
     // or if you want to override existing assignments, remove the condition
-    if (officer && (!shift.position || shift.position === 'Unassigned')) {
+    if (officer && (!shift.position || shift.position === '' || shift.position === 'No Position')) {
       return {
         ...shift,
         position: officer.default_position || shift.position,
@@ -54,23 +67,72 @@ export const applyDefaultAssignments = async (scheduleShifts: ScheduleShift[], d
 export const bulkApplyDefaults = async (scheduleShifts: ScheduleShift[], date: string) => {
   const updatedShifts = await applyDefaultAssignments(scheduleShifts, date);
   
-  // Update the shifts in the database
-  const updates = updatedShifts.map(shift => 
-    supabase
-      .from("shift_assignments") // Replace with your actual table name
-      .update({
-        position: shift.position,
-        unit: shift.unit
-      })
-      .eq("id", shift.id)
-  );
+  // Update the shifts in the database - handle both recurring_schedules and schedule_exceptions
+  const updates = updatedShifts.map(async (shift) => {
+    try {
+      // First check if this is a recurring schedule or exception
+      const { data: recurringSchedule, error: recurringError } = await supabase
+        .from("recurring_schedules")
+        .select("id")
+        .eq("id", shift.id)
+        .single();
+
+      if (recurringError) {
+        // If not found in recurring_schedules, check schedule_exceptions
+        const { data: exception, error: exceptionError } = await supabase
+          .from("schedule_exceptions")
+          .select("id")
+          .eq("id", shift.id)
+          .single();
+
+        if (exceptionError) {
+          console.warn(`Shift ${shift.id} not found in either table`);
+          return { success: false, error: "Shift not found" };
+        }
+
+        // Update schedule_exceptions
+        const { error: updateError } = await supabase
+          .from("schedule_exceptions")
+          .update({
+            position_name: shift.position,
+            unit_number: shift.unit
+          })
+          .eq("id", shift.id);
+
+        if (updateError) {
+          console.error(`Failed to update exception ${shift.id}:`, updateError);
+          return { success: false, error: updateError.message };
+        }
+      } else {
+        // Update recurring_schedules
+        const { error: updateError } = await supabase
+          .from("recurring_schedules")
+          .update({
+            position_name: shift.position,
+            unit_number: shift.unit
+          })
+          .eq("id", shift.id);
+
+        if (updateError) {
+          console.error(`Failed to update recurring schedule ${shift.id}:`, updateError);
+          return { success: false, error: updateError.message };
+        }
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error(`Error updating shift ${shift.id}:`, error);
+      return { success: false, error: String(error) };
+    }
+  });
 
   const results = await Promise.all(updates);
   
   // Check for errors
-  const hasErrors = results.some(result => result.error);
-  if (hasErrors) {
-    throw new Error("Some assignments failed to update");
+  const failedUpdates = results.filter(result => !result.success);
+  if (failedUpdates.length > 0) {
+    console.error(`${failedUpdates.length} assignments failed to update:`, failedUpdates);
+    throw new Error(`${failedUpdates.length} assignments failed to update`);
   }
   
   return updatedShifts;
