@@ -19,35 +19,98 @@ import { Badge } from "@/components/ui/badge";
 const UnderstaffedDetection = () => {
   const queryClient = useQueryClient();
 
-  const { data: understaffedShifts, isLoading } = useQuery({
+  const { data: understaffedShifts, isLoading, error } = useQuery({
     queryKey: ["understaffed-shifts-detection"],
     queryFn: async () => {
+      console.log("Starting understaffed shift detection...");
+      
       // Get daily schedules for the next 7 days
       const startDate = new Date();
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + 7);
 
-      const { data: dailySchedules, error } = await supabase
-        .from("daily_schedules")
-        .select(`
-          *,
-          shift_types(name, start_time, end_time, minimum_staffing),
-          profiles(full_name)
-        `)
-        .gte("date", startDate.toISOString().split('T')[0])
-        .lte("date", endDate.toISOString().split('T')[0])
-        .order("date", { ascending: true });
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
 
-      if (error) throw error;
+      console.log("Querying dates:", startDateStr, "to", endDateStr);
 
-      // Filter for understaffed shifts (using 8/9 as your example threshold)
-      const understaffed = dailySchedules?.filter(schedule => {
-        const currentStaffing = schedule.assigned_officers?.length || 0;
-        const minimumRequired = schedule.shift_types?.minimum_staffing || 9; // Default to 9 as per your example
-        return currentStaffing < minimumRequired;
-      }) || [];
+      try {
+        // Get recurring schedules with shift types that include minimum_staffing
+        const { data: recurringSchedules, error: recurringError } = await supabase
+          .from("recurring_schedules")
+          .select(`
+            *,
+            shift_types(name, start_time, end_time, minimum_staffing),
+            profiles(full_name)
+          `)
+          .order("day_of_week", { ascending: true });
 
-      return understaffed;
+        if (recurringError) {
+          console.error("Error fetching recurring_schedules:", recurringError);
+          throw recurringError;
+        }
+
+        console.log("Found recurring schedules:", recurringSchedules?.length);
+
+        // Generate daily schedules for the next 7 days from recurring schedules
+        const generatedSchedules = [];
+        const today = new Date();
+        
+        for (let i = 0; i < 7; i++) {
+          const date = new Date(today);
+          date.setDate(today.getDate() + i);
+          const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+          
+          const schedulesForDay = recurringSchedules?.filter(schedule => 
+            schedule.day_of_week === dayOfWeek
+          ) || [];
+
+          // Convert recurring schedules to daily schedule format
+          for (const schedule of schedulesForDay) {
+            // Calculate current staffing based on assigned officers
+            const currentStaffing = schedule.assigned_officers?.length || 0;
+            const minimumRequired = schedule.shift_types?.minimum_staffing || 1;
+            
+            generatedSchedules.push({
+              date: date.toISOString().split('T')[0],
+              shift_type_id: schedule.shift_type_id,
+              shift_types: schedule.shift_types,
+              assigned_officers: schedule.assigned_officers || [],
+              profiles: schedule.profiles,
+              current_staffing: currentStaffing,
+              minimum_required: minimumRequired,
+              day_of_week: dayOfWeek
+            });
+          }
+        }
+
+        console.log("Generated schedules:", generatedSchedules);
+
+        // Filter for understaffed shifts (using the minimum_staffing from shift_types)
+        const understaffed = generatedSchedules.filter(schedule => {
+          const currentStaffing = schedule.current_staffing;
+          const minimumRequired = schedule.minimum_required;
+          const isUnderstaffed = currentStaffing < minimumRequired;
+          
+          if (isUnderstaffed) {
+            console.log("Understaffed shift found:", {
+              date: schedule.date,
+              shift: schedule.shift_types?.name,
+              staffing: `${currentStaffing}/${minimumRequired}`,
+              day: schedule.day_of_week
+            });
+          }
+          
+          return isUnderstaffed;
+        });
+
+        console.log("Understaffed shifts found:", understaffed.length);
+        return understaffed;
+
+      } catch (err) {
+        console.error("Error in understaffed detection:", err);
+        throw err;
+      }
     },
   });
 
@@ -81,8 +144,8 @@ const UnderstaffedDetection = () => {
         .insert({
           date: shiftData.date,
           shift_type_id: shiftData.shift_type_id,
-          current_staffing: shiftData.assigned_officers?.length || 0,
-          minimum_required: shiftData.shift_types?.minimum_staffing || 9,
+          current_staffing: shiftData.current_staffing,
+          minimum_required: shiftData.minimum_required,
           status: "open",
           created_at: new Date().toISOString()
         })
@@ -206,6 +269,22 @@ const UnderstaffedDetection = () => {
     });
   };
 
+  if (error) {
+    console.error("Query error:", error);
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center text-red-600">
+            Error loading understaffed shifts: {error.message}
+          </div>
+          <div className="text-center text-sm text-muted-foreground mt-2">
+            Check console for details
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (isLoading) {
     return (
       <Card>
@@ -226,13 +305,13 @@ const UnderstaffedDetection = () => {
               Automatic Understaffed Shift Detection
             </CardTitle>
             <CardDescription>
-              Automatically detect shifts with insufficient staffing (e.g., 8/9 officers)
+              Automatically detect shifts with insufficient staffing based on shift type minimum staffing requirements
             </CardDescription>
           </div>
           <Button
             variant="outline"
             onClick={handleCreateAllAlerts}
-            disabled={createAlertMutation.isPending}
+            disabled={createAlertMutation.isPending || !understaffedShifts?.length}
           >
             <Plus className="h-4 w-4 mr-2" />
             Create All Alerts
@@ -244,14 +323,14 @@ const UnderstaffedDetection = () => {
           <p className="text-sm text-muted-foreground">No understaffed shifts found in the next 7 days.</p>
         ) : (
           <div className="space-y-4">
-            {understaffedShifts.map((shift) => {
-              const currentStaffing = shift.assigned_officers?.length || 0;
-              const minimumRequired = shift.shift_types?.minimum_staffing || 9;
+            {understaffedShifts.map((shift, index) => {
+              const currentStaffing = shift.current_staffing;
+              const minimumRequired = shift.minimum_required;
               const alertExists = isAlertCreated(shift);
 
               return (
                 <div
-                  key={`${shift.date}-${shift.shift_type_id}`}
+                  key={`${shift.date}-${shift.shift_type_id}-${index}`}
                   className="p-4 border rounded-lg space-y-3"
                 >
                   <div className="flex items-start justify-between">
