@@ -189,11 +189,29 @@ export const DailyScheduleView = ({
             e.officer_id === r.officer_id && e.shift_types?.id === shift.id
           );
 
-          // FIXED: Calculate custom time for partial PTO
+          // FIXED: Calculate custom time for partial PTO - Show WORKING hours, not PTO hours
           let customTime = undefined;
           if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
-            // Show their actual working hours when they have partial PTO
-            customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
+            // For partial PTO, show the actual working hours (opposite of PTO time)
+            const shiftStart = shift.start_time;
+            const shiftEnd = shift.end_time;
+            const ptoStart = ptoException.custom_start_time;
+            const ptoEnd = ptoException.custom_end_time;
+            
+            // Calculate working hours by excluding PTO time from shift time
+            if (ptoStart === shiftStart && ptoEnd !== shiftEnd) {
+              // PTO at start of shift
+              customTime = `Working: ${ptoEnd} - ${shiftEnd}`;
+            } else if (ptoStart !== shiftStart && ptoEnd === shiftEnd) {
+              // PTO at end of shift  
+              customTime = `Working: ${shiftStart} - ${ptoStart}`;
+            } else if (ptoStart !== shiftStart && ptoEnd !== shiftEnd) {
+              // PTO in middle of shift - show both working periods
+              customTime = `Working: ${shiftStart}-${ptoStart} & ${ptoEnd}-${shiftEnd}`;
+            } else {
+              // Fallback
+              customTime = `Working: Check PTO`;
+            }
           } else if (workingException?.custom_start_time && workingException?.custom_end_time) {
             customTime = `${workingException.custom_start_time} - ${workingException.custom_end_time}`;
           }
@@ -235,9 +253,29 @@ export const DailyScheduleView = ({
             p.officer_id === e.officer_id && p.shift_types?.id === shift.id
           );
 
+          // FIXED: Calculate custom time for partial PTO - Show WORKING hours, not PTO hours
           let customTime = undefined;
           if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
-            customTime = `Working: ${ptoException.custom_start_time} - ${ptoException.custom_end_time}`;
+            // For partial PTO, show the actual working hours (opposite of PTO time)
+            const shiftStart = shift.start_time;
+            const shiftEnd = shift.end_time;
+            const ptoStart = ptoException.custom_start_time;
+            const ptoEnd = ptoException.custom_end_time;
+            
+            // Calculate working hours by excluding PTO time from shift time
+            if (ptoStart === shiftStart && ptoEnd !== shiftEnd) {
+              // PTO at start of shift
+              customTime = `Working: ${ptoEnd} - ${shiftEnd}`;
+            } else if (ptoStart !== shiftStart && ptoEnd === shiftEnd) {
+              // PTO at end of shift  
+              customTime = `Working: ${shiftStart} - ${ptoStart}`;
+            } else if (ptoStart !== shiftStart && ptoEnd !== shiftEnd) {
+              // PTO in middle of shift - show both working periods
+              customTime = `Working: ${shiftStart}-${ptoStart} & ${ptoEnd}-${shiftEnd}`;
+            } else {
+              // Fallback
+              customTime = `Working: Check PTO`;
+            }
           } else if (e.custom_start_time && e.custom_end_time) {
             customTime = `${e.custom_start_time} - ${e.custom_end_time}`;
           }
@@ -1166,7 +1204,7 @@ export const DailyScheduleView = ({
             )}
             {/* Show partial PTO indicator */}
             {officer.hasPTO && !officer.ptoData?.isFullShift && (
-              <Badge variant="destructive" className="text-xs">
+              <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
                 Partial PTO
               </Badge>
             )}
