@@ -109,6 +109,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
       });
       setNewPassword("");
       
+      // Only fetch service credit for existing officers
       if (officer?.id) {
         fetchServiceCredit();
       } else {
@@ -129,11 +130,11 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
   const updateProfileMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (!officer?.id) throw new Error("No officer ID provided");
-
-       // Convert "none" back to null for database
-    const defaultPosition = data.default_position === "none" ? null : data.default_position;
       
-      // Update profile with new fields
+      // Convert "none" back to null for database
+      const defaultPosition = data.default_position === "none" ? null : data.default_position;
+      
+      // Update profile first
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -149,7 +150,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
           comp_hours: Number(data.comp_hours) || 0,
           holiday_hours: Number(data.holiday_hours) || 0,
           default_unit: data.default_unit || null,
-          default_position: data.default_position || null,
+          default_position: defaultPosition,
         })
         .eq("id", officer.id);
 
@@ -165,6 +166,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
 
       const newRole = getRoleFromRank(data.rank);
       
+      // Update the user_roles table
       const { error: roleError } = await supabase
         .from('user_roles')
         .update({ role: newRole })
@@ -172,6 +174,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
 
       if (roleError) {
         console.error('Failed to update role:', roleError);
+        // Don't throw - the profile was updated successfully, just role update failed
       }
     },
     onSuccess: () => {
@@ -186,6 +189,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
 
   const createProfileMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      // Convert "none" back to null for database
       const defaultPosition = data.default_position === "none" ? null : data.default_position;
       
       const response = await fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/create-user', {
@@ -206,7 +210,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
           comp_hours: Number(data.comp_hours) || 0,
           holiday_hours: Number(data.holiday_hours) || 0,
           default_unit: data.default_unit,
-          default_position: data.default_position,
+          default_position: defaultPosition,
         }),
       })
 
@@ -237,6 +241,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
         throw new Error("Password must be at least 6 characters");
       }
 
+      // Get the current user's session
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
@@ -328,7 +333,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
             />
           </div>
 
-          {/* UPDATED: DEFAULT ASSIGNMENT SECTION WITH DROPDOWN FOR POSITIONS */}
+          {/* NEW: DEFAULT ASSIGNMENT SECTION WITH DROPDOWN FOR POSITIONS */}
           <div className="space-y-4 p-4 border rounded-lg bg-blue-50/30">
             <h3 className="font-semibold text-sm flex items-center gap-2">
               <Building className="h-4 w-4" />
@@ -360,13 +365,11 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
                     <SelectValue placeholder="Select position" />
                   </SelectTrigger>
                   <SelectContent>
-                  <SelectItem value="none">No default position</SelectItem>
+                    <SelectItem value="none">No default position</SelectItem>
                     {shiftPositions.map((position) => (
-                  <SelectItem key={position.id} value={position.name}>
-                    {position.name}
-                </SelectItem>
-                    ))}
-                    </SelectContent>
+                      <SelectItem key={position.id} value={position.name}>
+                        {position.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -424,6 +427,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
                 onChange={(e) => {
                   const value = e.target.value;
                   if (value) {
+                    // Parse date as local time to avoid timezone issues
                     const [year, month, day] = value.split('-').map(Number);
                     setHireDate(new Date(year, month - 1, day));
                   } else {
