@@ -51,7 +51,6 @@ export const applyDefaultAssignments = async (scheduleShifts: ScheduleShift[], d
     const officer = officerDefaults.get(shift.officer_id);
     
     // Only apply defaults if the shift doesn't already have an assignment
-    // or if you want to override existing assignments, remove the condition
     if (officer && (!shift.position || shift.position === '' || shift.position === 'No Position')) {
       return {
         ...shift,
@@ -73,15 +72,30 @@ export const bulkApplyDefaults = async (scheduleShifts: ScheduleShift[], date: s
       // First check if this is a recurring schedule or exception
       const { data: recurringSchedule, error: recurringError } = await supabase
         .from("recurring_schedules")
-        .select("id")
+        .select("id, position_name")
         .eq("id", shift.id)
         .single();
 
-      if (recurringError) {
-        // If not found in recurring_schedules, check schedule_exceptions
+      if (!recurringError && recurringSchedule) {
+        // Update recurring_schedules - only position_name exists in this table
+        const updateData: any = {
+          position_name: shift.position
+        };
+        
+        const { error: updateError } = await supabase
+          .from("recurring_schedules")
+          .update(updateData)
+          .eq("id", shift.id);
+
+        if (updateError) {
+          console.error(`Failed to update recurring schedule ${shift.id}:`, updateError);
+          return { success: false, error: updateError.message };
+        }
+      } else {
+        // Check schedule_exceptions
         const { data: exception, error: exceptionError } = await supabase
           .from("schedule_exceptions")
-          .select("id")
+          .select("id, position_name, unit_number")
           .eq("id", shift.id)
           .single();
 
@@ -90,31 +104,23 @@ export const bulkApplyDefaults = async (scheduleShifts: ScheduleShift[], date: s
           return { success: false, error: "Shift not found" };
         }
 
-        // Update schedule_exceptions
+        // Update schedule_exceptions - this table has both position_name and unit_number
+        const updateData: any = {
+          position_name: shift.position
+        };
+        
+        // Only update unit_number if it exists in the table and we have a value
+        if (shift.unit) {
+          updateData.unit_number = shift.unit;
+        }
+        
         const { error: updateError } = await supabase
           .from("schedule_exceptions")
-          .update({
-            position_name: shift.position,
-            unit_number: shift.unit
-          })
+          .update(updateData)
           .eq("id", shift.id);
 
         if (updateError) {
           console.error(`Failed to update exception ${shift.id}:`, updateError);
-          return { success: false, error: updateError.message };
-        }
-      } else {
-        // Update recurring_schedules
-        const { error: updateError } = await supabase
-          .from("recurring_schedules")
-          .update({
-            position_name: shift.position,
-            unit_number: shift.unit
-          })
-          .eq("id", shift.id);
-
-        if (updateError) {
-          console.error(`Failed to update recurring schedule ${shift.id}:`, updateError);
           return { success: false, error: updateError.message };
         }
       }
