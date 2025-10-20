@@ -863,9 +863,10 @@ export const DailyScheduleView = ({
                       {officer.customTime}
                     </Badge>
                   )}
+                  //changed the Recurring badge to read as Regular
                   {officer.type === "recurring" && (
                     <Badge variant="secondary" className="text-xs">
-                      Recurring
+                      Regular
                     </Badge>
                   )}
                   {officer.type === "exception" && (
