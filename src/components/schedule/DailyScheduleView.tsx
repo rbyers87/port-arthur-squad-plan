@@ -1194,7 +1194,7 @@ export const DailyScheduleView = ({
             )}
             {officer.type === "recurring" && (
               <Badge variant="secondary" className="text-xs">
-                Recurring
+                Regular
               </Badge>
             )}
             {officer.type === "exception" && (
