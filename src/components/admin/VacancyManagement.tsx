@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { UnderstaffedDetection } from "./UnderstaffedDetection";
 
 const UnderstaffedDetection = () => {
   const queryClient = useQueryClient();
