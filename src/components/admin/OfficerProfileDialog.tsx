@@ -355,11 +355,13 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
                     <SelectValue placeholder="Select position" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No default position</SelectItem>
+                  <SelectItem value="none">No default position</SelectItem>
                     {shiftPositions.map((position) => (
-                      <SelectItem key={position.id} value={position.name}>
-                        {position.name}
-                      </SelectItem>
+                  <SelectItem key={position.id} value={position.name}>
+                    {position.name}
+                </SelectItem>
+                    ))}
+                    </SelectContent>
                     ))}
                   </SelectContent>
                 </Select>
