@@ -189,27 +189,49 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
   })
 
   const updatePasswordMutation = useMutation({
-    mutationFn: async () => {
-      if (!officer?.id) throw new Error("No officer ID provided");
-      if (!newPassword) throw new Error("New password is required");
-  
-      const { data, error } = await supabase.auth.admin.updateUserById(
-        officer.id,
-        { password: newPassword }
-      );
-  
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      toast.success("Password updated successfully");
-      onOpenChange(false);
-      setNewPassword("");
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to update password");
-    },
-  });
+  mutationFn: async () => {
+    if (!officer?.id) throw new Error("No officer ID provided");
+    if (!newPassword) throw new Error("New password is required");
+
+    if (newPassword.length < 6) {
+      throw new Error("Password must be at least 6 characters");
+    }
+
+    // Get the current user's session
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      throw new Error("You must be logged in to update passwords");
+    }
+
+    const response = await fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/update-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        userId: officer.id,
+        newPassword: newPassword
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to update password');
+    }
+
+    return result;
+  },
+  onSuccess: () => {
+    toast.success("Password updated successfully");
+    setNewPassword("");
+  },
+  onError: (error: any) => {
+    toast.error(error.message || "Failed to update password");
+  },
+});
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
