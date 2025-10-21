@@ -58,8 +58,11 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   const [assignedPosition, setAssignedPosition] = useState("none");
   const [shiftPositions, setShiftPositions] = useState<string[]>([]);
   const [editingSchedule, setEditingSchedule] = useState<any>(null);
+  const [showEditAssignment, setShowEditAssignment] = useState(false);
+  const [bulkUnitNumber, setBulkUnitNumber] = useState("");
+  const [bulkAssignedPosition, setBulkAssignedPosition] = useState("none");
 
-  // Fetch unique shift positions - UPDATED TO GET UNIQUE POSITION NAMES
+  // Fetch unique shift positions
   useEffect(() => {
     const fetchShiftPositions = async () => {
       const { data, error } = await supabase
@@ -71,7 +74,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
         console.error('Error fetching shift positions:', error);
         toast.error('Failed to load positions');
       } else {
-        // Get unique position names using Set to remove duplicates
         const uniquePositionNames = [...new Set(data?.map(p => p.position_name).filter(Boolean))];
         setShiftPositions(uniquePositionNames);
       }
@@ -97,7 +99,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
 
       if (error) throw error;
       
-      // Sort: Active schedules first (sorted by start_date desc), then ended schedules (sorted by start_date desc)
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
@@ -240,6 +241,44 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     },
   });
 
+  // Bulk update assignment for all active schedules
+  const bulkUpdateAssignmentMutation = useMutation({
+    mutationFn: async ({ unitNumber, position }: { unitNumber?: string; position?: string }) => {
+      const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
+      
+      const updates = activeSchedules.map(schedule => ({
+        id: schedule.id,
+        unit_number: unitNumber || null,
+        position_name: position !== "none" ? position : null,
+      }));
+
+      // Update each schedule individually
+      for (const update of updates) {
+        const { error } = await supabase
+          .from("recurring_schedules")
+          .update({
+            unit_number: update.unit_number,
+            position_name: update.position_name
+          })
+          .eq("id", update.id);
+
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      toast.success("Assignment updated for all active schedules");
+      queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      setShowEditAssignment(false);
+      setBulkUnitNumber("");
+      setBulkAssignedPosition("none");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update assignments");
+    },
+  });
+
   const handleAddSchedule = () => {
     if (selectedDays.length === 0) {
       toast.error("Please select at least one day");
@@ -280,7 +319,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       return;
     }
 
-    // Since we're editing a single schedule entry, we only use the first selected day
     const dayOfWeek = selectedDays[0];
 
     const updates = {
@@ -295,6 +333,13 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     updateScheduleMutation.mutate({
       scheduleId: editingSchedule.id,
       updates
+    });
+  };
+
+  const handleBulkUpdateAssignment = () => {
+    bulkUpdateAssignmentMutation.mutate({
+      unitNumber: bulkUnitNumber || undefined,
+      position: bulkAssignedPosition !== "none" ? bulkAssignedPosition : undefined,
     });
   };
 
@@ -318,7 +363,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   };
 
   const toggleDay = (day: number) => {
-    // When editing, only allow one day to be selected since we're editing a single schedule entry
     if (editingSchedule) {
       setSelectedDays([day]);
     } else {
@@ -337,9 +381,13 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     setUnitNumber("");
     setAssignedPosition("none");
     setEditingSchedule(null);
+    setShowEditAssignment(false);
+    setBulkUnitNumber("");
+    setBulkAssignedPosition("none");
   };
 
   const isEditing = !!editingSchedule;
+  const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
 
   return (
     <>
@@ -366,83 +414,101 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
               ) : (
                 <div className="space-y-4">
                   {/* Active Schedules Section */}
-                  {schedules.filter(s => !s.end_date || new Date(s.end_date) >= new Date()).length > 0 && (
+                  {activeSchedules.length > 0 && (
                     <div className="space-y-2">
                       <h4 className="text-sm font-semibold text-green-700 dark:text-green-400">Active Schedules</h4>
-                      {schedules
-                        .filter(s => !s.end_date || new Date(s.end_date) >= new Date())
-                        .map((schedule) => {
-                          return (
-                            <div
-                              key={schedule.id}
-                              className="flex items-center justify-between p-3 border rounded-lg"
-                            >
-                              <div className="space-y-1 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Badge variant="outline">
-                                    {daysOfWeek.find((d) => d.value === schedule.day_of_week)?.label}
-                                  </Badge>
-                                  <span className="font-medium">{schedule.shift_types?.name}</span>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                  {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {format(new Date(schedule.start_date), "MMM d, yyyy")}
-                                  {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
-                                  {!schedule.end_date && " - Ongoing"}
-                                </p>
-                                <div className="flex gap-2 flex-wrap">
-                                  {schedule.unit_number && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      <MapPin className="h-3 w-3 mr-1" />
-                                      {schedule.unit_number}
-                                    </Badge>
-                                  )}
-                                  {schedule.position_name && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      <Building className="h-3 w-3 mr-1" />
-                                      {schedule.position_name}
-                                    </Badge>
-                                  )}
-                                  {(!schedule.unit_number && !schedule.position_name) && (
-                                    <span className="text-xs text-muted-foreground italic">No assignment details</span>
-                                  )}
-                                </div>
+                      
+                      {/* Bulk Edit Assignment Button */}
+                      <div className="flex gap-2 mb-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowEditAssignment(true)}
+                          className="flex items-center gap-2"
+                        >
+                          <Edit className="h-4 w-4" />
+                          Edit Active Schedules Assignment
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const scheduleToEnd = activeSchedules[0];
+                            if (scheduleToEnd) {
+                              handleEndSchedule(scheduleToEnd.id);
+                            }
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          <StopCircle className="h-4 w-4" />
+                          End Current Schedule
+                        </Button>
+                      </div>
+
+                      {activeSchedules.map((schedule) => {
+                        return (
+                          <div
+                            key={schedule.id}
+                            className="flex items-center justify-between p-3 border rounded-lg"
+                          >
+                            <div className="space-y-1 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="outline">
+                                  {daysOfWeek.find((d) => d.value === schedule.day_of_week)?.label}
+                                </Badge>
+                                <span className="font-medium">{schedule.shift_types?.name}</span>
                               </div>
-                              <div className="flex gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleEditSchedule(schedule)}
-                                  title="Edit this schedule"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                {!schedule.end_date && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleEndSchedule(schedule.id)}
-                                    disabled={endScheduleMutation.isPending}
-                                    title="End this schedule"
-                                  >
-                                    <StopCircle className="h-4 w-4" />
-                                  </Button>
+                              <p className="text-sm text-muted-foreground">
+                                {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(schedule.start_date), "MMM d, yyyy")}
+                                {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
+                                {!schedule.end_date && " - Ongoing"}
+                              </p>
+                              <div className="flex gap-2 flex-wrap">
+                                {schedule.unit_number && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <MapPin className="h-3 w-3 mr-1" />
+                                    {schedule.unit_number}
+                                  </Badge>
                                 )}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDeleteClick(schedule.id)}
-                                  disabled={deleteScheduleMutation.isPending}
-                                  title="Delete this schedule"
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
+                                {schedule.position_name && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <Building className="h-3 w-3 mr-1" />
+                                    {schedule.position_name}
+                                  </Badge>
+                                )}
+                                {(!schedule.unit_number && !schedule.position_name) && (
+                                  <span className="text-xs text-muted-foreground italic">No assignment details</span>
+                                )}
                               </div>
                             </div>
-                          );
-                        })}
+                            <div className="flex gap-1">
+                              {!schedule.end_date && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleEndSchedule(schedule.id)}
+                                  disabled={endScheduleMutation.isPending}
+                                  title="End this schedule"
+                                >
+                                  <StopCircle className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteClick(schedule.id)}
+                                disabled={deleteScheduleMutation.isPending}
+                                title="Delete this schedule"
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -510,6 +576,74 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
               )}
             </div>
 
+            {/* Bulk Edit Assignment Form */}
+            {showEditAssignment && (
+              <div className="border rounded-lg p-4 space-y-4 bg-blue-50/30">
+                <h3 className="font-medium flex items-center gap-2">
+                  <Edit className="h-4 w-4" />
+                  Edit Assignment for All Active Schedules
+                </h3>
+                
+                <div className="space-y-4 p-4 border rounded-lg bg-white">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <Building className="h-4 w-4" />
+                    Assignment Details
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="bulk-unit" className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        Unit Number
+                      </Label>
+                      <Input
+                        id="bulk-unit"
+                        placeholder="e.g., Unit 1, Patrol, Traffic"
+                        value={bulkUnitNumber}
+                        onChange={(e) => setBulkUnitNumber(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bulk-position">Assigned Position</Label>
+                      <Select
+                        value={bulkAssignedPosition}
+                        onValueChange={setBulkAssignedPosition}
+                      >
+                        <SelectTrigger id="bulk-position">
+                          <SelectValue placeholder="Select position" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No position assigned</SelectItem>
+                          {shiftPositions.map((position) => (
+                            <SelectItem key={position} value={position}>
+                              {position}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This will update the unit number and position for all active schedules.
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowEditAssignment(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleBulkUpdateAssignment}
+                    disabled={bulkUpdateAssignmentMutation.isPending}
+                  >
+                    {bulkUpdateAssignmentMutation.isPending ? "Updating..." : "Update All Assignments"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Edit Schedule Form */}
             {isEditing && (
               <div className="border rounded-lg p-4 space-y-4 bg-blue-50/30">
@@ -556,47 +690,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-
-                {/* Assignment Details Section */}
-                <div className="space-y-4 p-4 border rounded-lg bg-white">
-                  <h4 className="font-medium text-sm flex items-center gap-2">
-                    <Building className="h-4 w-4" />
-                    Assignment Details (Optional)
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-unit" className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        Unit Number
-                      </Label>
-                      <Input
-                        id="edit-unit"
-                        placeholder="e.g., Unit 1, Patrol, Traffic"
-                        value={unitNumber}
-                        onChange={(e) => setUnitNumber(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-position">Assigned Position</Label>
-                      <Select
-                        value={assignedPosition}
-                        onValueChange={setAssignedPosition}
-                      >
-                        <SelectTrigger id="edit-position">
-                          <SelectValue placeholder="Select position" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No position assigned</SelectItem>
-                          {shiftPositions.map((position) => (
-                            <SelectItem key={position} value={position}>
-                              {position}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -684,7 +777,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
             )}
 
             {/* Add New Schedule */}
-            {!showAddForm && !isEditing ? (
+            {!showAddForm && !isEditing && !showEditAssignment ? (
               <Button
                 variant="outline"
                 className="w-full"
@@ -732,47 +825,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-
-                {/* Assignment Details Section */}
-                <div className="space-y-4 p-4 border rounded-lg bg-blue-50/30">
-                  <h4 className="font-medium text-sm flex items-center gap-2">
-                    <Building className="h-4 w-4" />
-                    Assignment Details (Optional)
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="unit-number" className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        Unit Number
-                      </Label>
-                      <Input
-                        id="unit-number"
-                        placeholder="e.g., Unit 1, Patrol, Traffic"
-                        value={unitNumber}
-                        onChange={(e) => setUnitNumber(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="assigned-position">Assigned Position</Label>
-                      <Select
-                        value={assignedPosition}
-                        onValueChange={setAssignedPosition}
-                      >
-                        <SelectTrigger id="assigned-position">
-                          <SelectValue placeholder="Select position" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No position assigned</SelectItem>
-                          {shiftPositions.map((position) => (
-                            <SelectItem key={position} value={position}>
-                              {position}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -823,7 +875,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                           mode="single"
                           selected={endDate}
                           onSelect={setEndDate}
-                          initialFocus>
+                          initialFocus
                           disabled={(date) => date < startDate}
                           className="pointer-events-auto"
                         />
