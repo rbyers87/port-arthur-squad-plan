@@ -37,7 +37,7 @@ interface OfficerProfileDialogProps {
 interface ShiftPosition {
   id: string;
   position_name: string;
-  position_order: number;
+  description?: string;
 }
 
 export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerProfileDialogProps) => {
@@ -73,8 +73,8 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
     const fetchShiftPositions = async () => {
       const { data, error } = await supabase
         .from('shift_positions')
-        .select('id, position_name, position_order')
-        .order('position_order');
+        .select('id, position_name, description')
+        .order('position_name');
 
       if (error) {
         console.error('Error fetching shift positions:', error);
