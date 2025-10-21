@@ -477,4 +477,273 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                             </div>
                           );
                         })}
-                    </
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Edit Schedule Assignment */}
+            {editingSchedule && (
+              <div className="border rounded-lg p-4 space-y-4 bg-blue-50/30">
+                <h3 className="font-medium flex items-center gap-2">
+                  <Edit className="h-4 w-4" />
+                  Edit Assignment Details
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-unit" className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      Unit Number
+                    </Label>
+                    <Input
+                      id="edit-unit"
+                      placeholder="e.g., Unit 1, Patrol, Traffic"
+                      value={unitNumber}
+                      onChange={(e) => setUnitNumber(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-position">Assigned Position</Label>
+                    <Select
+                      value={assignedPosition}
+                      onValueChange={setAssignedPosition}
+                    >
+                      <SelectTrigger id="edit-position">
+                        <SelectValue placeholder="Select position" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No position assigned</SelectItem>
+                        {shiftPositions.map((position) => (
+                          <SelectItem key={position.id} value={position.position_name}>
+                            {position.position_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditingSchedule(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSaveEdit}
+                    disabled={updateScheduleMutation.isPending}
+                  >
+                    {updateScheduleMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Add New Schedule */}
+            {!showAddForm && !editingSchedule ? (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowAddForm(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add New Work Schedule
+              </Button>
+            ) : showAddForm && (
+              <div className="border rounded-lg p-4 space-y-4">
+                <h3 className="font-medium">Create Work Schedule</h3>
+                
+                <div className="space-y-2">
+                  <Label>Work Days (Select Multiple)</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {daysOfWeek.map((day) => (
+                      <div key={day.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`day-${day.value}`}
+                          checked={selectedDays.includes(day.value)}
+                          onCheckedChange={() => toggleDay(day.value)}
+                        />
+                        <Label
+                          htmlFor={`day-${day.value}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          {day.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Shift</Label>
+                  <Select value={shiftTypeId} onValueChange={setShiftTypeId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select shift" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {shiftTypes?.map((shift) => (
+                        <SelectItem key={shift.id} value={shift.id}>
+                          {shift.name} ({shift.start_time} - {shift.end_time})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* NEW: Assignment Details Section */}
+                <div className="space-y-4 p-4 border rounded-lg bg-blue-50/30">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <Building className="h-4 w-4" />
+                    Assignment Details (Optional)
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="unit-number" className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        Unit Number
+                      </Label>
+                      <Input
+                        id="unit-number"
+                        placeholder="e.g., Unit 1, Patrol, Traffic"
+                        value={unitNumber}
+                        onChange={(e) => setUnitNumber(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="assigned-position">Assigned Position</Label>
+                      <Select
+                        value={assignedPosition}
+                        onValueChange={setAssignedPosition}
+                      >
+                        <SelectTrigger id="assigned-position">
+                          <SelectValue placeholder="Select position" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No position assigned</SelectItem>
+                          {shiftPositions.map((position) => (
+                            <SelectItem key={position.id} value={position.position_name}>
+                              {position.position_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Start Date *</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !startDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {startDate ? format(startDate, "PPP") : "Select date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={startDate}
+                          onSelect={(date) => date && setStartDate(date)}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>End Date (Optional)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !endDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {endDate ? format(endDate, "PPP") : "Ongoing"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={endDate}
+                          onSelect={setEndDate}
+                          initialFocus
+                          disabled={(date) => date < startDate}
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {endDate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEndDate(undefined)}
+                        className="w-full"
+                      >
+                        Clear End Date
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  * Leave end date empty for ongoing schedules
+                </p>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={resetForm}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleAddSchedule}
+                    disabled={addScheduleMutation.isPending}
+                  >
+                    {addScheduleMutation.isPending ? "Creating..." : "Create Schedule"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!scheduleToDelete} onOpenChange={(open) => !open && setScheduleToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Warning, you are deleting the schedule which includes the history.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelDelete}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Schedule
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+};
