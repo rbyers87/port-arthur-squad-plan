@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [activeView, setActiveView] = useState<"weekly" | "monthly">("weekly");
+  const [useBadgeNumbers, setUseBadgeNumbers] = useState(false);
   const queryClient = useQueryClient();
 
   // Week navigation functions
@@ -500,6 +501,29 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
 
   const isLoading = schedulesLoading || shiftsLoading;
 
+  // Get display name for officer based on current setting
+  const getOfficerDisplayName = (officer: any) => {
+    return useBadgeNumbers ? `#${officer.badgeNumber}` : officer.officerName.split(' ').pop();
+  };
+
+  // Calculate if we should use badge numbers based on officer count
+  const shouldUseBadgeNumbers = useMemo(() => {
+    if (!schedules?.dailySchedules) return false;
+    
+    // Count total scheduled shifts for the week
+    const totalShifts = schedules.dailySchedules.reduce((total, day) => {
+      return total + day.officers.length;
+    }, 0);
+    
+    // Use badge numbers if average more than 8 officers per day
+    return totalShifts / 7 > 8;
+  }, [schedules]);
+
+  // Auto-switch to badge numbers when crowded
+  useState(() => {
+    setUseBadgeNumbers(shouldUseBadgeNumbers);
+  });
+
   if (isLoading) {
     return (
       <Card>
@@ -559,131 +583,189 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
 
   const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
 
-  // Render weekly schedule view - UPDATED to show multiple officers per day
-  const renderWeeklyView = () => (
-    <div className="space-y-4">
-      {schedules?.dailySchedules?.map(({ date, dayOfWeek, officers }) => (
-        <div key={date} className="border rounded-lg overflow-hidden">
-          <div className="bg-muted/50 p-3 border-b">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">{daysOfWeek[dayOfWeek]}</p>
-                <p className="text-sm text-muted-foreground">{format(parseISO(date), "MMM d")}</p>
+  // NEW: Improved weekly view with days as columns
+  const renderWeeklyView = () => {
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
+      const date = addDays(currentWeekStart, i);
+      return {
+        date,
+        dateStr: format(date, "yyyy-MM-dd"),
+        dayName: daysOfWeek[i],
+        formattedDate: format(date, "MMM d"),
+        isToday: isSameDay(date, new Date())
+      };
+    });
+
+    return (
+      <div className="space-y-4">
+        {/* Display toggle */}
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setUseBadgeNumbers(!useBadgeNumbers)}
+            className="text-xs"
+          >
+            {useBadgeNumbers ? "Show Names" : "Show Badge Numbers"}
+          </Button>
+        </div>
+
+        {/* Calendar header */}
+        <div className="grid grid-cols-7 gap-2 border-b pb-2">
+          {weekDays.map(({ date, dayName, formattedDate, isToday }) => (
+            <div key={date.toISOString()} className="text-center">
+              <div className={`text-sm font-medium ${isToday ? 'text-primary' : 'text-muted-foreground'}`}>
+                {dayName}
               </div>
-              <Badge variant="outline">
-                {officers.length} {officers.length === 1 ? 'officer' : 'officers'}
-              </Badge>
+              <div className={`text-lg font-bold ${isToday ? 'bg-primary text-primary-foreground rounded-full w-8 h-8 flex items-center justify-center mx-auto' : ''}`}>
+                {formattedDate.split(' ')[1]}
+              </div>
             </div>
-          </div>
-          
-          <div className="p-3 space-y-2">
-            {officers.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic text-center py-4">No officers scheduled</p>
-            ) : (
-              officers.map(({ officerId, officerName, badgeNumber, rank, shiftInfo }) => (
-                <div
-                  key={`${officerId}-${date}`}
-                  className="flex items-center justify-between p-3 rounded-md bg-card border"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{officerName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {rank || 'Officer'} • Badge #{badgeNumber}
-                    </p>
+          ))}
+        </div>
+
+        {/* Calendar content */}
+        <div className="grid grid-cols-7 gap-2 min-h-[400px]">
+          {weekDays.map(({ dateStr, isToday }) => {
+            const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+            const officers = daySchedule?.officers || [];
+
+            return (
+              <div
+                key={dateStr}
+                className={`
+                  border rounded-lg p-2 min-h-[400px]
+                  ${isToday ? 'border-primary ring-1 ring-primary bg-primary/5' : 'border-border'}
+                  ${officers.length === 0 ? 'bg-muted/20' : ''}
+                `}
+              >
+                {officers.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                    No officers
                   </div>
-                  
-                  {shiftInfo ? (
-                    <div className="flex items-center gap-4">
-                      {editingSchedule === `${shiftInfo.scheduleId}-${shiftInfo.scheduleType}-${officerId}` ? (
-                        <PositionEditor
-                          currentPosition={shiftInfo.position || ""}
-                          onSave={(positionName) => handleSavePosition(shiftInfo.scheduleId, shiftInfo.scheduleType, positionName)}
-                          onCancel={() => setEditingSchedule(null)}
-                          isSaving={updatePositionMutation.isPending}
-                        />
-                      ) : (
-                        <>
-                          <div className="text-right">
-                            <p className="font-medium">{shiftInfo.type}</p>
-                            {shiftInfo.time && <p className="text-sm text-muted-foreground">{shiftInfo.time}</p>}
-                            {shiftInfo.position && (
-                              <Badge variant="secondary" className="mt-1">
-                                {shiftInfo.position}
-                              </Badge>
+                ) : (
+                  <div className="space-y-1">
+                    {officers.map((officer) => (
+                      <div
+                        key={`${officer.officerId}-${dateStr}`}
+                        className={`
+                          p-2 rounded text-xs border
+                          ${officer.shiftInfo.isOff 
+                            ? 'bg-destructive/10 border-destructive/20' 
+                            : officer.shiftInfo.hasPTO
+                            ? 'bg-yellow-100 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800'
+                            : 'bg-card border-border'
+                          }
+                          hover:bg-accent/50 transition-colors cursor-pointer
+                        `}
+                        onClick={() => {
+                          if (isAdminOrSupervisor && officer.shiftInfo) {
+                            handleEditClick(officer.shiftInfo, officer.officerId);
+                          }
+                        }}
+                      >
+                        <div className="font-medium truncate">
+                          {getOfficerDisplayName(officer)}
+                        </div>
+                        <div className="text-muted-foreground truncate">
+                          {officer.shiftInfo.type}
+                        </div>
+                        {officer.shiftInfo.position && (
+                          <Badge variant="secondary" className="mt-1 text-xs truncate w-full">
+                            {officer.shiftInfo.position}
+                          </Badge>
+                        )}
+                        {officer.shiftInfo.isOff && (
+                          <Badge variant="destructive" className="mt-1 text-xs">
+                            {officer.shiftInfo.reason || "Off"}
+                          </Badge>
+                        )}
+                        {officer.shiftInfo.hasPTO && !officer.shiftInfo.isOff && (
+                          <Badge variant="outline" className="mt-1 text-xs bg-yellow-500/20">
+                            PTO
+                          </Badge>
+                        )}
+                        
+                        {/* Action buttons for admin/supervisor */}
+                        {isAdminOrSupervisor && officer.shiftInfo && (
+                          <div className="flex gap-1 mt-2">
+                            {!officer.shiftInfo.isOff && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditClick(officer.shiftInfo, officer.officerId);
+                                }}
+                                title="Edit Position"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </Button>
                             )}
-                            {shiftInfo.isOff && (
-                              <Badge variant="destructive" className="mt-1">
-                                {shiftInfo.reason || "Time Off"}
-                              </Badge>
+                            {officer.shiftInfo.hasPTO ? (
+                              <>
+                                <Button
+                                  size="icon"
+                                  variant="default"
+                                  className="h-6 w-6"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
+                                  }}
+                                  title="Edit PTO"
+                                >
+                                  <Clock className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
+                                  }}
+                                  disabled={removePTOMutation.isPending}
+                                  title="Remove PTO"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
+                                }}
+                                title="Assign PTO"
+                              >
+                                <Clock className="h-3 w-3" />
+                              </Button>
                             )}
                           </div>
-                          
-                          {isAdminOrSupervisor && (
-                            <div className="flex items-center gap-2">
-                              {!shiftInfo.isOff && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleEditClick(shiftInfo, officerId)}
-                                  title="Edit Position"
-                                >
-                                  <Edit2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {shiftInfo.hasPTO ? (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="default"
-                                    onClick={() => handleAssignPTO(shiftInfo, date, officerId, officerName)}
-                                    title="Edit PTO"
-                                  >
-                                    <Clock className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleRemovePTO(shiftInfo, date, officerId)}
-                                    disabled={removePTOMutation.isPending}
-                                    title="Remove PTO"
-                                  >
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleAssignPTO(shiftInfo, date, officerId, officerName)}
-                                  title="Assign PTO"
-                                >
-                                  <Clock className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No shift scheduled</p>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-      ))}
-    </div>
-  );
+      </div>
+    );
+  };
 
-  // Render monthly schedule view - UPDATED to show multiple officers per day
+  // IMPROVED: Monthly view with better layout
   const renderMonthlyView = () => (
     <div className="space-y-4">
       {/* Calendar header */}
       <div className="grid grid-cols-7 gap-1 mb-2">
         {daysOfWeek.map(day => (
-          <div key={day} className="text-center font-medium text-sm py-2">
+          <div key={day} className="text-center font-medium text-sm py-2 bg-muted/50 rounded">
             {day}
           </div>
         ))}
@@ -696,15 +778,17 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
           const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
           const isCurrentMonthDay = isSameMonth(day, currentMonth);
           const isToday = isSameDay(day, new Date());
+          const officers = daySchedule?.officers || [];
           
           return (
             <div
               key={day.toISOString()}
               className={`
                 min-h-24 p-2 border rounded-lg text-sm
-                ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/30 text-muted-foreground'}
-                ${isToday ? 'border-primary ring-1 ring-primary' : 'border-border'}
+                ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/20 text-muted-foreground'}
+                ${isToday ? 'border-primary ring-2 ring-primary' : 'border-border'}
                 hover:bg-accent/50 transition-colors
+                ${officers.length > 0 ? 'cursor-pointer' : ''}
               `}
             >
               <div className="flex justify-between items-start mb-1">
@@ -714,30 +798,42 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
                 `}>
                   {format(day, "d")}
                 </span>
-                {daySchedule && daySchedule.officers.length > 0 && (
+                {officers.length > 0 && (
                   <Badge variant="secondary" className="text-xs">
-                    {daySchedule.officers.length}
+                    {officers.length}
                   </Badge>
                 )}
               </div>
               
-              {daySchedule?.officers.slice(0, 3).map(({ officerId, officerName, shiftInfo }) => (
-                <div key={officerId} className="text-xs mb-1 truncate">
-                  <div className="font-medium truncate">{officerName.split(' ')[0]}</div>
-                  <div className="text-muted-foreground truncate">{shiftInfo?.type}</div>
-                  {shiftInfo?.position && (
-                    <Badge variant="secondary" className="text-xs truncate">
-                      {shiftInfo.position}
-                    </Badge>
-                  )}
-                </div>
-              ))}
-              
-              {daySchedule?.officers.length > 3 && (
-                <div className="text-xs text-muted-foreground mt-1">
-                  +{daySchedule.officers.length - 3} more
-                </div>
-              )}
+              <div className="space-y-1">
+                {officers.slice(0, 4).map(({ officerId, officerName, badgeNumber, shiftInfo }) => (
+                  <div 
+                    key={officerId}
+                    className={`
+                      p-1 rounded text-xs border
+                      ${shiftInfo.isOff 
+                        ? 'bg-destructive/10 border-destructive/20' 
+                        : shiftInfo.hasPTO
+                        ? 'bg-yellow-100 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800'
+                        : 'bg-muted/50 border-border'
+                      }
+                    `}
+                  >
+                    <div className="font-medium truncate">
+                      {useBadgeNumbers ? `#${badgeNumber}` : officerName.split(' ').pop()}
+                    </div>
+                    <div className="text-muted-foreground truncate text-[10px]">
+                      {shiftInfo.type}
+                    </div>
+                  </div>
+                ))}
+                
+                {officers.length > 4 && (
+                  <div className="text-xs text-muted-foreground text-center">
+                    +{officers.length - 4} more
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
