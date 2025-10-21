@@ -21,7 +21,7 @@ interface OfficersManagementProps {
   isAdminOrSupervisor: boolean;
 }
 
-export const OfficersManagement = ({ userId, isAdminOrSupervisor }: WeeklyScheduleProps) => {
+export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersManagementProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedOfficerId, setSelectedOfficerId] = useState<string>(userId);
