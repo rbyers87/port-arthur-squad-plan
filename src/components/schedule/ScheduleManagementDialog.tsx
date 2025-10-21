@@ -5,7 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { Building, MapPin } from "lucide-react";
 
 interface ScheduleManagementDialogProps {
   open: boolean;
@@ -26,8 +28,9 @@ export const ScheduleManagementDialog = ({ open, onOpenChange }: ScheduleManagem
   const queryClient = useQueryClient();
   const [selectedOfficer, setSelectedOfficer] = useState("");
   const [selectedShift, setSelectedShift] = useState("");
-  const [selectedPosition, setSelectedPosition] = useState("");
+  const [selectedPosition, setSelectedPosition] = useState("none");
   const [selectedDay, setSelectedDay] = useState("");
+  const [unitNumber, setUnitNumber] = useState("");
 
   const { data: officers } = useQuery({
     queryKey: ["officers"],
@@ -54,18 +57,15 @@ export const ScheduleManagementDialog = ({ open, onOpenChange }: ScheduleManagem
   });
 
   const { data: positions } = useQuery({
-    queryKey: ["shift-positions", selectedShift],
+    queryKey: ["shift-positions"],
     queryFn: async () => {
-      if (!selectedShift) return [];
       const { data, error } = await supabase
         .from("shift_positions")
-        .select("*")
-        .eq("shift_type_id", selectedShift)
+        .select("id, position_name, position_order")
         .order("position_order");
       if (error) throw error;
       return data;
     },
-    enabled: !!selectedShift,
   });
 
   const createScheduleMutation = useMutation({
@@ -75,7 +75,8 @@ export const ScheduleManagementDialog = ({ open, onOpenChange }: ScheduleManagem
         .insert({
           officer_id: selectedOfficer,
           shift_type_id: selectedShift,
-          position_id: selectedPosition || null,
+          position_name: selectedPosition !== "none" ? selectedPosition : null,
+          unit_number: unitNumber || null,
           day_of_week: parseInt(selectedDay),
           start_date: new Date().toISOString().split("T")[0],
         });
@@ -84,11 +85,13 @@ export const ScheduleManagementDialog = ({ open, onOpenChange }: ScheduleManagem
     onSuccess: () => {
       toast.success("Recurring schedule created");
       queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
       onOpenChange(false);
       setSelectedOfficer("");
       setSelectedShift("");
-      setSelectedPosition("");
+      setSelectedPosition("none");
       setSelectedDay("");
+      setUnitNumber("");
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to create schedule");
@@ -150,30 +153,53 @@ export const ScheduleManagementDialog = ({ open, onOpenChange }: ScheduleManagem
             </Select>
           </div>
 
-          {selectedShift && positions && positions.length > 0 && (
-            <div className="space-y-2">
-              <Label>Position (Optional)</Label>
-              <Select value={selectedPosition} onValueChange={setSelectedPosition}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select position" />
-                </SelectTrigger>
-                <SelectContent>
-                  {positions.map((pos) => (
-                    <SelectItem key={pos.id} value={pos.id}>
-                      {pos.position_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* NEW: Assignment Details Section */}
+          <div className="space-y-4 p-4 border rounded-lg bg-blue-50/30">
+            <h4 className="font-medium text-sm flex items-center gap-2">
+              <Building className="h-4 w-4" />
+              Assignment Details (Optional)
+            </h4>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="unit-number" className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  Unit Number
+                </Label>
+                <Input
+                  id="unit-number"
+                  placeholder="e.g., Unit 1, Patrol, Traffic"
+                  value={unitNumber}
+                  onChange={(e) => setUnitNumber(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="assigned-position">Assigned Position</Label>
+                <Select
+                  value={selectedPosition}
+                  onValueChange={setSelectedPosition}
+                >
+                  <SelectTrigger id="assigned-position">
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No position assigned</SelectItem>
+                    {positions?.map((position) => (
+                      <SelectItem key={position.id} value={position.position_name}>
+                        {position.position_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          )}
+          </div>
 
           <Button
             className="w-full"
             onClick={() => createScheduleMutation.mutate()}
             disabled={!selectedOfficer || !selectedShift || !selectedDay || createScheduleMutation.isPending}
           >
-            Create Schedule
+            {createScheduleMutation.isPending ? "Creating..." : "Create Schedule"}
           </Button>
         </div>
       </DialogContent>
