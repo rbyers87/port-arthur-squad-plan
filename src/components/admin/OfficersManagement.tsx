@@ -16,7 +16,7 @@ import { PositionEditor } from "@/components/schedule/PositionEditor";
 import { usePositionMutation } from "@/hooks/usePositionMutation";
 import { toast } from "sonner";
 
-interface WeeklyScheduleProps {
+interface OfficersManagementProps {
   userId: string;
   isAdminOrSupervisor: boolean;
 }
