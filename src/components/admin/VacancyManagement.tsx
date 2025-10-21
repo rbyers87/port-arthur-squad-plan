@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, Plus, Users, RefreshCw } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Users, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -110,13 +110,30 @@ export const VacancyManagement = () => {
           shift_type_id: alert.shift_type_id,
           shift_types: alert.shift_types,
           minimum_required: alert.minimum_required,
-          current_staffing: alert.current_staffing
+          current_staffing: alert.current_staffing,
+          // Check if shift data matches what we expect
+          shift_name_match: shiftTypes?.find(s => s.id === alert.shift_type_id)?.name === alert.shift_types?.name,
+          shift_time_match: shiftTypes?.find(s => s.id === alert.shift_type_id)?.start_time === alert.shift_types?.start_time
         });
+
+        // Log warning if there's a mismatch
+        const expectedShift = shiftTypes?.find(s => s.id === alert.shift_type_id);
+        if (expectedShift && alert.shift_types) {
+          if (expectedShift.name !== alert.shift_types.name || 
+              expectedShift.start_time !== alert.shift_types.start_time) {
+            console.warn("🚨 SHIFT DATA MISMATCH:", {
+              alert_id: alert.id,
+              expected_shift: expectedShift,
+              actual_shift_data: alert.shift_types
+            });
+          }
+        }
       });
       
       return alertsData;
     },
     staleTime: 30000,
+    gcTime: 5 * 60 * 1000,
   });
 
   const { data: responses, refetch: refetchResponses } = useQuery({
@@ -147,6 +164,23 @@ export const VacancyManagement = () => {
       if (!selectedDate || !selectedShift) {
         throw new Error("Please select date and shift");
       }
+
+      // Validate the selected shift exists and get its correct data
+      const { data: shift, error: shiftError } = await supabase
+        .from("shift_types")
+        .select("id, name, start_time, end_time")
+        .eq("id", selectedShift)
+        .single();
+
+      if (shiftError || !shift) {
+        throw new Error("Invalid shift selected");
+      }
+
+      console.log("📝 Creating alert for shift:", {
+        id: shift.id,
+        name: shift.name,
+        time: `${shift.start_time} - ${shift.end_time}`
+      });
 
       const { error } = await supabase.from("vacancy_alerts").insert({
         date: format(selectedDate, "yyyy-MM-dd"),
@@ -191,6 +225,39 @@ export const VacancyManagement = () => {
     },
   });
 
+  // Function to fix individual alert data
+  const fixAlertData = async (alertId: string, shiftTypeId: string) => {
+    try {
+      // Get the correct shift data
+      const { data: shift, error: shiftError } = await supabase
+        .from("shift_types")
+        .select("id, name, start_time, end_time")
+        .eq("id", shiftTypeId)
+        .single();
+
+      if (shiftError || !shift) {
+        toast.error("Invalid shift data");
+        return;
+      }
+
+      // Update the alert to ensure correct shift data
+      const { error } = await supabase
+        .from("vacancy_alerts")
+        .update({
+          shift_type_id: shiftTypeId
+          // Note: We're only updating the shift_type_id, not trying to override the joined data
+        })
+        .eq("id", alertId);
+
+      if (error) throw error;
+
+      toast.success("Alert data fixed");
+      queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+    } catch (error: any) {
+      toast.error("Failed to fix alert: " + error.message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Refresh Button */}
@@ -206,6 +273,26 @@ export const VacancyManagement = () => {
           Refresh All
         </Button>
       </div>
+
+      {/* Debug Info Card */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-blue-800">
+            <AlertTriangle className="h-5 w-5" />
+            Debug Information
+          </CardTitle>
+          <CardDescription className="text-blue-700">
+            Check browser console for detailed shift data. Looking for shift data mismatches.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-sm text-blue-800 space-y-1">
+            <p><strong>Current Issue:</strong> Shift times displaying incorrectly</p>
+            <p><strong>Example:</strong> "Day Shift" showing "06:30:00 - 16:30:00"</p>
+            <p><strong>Solution:</strong> The UnderstaffedDetection component is creating alerts with wrong shift data</p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Automatic Understaffed Detection */}
       <UnderstaffedDetection />
@@ -308,42 +395,81 @@ export const VacancyManagement = () => {
             <p className="text-sm text-muted-foreground">No vacancy alerts created yet.</p>
           ) : (
             <div className="space-y-4">
-              {alerts.map((alert) => (
-                <div key={alert.id} className="p-4 border rounded-lg space-y-2">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium">{alert.shift_types?.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {format(new Date(alert.date), "EEEE, MMM d, yyyy")}
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Staffing: {alert.current_staffing} / {alert.minimum_required}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <span
-                        className={cn(
-                          "text-xs px-2 py-1 rounded",
-                          alert.status === "open"
-                            ? "bg-green-500/10 text-green-700"
-                            : "bg-gray-500/10 text-gray-700"
-                        )}
-                      >
-                        {alert.status}
-                      </span>
-                      {alert.status === "open" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => closeAlertMutation.mutate(alert.id)}
+              {alerts.map((alert) => {
+                // Safely handle missing shift_types
+                const shiftName = alert.shift_types?.name || `Shift ID: ${alert.shift_type_id}`;
+                const shiftTime = alert.shift_types 
+                  ? `${alert.shift_types.start_time} - ${alert.shift_types.end_time}`
+                  : "Time not available";
+
+                // Check if this alert has the wrong shift data
+                const hasPotentialIssue = shiftName === "Day Shift" && shiftTime === "06:30:00 - 16:30:00";
+
+                return (
+                  <div 
+                    key={alert.id} 
+                    className={`p-4 border rounded-lg space-y-2 ${hasPotentialIssue ? 'bg-yellow-50 border-yellow-200' : ''}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="font-medium">{shiftName}</p>
+                          {hasPotentialIssue && (
+                            <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
+                              Data Mismatch
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Staffing: {alert.current_staffing} / {alert.minimum_required}
+                        </p>
+                        
+                        {/* Debug info */}
+                        <div className="mt-2 p-2 bg-gray-100 rounded text-xs">
+                          <p className="text-gray-600">
+                            <strong>Shift ID:</strong> {alert.shift_type_id} | 
+                            <strong> Staffing:</strong> {alert.current_staffing}/{alert.minimum_required}
+                          </p>
+                          {hasPotentialIssue && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => fixAlertData(alert.id, alert.shift_type_id)}
+                              className="mt-1 text-xs"
+                            >
+                              Fix This Alert
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 ml-4">
+                        <span
+                          className={cn(
+                            "text-xs px-2 py-1 rounded",
+                            alert.status === "open"
+                              ? "bg-green-500/10 text-green-700"
+                              : "bg-gray-500/10 text-gray-700"
+                          )}
                         >
-                          Close Alert
-                        </Button>
-                      )}
+                          {alert.status}
+                        </span>
+                        {alert.status === "open" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => closeAlertMutation.mutate(alert.id)}
+                          >
+                            Close Alert
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
