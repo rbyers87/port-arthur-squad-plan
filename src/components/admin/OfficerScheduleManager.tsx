@@ -187,7 +187,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     },
   });
 
-  // Update schedule mutation
+  // Update schedule mutation - now updates all fields
   const updateScheduleMutation = useMutation({
     mutationFn: async ({ 
       scheduleId, 
@@ -195,6 +195,10 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     }: { 
       scheduleId: string; 
       updates: { 
+        day_of_week: number;
+        shift_type_id: string;
+        start_date: string;
+        end_date?: string | null;
         unit_number?: string | null;
         position_name?: string | null;
       } 
@@ -212,6 +216,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
       queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
       setEditingSchedule(null);
+      resetForm();
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to update schedule");
@@ -260,14 +265,33 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
 
   const handleEditSchedule = (schedule: any) => {
     setEditingSchedule(schedule);
+    setSelectedDays([schedule.day_of_week]);
+    setShiftTypeId(schedule.shift_type_id);
+    setStartDate(new Date(schedule.start_date));
+    setEndDate(schedule.end_date ? new Date(schedule.end_date) : undefined);
     setUnitNumber(schedule.unit_number || "");
     setAssignedPosition(schedule.position_name || "none");
   };
 
   const handleSaveEdit = () => {
     if (!editingSchedule) return;
+    if (!shiftTypeId) {
+      toast.error("Please select a shift");
+      return;
+    }
+    if (selectedDays.length === 0) {
+      toast.error("Please select at least one day");
+      return;
+    }
+
+    // Since we're editing a single schedule entry, we only use the first selected day
+    const dayOfWeek = selectedDays[0];
 
     const updates = {
+      day_of_week: dayOfWeek,
+      shift_type_id: shiftTypeId,
+      start_date: format(startDate, "yyyy-MM-dd"),
+      end_date: endDate ? format(endDate, "yyyy-MM-dd") : null,
       unit_number: unitNumber || null,
       position_name: assignedPosition !== "none" ? assignedPosition : null,
     };
@@ -298,9 +322,14 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   };
 
   const toggleDay = (day: number) => {
-    setSelectedDays(prev =>
-      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
-    );
+    // When editing, only allow one day to be selected since we're editing a single schedule entry
+    if (editingSchedule) {
+      setSelectedDays([day]);
+    } else {
+      setSelectedDays(prev =>
+        prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+      );
+    }
   };
 
   const resetForm = () => {
@@ -313,6 +342,8 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     setAssignedPosition("none");
     setEditingSchedule(null);
   };
+
+  const isEditing = !!editingSchedule;
 
   return (
     <>
@@ -388,7 +419,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleEditSchedule(schedule)}
-                                  title="Edit assignment details"
+                                  title="Edit this schedule"
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
@@ -483,46 +514,162 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
               )}
             </div>
 
-            {/* Edit Schedule Assignment */}
-            {editingSchedule && (
+            {/* Edit Schedule Form */}
+            {isEditing && (
               <div className="border rounded-lg p-4 space-y-4 bg-blue-50/30">
                 <h3 className="font-medium flex items-center gap-2">
                   <Edit className="h-4 w-4" />
-                  Edit Assignment Details
+                  Edit Schedule
                 </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-unit" className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      Unit Number
-                    </Label>
-                    <Input
-                      id="edit-unit"
-                      placeholder="e.g., Unit 1, Patrol, Traffic"
-                      value={unitNumber}
-                      onChange={(e) => setUnitNumber(e.target.value)}
-                    />
+                
+                <div className="space-y-2">
+                  <Label>Day of Week</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {daysOfWeek.map((day) => (
+                      <div key={day.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`edit-day-${day.value}`}
+                          checked={selectedDays.includes(day.value)}
+                          onCheckedChange={() => toggleDay(day.value)}
+                        />
+                        <Label
+                          htmlFor={`edit-day-${day.value}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          {day.label}
+                        </Label>
+                      </div>
+                    ))}
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-position">Assigned Position</Label>
-                    <Select
-                      value={assignedPosition}
-                      onValueChange={setAssignedPosition}
-                    >
-                      <SelectTrigger id="edit-position">
-                        <SelectValue placeholder="Select position" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No position assigned</SelectItem>
-                        {shiftPositions.map((position) => (
-                          <SelectItem key={position.id} value={position.position_name}>
-                            {position.position_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Select one day for this schedule entry
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Shift</Label>
+                  <Select value={shiftTypeId} onValueChange={setShiftTypeId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select shift" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {shiftTypes?.map((shift) => (
+                        <SelectItem key={shift.id} value={shift.id}>
+                          {shift.name} ({shift.start_time} - {shift.end_time})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Assignment Details Section */}
+                <div className="space-y-4 p-4 border rounded-lg bg-white">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <Building className="h-4 w-4" />
+                    Assignment Details (Optional)
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-unit" className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        Unit Number
+                      </Label>
+                      <Input
+                        id="edit-unit"
+                        placeholder="e.g., Unit 1, Patrol, Traffic"
+                        value={unitNumber}
+                        onChange={(e) => setUnitNumber(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-position">Assigned Position</Label>
+                      <Select
+                        value={assignedPosition}
+                        onValueChange={setAssignedPosition}
+                      >
+                        <SelectTrigger id="edit-position">
+                          <SelectValue placeholder="Select position" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No position assigned</SelectItem>
+                          {shiftPositions.map((position) => (
+                            <SelectItem key={position.id} value={position.position_name}>
+                              {position.position_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Start Date *</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !startDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {startDate ? format(startDate, "PPP") : "Select date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={startDate}
+                          onSelect={(date) => date && setStartDate(date)}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>End Date (Optional)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !endDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {endDate ? format(endDate, "PPP") : "Ongoing"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={endDate}
+                          onSelect={setEndDate}
+                          initialFocus
+                          disabled={(date) => date < startDate}
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {endDate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEndDate(undefined)}
+                        className="w-full"
+                      >
+                        Clear End Date
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -541,7 +688,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
             )}
 
             {/* Add New Schedule */}
-            {!showAddForm && !editingSchedule ? (
+            {!showAddForm && !isEditing ? (
               <Button
                 variant="outline"
                 className="w-full"
@@ -591,7 +738,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                   </Select>
                 </div>
 
-                {/* NEW: Assignment Details Section */}
+                {/* Assignment Details Section */}
                 <div className="space-y-4 p-4 border rounded-lg bg-blue-50/30">
                   <h4 className="font-medium text-sm flex items-center gap-2">
                     <Building className="h-4 w-4" />
