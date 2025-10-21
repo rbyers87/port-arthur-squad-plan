@@ -457,6 +457,8 @@ export const DailyScheduleView = ({
   onSuccess: () => {
     toast.success("Position updated");
     queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    
     setEditingSchedule(null);
     setEditPosition("");
     setCustomPosition("");
