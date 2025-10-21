@@ -1,4 +1,4 @@
-//used for officers weekly and monthly schedules
+//used for officer weekly and monthly schedules
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,7 +15,6 @@ import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { PositionEditor } from "./PositionEditor";
 import { usePositionMutation } from "@/hooks/usePositionMutation";
 import { toast } from "sonner";
-
 
 interface OfficersManagementProps {
   userId: string;
@@ -464,7 +463,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Officer Schedule
+            Officer Schedule Management
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -480,7 +479,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Officer Schedule
+            Officer Schedule Management
           </CardTitle>
         </CardHeader>
         <CardContent>
