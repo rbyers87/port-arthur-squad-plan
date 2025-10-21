@@ -236,7 +236,10 @@ const Dashboard = () => {
             </TabsContent>
 
             <TabsContent value="officers" className="space-y-6">
-              <OfficersManagement />
+              <OfficersManagement 
+                userId={user!.id} 
+                isAdminOrSupervisor={isAdminOrSupervisor} 
+                  />
             </TabsContent>
 
             <TabsContent value="vacancies" className="space-y-6">
