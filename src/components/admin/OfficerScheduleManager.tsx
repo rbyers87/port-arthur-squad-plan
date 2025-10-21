@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar as CalendarIcon, Trash2, Plus, StopCircle } from "lucide-react";
+import { Calendar as CalendarIcon, Trash2, Plus, StopCircle, Building, MapPin, Edit } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
@@ -23,11 +23,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 
 interface OfficerScheduleManagerProps {
   officer: {
     id: string;
     full_name: string;
+    default_unit?: string | null;
+    default_position?: string | null;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -43,6 +46,12 @@ const daysOfWeek = [
   { value: 6, label: "Saturday" },
 ];
 
+interface ShiftPosition {
+  id: string;
+  position_name: string;
+  description?: string;
+}
+
 export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerScheduleManagerProps) => {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
@@ -51,6 +60,31 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [shiftTypeId, setShiftTypeId] = useState("");
   const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
+  const [unitNumber, setUnitNumber] = useState("");
+  const [assignedPosition, setAssignedPosition] = useState("none");
+  const [shiftPositions, setShiftPositions] = useState<ShiftPosition[]>([]);
+  const [editingSchedule, setEditingSchedule] = useState<any>(null);
+
+  // Fetch shift positions
+  useEffect(() => {
+    const fetchShiftPositions = async () => {
+      const { data, error } = await supabase
+        .from('shift_positions')
+        .select('id, position_name, description')
+        .order('position_name');
+
+      if (error) {
+        console.error('Error fetching shift positions:', error);
+        toast.error('Failed to load positions');
+      } else {
+        setShiftPositions(data || []);
+      }
+    };
+
+    if (open) {
+      fetchShiftPositions();
+    }
+  }, [open]);
 
   // Fetch officer's recurring schedules
   const { data: schedules, isLoading: schedulesLoading } = useQuery({
@@ -117,13 +151,22 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
 
   // Add schedule mutation (bulk insert multiple days)
   const addScheduleMutation = useMutation({
-    mutationFn: async (data: { days: number[]; shiftId: string; start: string; end?: string }) => {
+    mutationFn: async (data: { 
+      days: number[]; 
+      shiftId: string; 
+      start: string; 
+      end?: string;
+      unitNumber?: string;
+      assignedPosition?: string;
+    }) => {
       const schedules = data.days.map(day => ({
         officer_id: officer.id,
         day_of_week: day,
         shift_type_id: data.shiftId,
         start_date: data.start,
         end_date: data.end || null,
+        unit_number: data.unitNumber || null,
+        position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
       }));
 
       const { error } = await supabase
@@ -137,14 +180,41 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
       queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
       queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      setShowAddForm(false);
-      setSelectedDays([]);
-      setShiftTypeId("");
-      setStartDate(new Date());
-      setEndDate(undefined);
+      resetForm();
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to add schedule");
+    },
+  });
+
+  // Update schedule mutation
+  const updateScheduleMutation = useMutation({
+    mutationFn: async ({ 
+      scheduleId, 
+      updates 
+    }: { 
+      scheduleId: string; 
+      updates: { 
+        unit_number?: string | null;
+        position_name?: string | null;
+      } 
+    }) => {
+      const { error } = await supabase
+        .from("recurring_schedules")
+        .update(updates)
+        .eq("id", scheduleId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Schedule updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      setEditingSchedule(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update schedule");
     },
   });
 
@@ -183,6 +253,28 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       shiftId: shiftTypeId,
       start: format(startDate, "yyyy-MM-dd"),
       end: endDate ? format(endDate, "yyyy-MM-dd") : undefined,
+      unitNumber: unitNumber || undefined,
+      assignedPosition: assignedPosition !== "none" ? assignedPosition : undefined,
+    });
+  };
+
+  const handleEditSchedule = (schedule: any) => {
+    setEditingSchedule(schedule);
+    setUnitNumber(schedule.unit_number || "");
+    setAssignedPosition(schedule.position_name || "none");
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingSchedule) return;
+
+    const updates = {
+      unit_number: unitNumber || null,
+      position_name: assignedPosition !== "none" ? assignedPosition : null,
+    };
+
+    updateScheduleMutation.mutate({
+      scheduleId: editingSchedule.id,
+      updates
     });
   };
 
@@ -209,6 +301,17 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     setSelectedDays(prev =>
       prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
     );
+  };
+
+  const resetForm = () => {
+    setShowAddForm(false);
+    setSelectedDays([]);
+    setShiftTypeId("");
+    setStartDate(new Date());
+    setEndDate(undefined);
+    setUnitNumber("");
+    setAssignedPosition("none");
+    setEditingSchedule(null);
   };
 
   return (
@@ -262,13 +365,33 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                                   {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
                                   {!schedule.end_date && " - Ongoing"}
                                 </p>
-                                {schedule.position_name && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {schedule.position_name}
-                                  </Badge>
-                                )}
+                                <div className="flex gap-2 flex-wrap">
+                                  {schedule.unit_number && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <MapPin className="h-3 w-3 mr-1" />
+                                      {schedule.unit_number}
+                                    </Badge>
+                                  )}
+                                  {schedule.position_name && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <Building className="h-3 w-3 mr-1" />
+                                      {schedule.position_name}
+                                    </Badge>
+                                  )}
+                                  {(!schedule.unit_number && !schedule.position_name) && (
+                                    <span className="text-xs text-muted-foreground italic">No assignment details</span>
+                                  )}
+                                </div>
                               </div>
                               <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleEditSchedule(schedule)}
+                                  title="Edit assignment details"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
                                 {!schedule.end_date && (
                                   <Button
                                     size="sm"
@@ -325,11 +448,20 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                                   {format(new Date(schedule.start_date), "MMM d, yyyy")}
                                   {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
                                 </p>
-                                {schedule.position_name && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {schedule.position_name}
-                                  </Badge>
-                                )}
+                                <div className="flex gap-2 flex-wrap">
+                                  {schedule.unit_number && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <MapPin className="h-3 w-3 mr-1" />
+                                      {schedule.unit_number}
+                                    </Badge>
+                                  )}
+                                  {schedule.position_name && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <Building className="h-3 w-3 mr-1" />
+                                      {schedule.position_name}
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                               <div className="flex gap-1">
                                 <Button
@@ -345,181 +477,4 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                             </div>
                           );
                         })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Add New Schedule */}
-            {!showAddForm ? (
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowAddForm(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Work Schedule
-              </Button>
-            ) : (
-              <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-medium">Create Work Schedule</h3>
-                
-                <div className="space-y-2">
-                  <Label>Work Days (Select Multiple)</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {daysOfWeek.map((day) => (
-                      <div key={day.value} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`day-${day.value}`}
-                          checked={selectedDays.includes(day.value)}
-                          onCheckedChange={() => toggleDay(day.value)}
-                        />
-                        <Label
-                          htmlFor={`day-${day.value}`}
-                          className="text-sm font-normal cursor-pointer"
-                        >
-                          {day.label}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Shift</Label>
-                  <Select value={shiftTypeId} onValueChange={setShiftTypeId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select shift" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {shiftTypes?.map((shift) => (
-                        <SelectItem key={shift.id} value={shift.id}>
-                          {shift.name} ({shift.start_time} - {shift.end_time})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Start Date *</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !startDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {startDate ? format(startDate, "PPP") : "Select date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={startDate}
-                          onSelect={(date) => date && setStartDate(date)}
-                          initialFocus
-                          className="pointer-events-auto"
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>End Date (Optional)</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !endDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {endDate ? format(endDate, "PPP") : "Ongoing"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={endDate}
-                          onSelect={setEndDate}
-                          initialFocus
-                          disabled={(date) => date < startDate}
-                          className="pointer-events-auto"
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    {endDate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEndDate(undefined)}
-                        className="w-full"
-                      >
-                        Clear End Date
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  * Leave end date empty for ongoing schedules
-                </p>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowAddForm(false);
-                      setSelectedDays([]);
-                      setShiftTypeId("");
-                      setStartDate(new Date());
-                      setEndDate(undefined);
-                    }}
-                  >
-                    Cancel
-                </Button>
-                <Button
-                  onClick={handleAddSchedule}
-                  disabled={addScheduleMutation.isPending}
-                >
-                  {addScheduleMutation.isPending ? "Creating..." : "Create Schedule"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-
-    {/* Delete Confirmation Dialog */}
-    <AlertDialog open={!!scheduleToDelete} onOpenChange={(open) => !open && setScheduleToDelete(null)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-          <AlertDialogDescription>
-            Warning, you are deleting the schedule which includes the history.
-            This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={cancelDelete}>Cancel</AlertDialogCancel>
-          <AlertDialogAction 
-            onClick={confirmDelete}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Delete Schedule
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  </>
-  );
-};
+                    </
