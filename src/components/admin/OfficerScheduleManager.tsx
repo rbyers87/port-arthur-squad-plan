@@ -343,9 +343,21 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     });
   };
 
-  const handleEndSchedule = (scheduleId: string) => {
+  const handleEndAllSchedules = () => {
+    const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
     const today = format(new Date(), "yyyy-MM-dd");
-    endScheduleMutation.mutate({ scheduleId, endDate: today });
+    
+    activeSchedules.forEach(schedule => {
+      endScheduleMutation.mutate({ scheduleId: schedule.id, endDate: today });
+    });
+  };
+
+  const handleDeleteAllSchedules = () => {
+    const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
+    
+    if (activeSchedules.length > 0) {
+      setScheduleToDelete("all");
+    }
   };
 
   const handleDeleteClick = (scheduleId: string) => {
@@ -353,9 +365,16 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   };
 
   const confirmDelete = () => {
-    if (scheduleToDelete) {
+    if (scheduleToDelete === "all") {
+      // Delete all active schedules
+      const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
+      activeSchedules.forEach(schedule => {
+        deleteScheduleMutation.mutate(schedule.id);
+      });
+    } else if (scheduleToDelete) {
       deleteScheduleMutation.mutate(scheduleToDelete);
     }
+    setScheduleToDelete(null);
   };
 
   const cancelDelete = () => {
@@ -407,6 +426,75 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                 <CalendarIcon className="h-4 w-4" />
                 Regular Schedules
               </h3>
+              
+              {/* Bulk Edit Assignment Form - AT THE TOP */}
+              {showEditAssignment && (
+                <div className="border rounded-lg p-4 space-y-4 bg-blue-50/30">
+                  <h3 className="font-medium flex items-center gap-2">
+                    <Edit className="h-4 w-4" />
+                    Edit Assignment for All Active Schedules
+                  </h3>
+                  
+                  <div className="space-y-4 p-4 border rounded-lg bg-white">
+                    <h4 className="font-medium text-sm flex items-center gap-2">
+                      <Building className="h-4 w-4" />
+                      Assignment Details
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="bulk-unit" className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          Unit Number
+                        </Label>
+                        <Input
+                          id="bulk-unit"
+                          placeholder="e.g., Unit 1, Patrol, Traffic"
+                          value={bulkUnitNumber}
+                          onChange={(e) => setBulkUnitNumber(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="bulk-position">Assigned Position</Label>
+                        <Select
+                          value={bulkAssignedPosition}
+                          onValueChange={setBulkAssignedPosition}
+                        >
+                          <SelectTrigger id="bulk-position">
+                            <SelectValue placeholder="Select position" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No position assigned</SelectItem>
+                            {shiftPositions.map((position) => (
+                              <SelectItem key={position} value={position}>
+                                {position}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This will update the unit number and position for all active schedules.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowEditAssignment(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleBulkUpdateAssignment}
+                      disabled={bulkUpdateAssignmentMutation.isPending}
+                    >
+                      {bulkUpdateAssignmentMutation.isPending ? "Updating..." : "Update All Assignments"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {schedulesLoading ? (
                 <p className="text-sm text-muted-foreground">Loading schedules...</p>
               ) : !schedules || schedules.length === 0 ? (
@@ -418,7 +506,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                     <div className="space-y-2">
                       <h4 className="text-sm font-semibold text-green-700 dark:text-green-400">Active Schedules</h4>
                       
-                      {/* Bulk Edit Assignment Button */}
+                      {/* Single End and Delete Buttons */}
                       <div className="flex gap-2 mb-4">
                         <Button
                           variant="outline"
@@ -432,16 +520,22 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            const scheduleToEnd = activeSchedules[0];
-                            if (scheduleToEnd) {
-                              handleEndSchedule(scheduleToEnd.id);
-                            }
-                          }}
+                          onClick={handleEndAllSchedules}
+                          disabled={endScheduleMutation.isPending}
                           className="flex items-center gap-2"
                         >
                           <StopCircle className="h-4 w-4" />
-                          End Current Schedule
+                          End Schedule
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDeleteAllSchedules}
+                          disabled={deleteScheduleMutation.isPending}
+                          className="flex items-center gap-2 text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete Schedule
                         </Button>
                       </div>
 
@@ -483,28 +577,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                                   <span className="text-xs text-muted-foreground italic">No assignment details</span>
                                 )}
                               </div>
-                            </div>
-                            <div className="flex gap-1">
-                              {!schedule.end_date && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleEndSchedule(schedule.id)}
-                                  disabled={endScheduleMutation.isPending}
-                                  title="End this schedule"
-                                >
-                                  <StopCircle className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDeleteClick(schedule.id)}
-                                disabled={deleteScheduleMutation.isPending}
-                                title="Delete this schedule"
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
                             </div>
                           </div>
                         );
@@ -575,74 +647,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                 </div>
               )}
             </div>
-
-            {/* Bulk Edit Assignment Form */}
-            {showEditAssignment && (
-              <div className="border rounded-lg p-4 space-y-4 bg-blue-50/30">
-                <h3 className="font-medium flex items-center gap-2">
-                  <Edit className="h-4 w-4" />
-                  Edit Assignment for All Active Schedules
-                </h3>
-                
-                <div className="space-y-4 p-4 border rounded-lg bg-white">
-                  <h4 className="font-medium text-sm flex items-center gap-2">
-                    <Building className="h-4 w-4" />
-                    Assignment Details
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="bulk-unit" className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        Unit Number
-                      </Label>
-                      <Input
-                        id="bulk-unit"
-                        placeholder="e.g., Unit 1, Patrol, Traffic"
-                        value={bulkUnitNumber}
-                        onChange={(e) => setBulkUnitNumber(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="bulk-position">Assigned Position</Label>
-                      <Select
-                        value={bulkAssignedPosition}
-                        onValueChange={setBulkAssignedPosition}
-                      >
-                        <SelectTrigger id="bulk-position">
-                          <SelectValue placeholder="Select position" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No position assigned</SelectItem>
-                          {shiftPositions.map((position) => (
-                            <SelectItem key={position} value={position}>
-                              {position}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    This will update the unit number and position for all active schedules.
-                  </p>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowEditAssignment(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleBulkUpdateAssignment}
-                    disabled={bulkUpdateAssignmentMutation.isPending}
-                  >
-                    {bulkUpdateAssignmentMutation.isPending ? "Updating..." : "Update All Assignments"}
-                  </Button>
-                </div>
-              </div>
-            )}
 
             {/* Edit Schedule Form */}
             {isEditing && (
@@ -924,8 +928,9 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
             <AlertDialogDescription>
-              Warning, you are deleting the schedule which includes the history.
-              This action cannot be undone.
+              {scheduleToDelete === "all" 
+                ? "Warning, you are deleting ALL active schedules which includes their history. This action cannot be undone."
+                : "Warning, you are deleting the schedule which includes the history. This action cannot be undone."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -934,7 +939,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete Schedule
+              Delete Schedule{scheduleToDelete === "all" ? "s" : ""}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
