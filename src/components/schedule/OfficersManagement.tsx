@@ -1,5 +1,4 @@
-//used for officer weekly and monthly schedules
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +23,7 @@ interface OfficersManagementProps {
 export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersManagementProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
-  const [selectedOfficerId, setSelectedOfficerId] = useState<string>(userId);
+  const [selectedOfficerId, setSelectedOfficerId] = useState<string>("");
   const [selectedSchedule, setSelectedSchedule] = useState<{
     scheduleId: string;
     type: "recurring" | "exception";
@@ -43,6 +42,18 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [activeView, setActiveView] = useState<"weekly" | "monthly">("weekly");
   const queryClient = useQueryClient();
+
+  // Initialize selectedOfficerId when component mounts or props change
+  useEffect(() => {
+    if (isAdminOrSupervisor && selectedOfficerId === "") {
+      // For admins, we'll set this after profiles load
+      return;
+    }
+    if (!isAdminOrSupervisor && selectedOfficerId === "") {
+      // For regular officers, use their own ID
+      setSelectedOfficerId(userId);
+    }
+  }, [userId, isAdminOrSupervisor, selectedOfficerId]);
 
   // Week navigation functions
   const goToPreviousWeek = () => {
@@ -96,10 +107,30 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
     enabled: isAdminOrSupervisor,
   });
 
+  // Set default officer for admins when profiles load
+  useEffect(() => {
+    if (isAdminOrSupervisor && profiles && profiles.length > 0 && selectedOfficerId === "") {
+      setSelectedOfficerId(profiles[0].id);
+    }
+  }, [profiles, isAdminOrSupervisor, selectedOfficerId]);
+
   // Enhanced query to fetch schedule data for both weekly and monthly views
   const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
     queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView],
     queryFn: async () => {
+      // Don't fetch if no officer is selected
+      if (!selectedOfficerId) {
+        console.log("No officer selected, skipping schedule fetch");
+        return { 
+          dailySchedules: [], 
+          dates: [],
+          recurring: [],
+          exceptions: [],
+          startDate: "",
+          endDate: ""
+        };
+      }
+
       const targetUserId = isAdminOrSupervisor ? selectedOfficerId : userId;
       
       // Determine date range based on active view
@@ -267,6 +298,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
         endDate: format(endDate, "yyyy-MM-dd")
       };
     },
+    enabled: !!selectedOfficerId, // Only fetch when we have a valid officer ID
   });
 
   const updatePositionMutation = usePositionMutation();
@@ -455,7 +487,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
     });
   };
 
-  const isLoading = schedulesLoading || (isAdminOrSupervisor && profilesLoading);
+  const isLoading = schedulesLoading || (isAdminOrSupervisor && profilesLoading) || !selectedOfficerId;
 
   if (isLoading) {
     return (
@@ -744,7 +776,10 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
             </CardTitle>
             {isAdminOrSupervisor && (
               <div className="flex items-center gap-3">
-                <Select value={selectedOfficerId} onValueChange={setSelectedOfficerId}>
+                <Select 
+                  value={selectedOfficerId} 
+                  onValueChange={(value) => setSelectedOfficerId(value)}
+                >
                   <SelectTrigger className="w-64">
                     <SelectValue placeholder="Select officer" />
                   </SelectTrigger>
