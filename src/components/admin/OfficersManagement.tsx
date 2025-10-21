@@ -11,8 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO } from "date-fns";
 import { Calendar, Plus, Edit2, Clock, Trash2, ChevronLeft, ChevronRight, Grid, Calendar as CalendarIcon } from "lucide-react";
 import { ScheduleManagementDialog } from "@/components/schedule/ScheduleManagementDialog";
-import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
-import { PositionEditor } from "./PositionEditor";
+import { PTOAssignmentDialog } from "@/components/schedule/PTOAssignmentDialog";
+import { PositionEditor } from "@/components/schedule/PositionEditor";
 import { usePositionMutation } from "@/hooks/usePositionMutation";
 import { toast } from "sonner";
 
