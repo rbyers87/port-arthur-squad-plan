@@ -21,6 +21,8 @@ interface OfficersManagementProps {
 }
 
 export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersManagementProps) => {
+  console.log("🔍 OfficersManagement props:", { userId, isAdminOrSupervisor });
+  
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedOfficerId, setSelectedOfficerId] = useState<string>("");
@@ -45,12 +47,11 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
 
   // Initialize selectedOfficerId when component mounts or props change
   useEffect(() => {
-    if (isAdminOrSupervisor && selectedOfficerId === "") {
-      // For admins, we'll set this after profiles load
-      return;
-    }
-    if (!isAdminOrSupervisor && selectedOfficerId === "") {
+    console.log("🔍 useEffect - Initializing officer ID:", { userId, isAdminOrSupervisor, selectedOfficerId });
+    
+    if (!isAdminOrSupervisor && userId && selectedOfficerId === "") {
       // For regular officers, use their own ID
+      console.log("👮 Setting officer ID to user ID:", userId);
       setSelectedOfficerId(userId);
     }
   }, [userId, isAdminOrSupervisor, selectedOfficerId]);
@@ -91,6 +92,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
   const { data: profiles, isLoading: profilesLoading } = useQuery({
     queryKey: ["profiles"],
     queryFn: async () => {
+      console.log("🔍 Fetching profiles...");
       const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, badge_number")
@@ -110,7 +112,9 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
   // Set default officer for admins when profiles load
   useEffect(() => {
     if (isAdminOrSupervisor && profiles && profiles.length > 0 && selectedOfficerId === "") {
-      setSelectedOfficerId(profiles[0].id);
+      const firstOfficerId = profiles[0].id;
+      console.log("👨‍💼 Setting default officer for admin:", firstOfficerId);
+      setSelectedOfficerId(firstOfficerId);
     }
   }, [profiles, isAdminOrSupervisor, selectedOfficerId]);
 
@@ -118,9 +122,11 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
   const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
     queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView],
     queryFn: async () => {
+      console.log("🔍 Fetching schedules for officer:", selectedOfficerId);
+      
       // Don't fetch if no officer is selected
       if (!selectedOfficerId) {
-        console.log("No officer selected, skipping schedule fetch");
+        console.log("❌ No officer selected, skipping schedule fetch");
         return { 
           dailySchedules: [], 
           dates: [],
@@ -132,6 +138,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
       }
 
       const targetUserId = isAdminOrSupervisor ? selectedOfficerId : userId;
+      console.log("🎯 Target user ID:", targetUserId);
       
       // Determine date range based on active view
       let startDate: Date;
@@ -193,15 +200,12 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
         throw exceptionsError;
       }
 
+      console.log("✅ Schedule data fetched successfully");
+      
       // Build schedule for each day
       const dailySchedules = dates.map((date, idx) => {
         const currentDate = parseISO(date);        // parse ISO (yyyy-MM-dd) safely
         const dayOfWeek = currentDate.getDay();
-        
-        // ADD MONTHLY VIEW DEBUGGING
-        if (activeView === "monthly") {
-          console.log(`📅 MONTHLY VIEW - Date: ${date}, Day of Week: ${dayOfWeek} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]}), Recurring check for day: ${dayOfWeek}`);
-        }
         
         const exception = exceptionsData?.find(e => e.date === date);
         
@@ -215,11 +219,6 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
           
           const isAfterStart = currentDate >= scheduleStartDate;
           const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
-          
-          // ADD DEBUGGING FOR RECURRING MATCH
-          if (activeView === "monthly" && r.day_of_week === dayOfWeek) {
-            console.log(`   🔍 Recurring schedule: ${r.shift_types?.name}, DB day_of_week: ${r.day_of_week}, Matches: ${r.day_of_week === dayOfWeek}, Active: ${isAfterStart && isBeforeEnd}`);
-          }
           
           return isAfterStart && isBeforeEnd;
         });
@@ -275,7 +274,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
               startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
               endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
               isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
-              shiftTypeId: ptoException.shift_type_id // ← ADDED THIS LINE
+              shiftTypeId: ptoException.shift_type_id
             } : undefined
           };
         }
@@ -301,6 +300,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
     enabled: !!selectedOfficerId, // Only fetch when we have a valid officer ID
   });
 
+  // Rest of the component remains the same...
   const updatePositionMutation = usePositionMutation();
 
   // Add mutation for removing PTO
@@ -489,7 +489,17 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
 
   const isLoading = schedulesLoading || (isAdminOrSupervisor && profilesLoading) || !selectedOfficerId;
 
+  console.log("🔍 Component state:", { 
+    isLoading, 
+    schedulesLoading, 
+    profilesLoading, 
+    selectedOfficerId,
+    hasSchedules: !!schedules,
+    error 
+  });
+
   if (isLoading) {
+    console.log("🔍 Rendering loading state");
     return (
       <Card>
         <CardHeader>
@@ -506,6 +516,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
   }
 
   if (error) {
+    console.log("🔍 Rendering error state:", error);
     return (
       <Card>
         <CardHeader>
@@ -523,6 +534,8 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
       </Card>
     );
   }
+
+  console.log("🔍 Rendering main component with schedules:", schedules);
 
   const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const weekEnd = addDays(currentWeekStart, 6);
