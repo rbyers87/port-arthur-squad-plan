@@ -116,20 +116,25 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
       getLastName(a.officerName).localeCompare(getLastName(b.officerName))
     );
 
-    // Categorize officers
+    // Separate PTO officers (those marked as off) FIRST
+    const ptoOfficers = sortedByLastName.filter(o => o.shiftInfo?.isOff);
+    
+    // Then categorize the non-PTO officers
+    const workingOfficers = sortedByLastName.filter(o => !o.shiftInfo?.isOff);
+
     const supervisors = sortSupervisorsByRank(
-      sortedByLastName.filter(o => 
+      workingOfficers.filter(o => 
         o.shiftInfo?.position?.toLowerCase().includes('supervisor')
       )
     );
 
-    const specialAssignmentOfficers = sortedByLastName.filter(o => {
+    const specialAssignmentOfficers = workingOfficers.filter(o => {
       const position = o.shiftInfo?.position?.toLowerCase() || '';
       return position.includes('other') || 
              (o.shiftInfo?.position && !predefinedPositions.includes(o.shiftInfo.position));
     });
 
-    const regularOfficers = sortedByLastName.filter(o => 
+    const regularOfficers = workingOfficers.filter(o => 
       !o.shiftInfo?.position?.toLowerCase().includes('supervisor') && 
       !specialAssignmentOfficers.includes(o)
     ).sort((a, b) => {
@@ -143,14 +148,11 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
       return (a.shiftInfo?.position || '').localeCompare(b.shiftInfo?.position || '');
     });
 
-    // PTO officers (those marked as off)
-    const ptoOfficers = sortedByLastName.filter(o => o.shiftInfo?.isOff);
-
     return {
       supervisors,
       regularOfficers,
       specialAssignmentOfficers,
-      ptoOfficers
+      ptoOfficers // This will be displayed last
     };
   };
 
@@ -731,7 +733,12 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
                   ${isToday ? 'border-primary ring-1 ring-primary bg-primary/5' : 'border-border'}
                 `}
               >
-                {!categorizedOfficers || Object.values(categorizedOfficers).every(arr => arr.length === 0) ? (
+                {!categorizedOfficers || (
+                  categorizedOfficers.supervisors.length === 0 &&
+                  categorizedOfficers.regularOfficers.length === 0 &&
+                  categorizedOfficers.specialAssignmentOfficers.length === 0 &&
+                  categorizedOfficers.ptoOfficers.length === 0
+                ) ? (
                   <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                     No officers
                   </div>
@@ -824,7 +831,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
                       </div>
                     )}
 
-                    {/* PTO Officers */}
+                    {/* PTO Officers - ALWAYS LAST */}
                     {categorizedOfficers.ptoOfficers.length > 0 && (
                       <div>
                         <div className="text-xs font-semibold text-muted-foreground mb-1 border-b pb-1">
