@@ -10,7 +10,7 @@ import { Calendar, Users, AlertTriangle, Clock, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
 import { WeeklySchedule } from "@/components/schedule/WeeklySchedule";
-import { OfficersManagement } from "@/components/admin/OfficersManagement";
+import { OfficersManagement } from "@/components/schedule/OfficersManagement";
 import { DailyScheduleManagement } from "@/components/schedule/DailyScheduleManagement";
 import { DailyScheduleView } from "@/components/schedule/DailyScheduleView";
 import { TimeOffRequests } from "@/components/time-off/TimeOffRequests";
