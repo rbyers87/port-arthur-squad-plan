@@ -28,6 +28,22 @@ export const UnderstaffedDetection = () => {
     },
   });
 
+  // Function to validate shift data
+  const validateShiftData = async (shiftId: string) => {
+    const { data: shift, error } = await supabase
+      .from("shift_types")
+      .select("id, name, start_time, end_time")
+      .eq("id", shiftId)
+      .single();
+
+    if (error || !shift) {
+      console.error(`❌ Invalid shift ID: ${shiftId}`, error);
+      return null;
+    }
+
+    return shift;
+  };
+
   const { 
     data: understaffedShifts, 
     isLoading, 
@@ -202,18 +218,26 @@ export const UnderstaffedDetection = () => {
             const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
 
             if (isUnderstaffed) {
-              console.log("Understaffed shift found:", {
+              console.log("🚨 Understaffed shift found:", {
                 date,
-                shift: shift.name,
+                shift_id: shift.id,
+                shift_name: shift.name,
+                shift_time: `${shift.start_time} - ${shift.end_time}`,
                 supervisors: `${currentSupervisors}/${minSupervisors}`,
                 officers: `${currentOfficers}/${minOfficers}`,
                 dayOfWeek
               });
 
-              allUnderstaffedShifts.push({
+              // Ensure we have the complete shift data
+              const shiftData = {
                 date,
                 shift_type_id: shift.id,
-                shift_types: shift,
+                shift_types: {
+                  id: shift.id,
+                  name: shift.name,
+                  start_time: shift.start_time,
+                  end_time: shift.end_time
+                },
                 current_staffing: currentSupervisors + currentOfficers,
                 minimum_required: minSupervisors + minOfficers,
                 current_supervisors: currentSupervisors,
@@ -223,16 +247,19 @@ export const UnderstaffedDetection = () => {
                 day_of_week: dayOfWeek,
                 isSupervisorsUnderstaffed: supervisorsUnderstaffed,
                 isOfficersUnderstaffed: officersUnderstaffed
-              });
+              };
+
+              console.log("📊 Storing shift data:", shiftData);
+              allUnderstaffedShifts.push(shiftData);
             }
           }
         }
 
-        console.log("Total understaffed shifts found:", allUnderstaffedShifts.length);
+        console.log("✅ Total understaffed shifts found:", allUnderstaffedShifts.length);
         return allUnderstaffedShifts;
 
       } catch (err) {
-        console.error("Error in understaffed detection:", err);
+        console.error("❌ Error in understaffed detection:", err);
         throw err;
       }
     },
@@ -253,6 +280,18 @@ export const UnderstaffedDetection = () => {
 
   const createAlertMutation = useMutation({
     mutationFn: async (shiftData: any) => {
+      console.log("🔍 Validating shift data for alert creation:", {
+        shift_type_id: shiftData.shift_type_id,
+        shift_name: shiftData.shift_types?.name,
+        date: shiftData.date
+      });
+
+      // Validate the shift data first
+      const validatedShift = await validateShiftData(shiftData.shift_type_id);
+      if (!validatedShift) {
+        throw new Error(`Invalid shift type ID: ${shiftData.shift_type_id}`);
+      }
+
       // Check if alert already exists
       const existingAlert = existingAlerts?.find(alert => 
         alert.date === shiftData.date && 
@@ -260,9 +299,11 @@ export const UnderstaffedDetection = () => {
       );
 
       if (existingAlert) {
+        console.log("⚠️ Alert already exists:", existingAlert);
         throw new Error("Alert already exists for this shift");
       }
 
+      // Create alert with validated shift data
       const { data, error } = await supabase
         .from("vacancy_alerts")
         .insert({
@@ -273,18 +314,34 @@ export const UnderstaffedDetection = () => {
           status: "open",
           created_at: new Date().toISOString()
         })
-        .select()
+        .select(`
+          *,
+          shift_types (
+            id,
+            name,
+            start_time,
+            end_time
+          )
+        `)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ Error creating vacancy alert:", error);
+        throw error;
+      }
+
+      console.log("✅ Vacancy alert created successfully:", data);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("🔄 Invalidating queries after alert creation");
       queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
-      toast.success("Vacancy alert created successfully");
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      toast.success(`Alert created for ${data.shift_types?.name} shift`);
     },
     onError: (error) => {
+      console.error("❌ Alert creation failed:", error);
       toast.error("Failed to create alert: " + error.message);
     },
   });
@@ -361,6 +418,51 @@ export const UnderstaffedDetection = () => {
       toast.error("Failed to refresh: " + error.message);
     },
   });
+
+  // Temporary cleanup function for corrupted alerts
+  const cleanupCorruptedAlerts = async () => {
+    console.log("🧹 Starting cleanup of corrupted alerts...");
+    
+    const { data: allAlerts, error } = await supabase
+      .from("vacancy_alerts")
+      .select(`
+        *,
+        shift_types (
+          id,
+          name,
+          start_time,
+          end_time
+        )
+      `)
+      .eq("status", "open");
+
+    if (error) {
+      console.error("Error fetching alerts for cleanup:", error);
+      return;
+    }
+
+    const corruptedAlerts = allAlerts?.filter(alert => !alert.shift_types);
+    
+    console.log(`Found ${corruptedAlerts?.length} corrupted alerts`);
+    
+    if (corruptedAlerts && corruptedAlerts.length > 0) {
+      // Delete corrupted alerts
+      for (const alert of corruptedAlerts) {
+        console.log(`Deleting corrupted alert:`, alert);
+        await supabase
+          .from("vacancy_alerts")
+          .delete()
+          .eq("id", alert.id);
+      }
+      
+      toast.success(`Cleaned up ${corruptedAlerts.length} corrupted alerts`);
+    } else {
+      toast.info("No corrupted alerts found");
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+    queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+  };
 
   const isAlertCreated = (shift: any) => {
     return existingAlerts?.some(alert => 
@@ -493,6 +595,21 @@ export const UnderstaffedDetection = () => {
           </p>
         </div>
 
+        {/* Temporary cleanup button - remove after use */}
+        <div className="mb-4">
+          <Button
+            variant="outline"
+            onClick={cleanupCorruptedAlerts}
+            className="w-full"
+            size="sm"
+          >
+            🧹 Clean Corrupted Alerts (Temporary)
+          </Button>
+          <p className="text-xs text-muted-foreground mt-1 text-center">
+            Use this if you see alerts with wrong shift names. Removes alerts with invalid shift data.
+          </p>
+        </div>
+
         {!understaffedShifts || understaffedShifts.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-sm text-muted-foreground">
@@ -507,6 +624,12 @@ export const UnderstaffedDetection = () => {
           <div className="space-y-4">
             {understaffedShifts.map((shift, index) => {
               const alertExists = isAlertCreated(shift);
+              
+              // Safely handle shift data
+              const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
+              const shiftTime = shift.shift_types 
+                ? `${shift.shift_types.start_time} - ${shift.shift_types.end_time}`
+                : "Time not available";
 
               return (
                 <div
@@ -515,13 +638,24 @@ export const UnderstaffedDetection = () => {
                 >
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
-                      <p className="font-medium">{shift.shift_types?.name}</p>
+                      <p className="font-medium">{shiftName}</p>
                       <p className="text-sm text-muted-foreground">
                         {format(new Date(shift.date), "EEEE, MMM d, yyyy")}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {shift.shift_types?.start_time} - {shift.shift_types?.end_time}
+                        {shiftTime}
                       </p>
+                      
+                      {/* Debug info - remove in production */}
+                      <div className="bg-gray-100 p-2 rounded text-xs mt-2">
+                        <p className="text-gray-600">
+                          Shift ID: {shift.shift_type_id} | 
+                          Staffing: {shift.current_staffing}/{shift.minimum_required} |
+                          Supervisors: {shift.current_supervisors}/{shift.min_supervisors} |
+                          Officers: {shift.current_officers}/{shift.min_officers}
+                        </p>
+                      </div>
+
                       <div className="flex items-center gap-2 mt-2">
                         <Badge variant="destructive" className="block">
                           Total Staffing: {shift.current_staffing} / {shift.minimum_required}
