@@ -65,11 +65,31 @@ export const VacancyManagement = () => {
     queryKey: ["all-vacancy-alerts"],
     queryFn: async () => {
       console.log("🔄 Fetching vacancy alerts...");
-      const { data, error } = await supabase
+      
+      // First, let's verify the shift_types data
+      const { data: shiftTypes, error: shiftError } = await supabase
+        .from("shift_types")
+        .select("id, name, start_time, end_time")
+        .order("start_time");
+      
+      if (shiftError) {
+        console.error("Error fetching shift types:", shiftError);
+        throw shiftError;
+      }
+      
+      console.log("📊 Available shift types:", shiftTypes);
+
+      // Fetch vacancy alerts with proper join
+      const { data: alertsData, error } = await supabase
         .from("vacancy_alerts")
         .select(`
           *,
-          shift_types(name, start_time, end_time)
+          shift_types (
+            id, 
+            name, 
+            start_time, 
+            end_time
+          )
         `)
         .order("date", { ascending: false })
         .limit(20);
@@ -79,11 +99,24 @@ export const VacancyManagement = () => {
         throw error;
       }
       
-      console.log("✅ Fetched vacancy alerts:", data);
-      return data;
+      // Debug: Log the raw data
+      console.log("🔍 Raw vacancy alerts data:", alertsData);
+      
+      // Validate and log each alert's shift data
+      alertsData?.forEach((alert, index) => {
+        console.log(`Alert ${index + 1}:`, {
+          id: alert.id,
+          date: alert.date,
+          shift_type_id: alert.shift_type_id,
+          shift_types: alert.shift_types,
+          minimum_required: alert.minimum_required,
+          current_staffing: alert.current_staffing
+        });
+      });
+      
+      return alertsData;
     },
-    staleTime: 30000, // Consider data stale after 30 seconds
-    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    staleTime: 30000,
   });
 
   const { data: responses, refetch: refetchResponses } = useQuery({
