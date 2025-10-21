@@ -49,7 +49,7 @@ const daysOfWeek = [
 interface ShiftPosition {
   id: string;
   position_name: string;
-  description?: string;
+  position_order: number;
 }
 
 export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerScheduleManagerProps) => {
@@ -70,8 +70,8 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     const fetchShiftPositions = async () => {
       const { data, error } = await supabase
         .from('shift_positions')
-        .select('id, position_name, description')
-        .order('position_name');
+        .select('id, position_name, position_order')
+        .order('position_order');
 
       if (error) {
         console.error('Error fetching shift positions:', error);
