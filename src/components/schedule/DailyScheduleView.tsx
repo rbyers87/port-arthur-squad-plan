@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2, UserPlus, Download } from "lucide-react";
+import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2, UserPlus, Download, Building, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
@@ -116,7 +116,7 @@ export const DailyScheduleView = ({
       .eq("day_of_week", dayOfWeek);
     if (minError) throw minError;
 
-    // Get recurring schedules for this day of week - FIXED QUERY
+    // Get recurring schedules for this day of week - UPDATED QUERY TO INCLUDE UNIT_NUMBER AND POSITION_NAME
     const { data: recurringData, error: recurringError } = await supabase
       .from("recurring_schedules")
       .select(`
@@ -142,7 +142,7 @@ export const DailyScheduleView = ({
       throw recurringError;
     }
 
-    // Get schedule exceptions for this specific date - FIXED QUERY
+    // Get schedule exceptions for this specific date - UPDATED QUERY TO INCLUDE UNIT_NUMBER AND POSITION_NAME
     const { data: exceptionsData, error: exceptionsError } = await supabase
       .from("schedule_exceptions")
       .select(`
@@ -223,20 +223,21 @@ export const DailyScheduleView = ({
             name: r.profiles?.full_name || "Unknown",
             badge: r.profiles?.badge_number,
             rank: r.profiles?.rank,
+            // FIXED: Use unit_number and position_name from recurring_schedules
             position: workingException ? workingException.position_name : r.position_name,
-            unitNumber: workingException ? workingException.unit_number : null,
+            unitNumber: workingException ? workingException.unit_number : r.unit_number,
             notes: workingException ? workingException.notes : null,
             type: "recurring" as const,
             originalScheduleId: r.id,
             customTime: customTime,
             hasPTO: !!ptoException,
             ptoData: ptoException ? {
- 						 id: ptoException.id,
- 							ptoType: ptoException.reason,
- 						 startTime: ptoException.custom_start_time || shift.start_time,
- 						 endTime: ptoException.custom_end_time || shift.end_time,
- 						 isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-							} : undefined,
+              id: ptoException.id,
+              ptoType: ptoException.reason,
+              startTime: ptoException.custom_start_time || shift.start_time,
+              endTime: ptoException.custom_end_time || shift.end_time,
+              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+            } : undefined,
             shift: shift
           };
         })
@@ -295,12 +296,12 @@ export const DailyScheduleView = ({
             customTime: customTime,
             hasPTO: !!ptoException,
             ptoData: ptoException ? {
- 						 id: ptoException.id,
-						  ptoType: ptoException.reason,
-						  startTime: ptoException.custom_start_time || shift.start_time,
-						  endTime: ptoException.custom_end_time || shift.end_time,
-						  isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-							} : undefined,
+              id: ptoException.id,
+              ptoType: ptoException.reason,
+              startTime: ptoException.custom_start_time || shift.start_time,
+              endTime: ptoException.custom_end_time || shift.end_time,
+              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+            } : undefined,
             shift: shift
           };
         })
