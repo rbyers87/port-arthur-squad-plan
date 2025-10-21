@@ -24,6 +24,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedOfficerId, setSelectedOfficerId] = useState<string>(userId);
+  const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
   const [selectedSchedule, setSelectedSchedule] = useState<{
     scheduleId: string;
     type: "recurring" | "exception";
@@ -45,16 +46,16 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
 
   // Week navigation functions
   const goToPreviousWeek = () => {
-  setCurrentWeekStart(subWeeks(currentWeekStart, 1));
-};
+    setCurrentWeekStart(subWeeks(currentWeekStart, 1));
+  };
 
-const goToNextWeek = () => {
-  setCurrentWeekStart(addWeeks(currentWeekStart, 1));
-};
+  const goToNextWeek = () => {
+    setCurrentWeekStart(addWeeks(currentWeekStart, 1));
+  };
 
-const goToCurrentWeek = () => {
-  setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
-};
+  const goToCurrentWeek = () => {
+    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
+  };
 
   // Month navigation functions
   const goToPreviousMonth = () => {
@@ -95,59 +96,79 @@ const goToCurrentWeek = () => {
     enabled: isAdminOrSupervisor,
   });
 
+  // Fetch all shift types for the filter
+  const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
+    queryKey: ["shift-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shift_types")
+        .select("*")
+        .order("start_time");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Enhanced query to fetch schedule data for both weekly and monthly views
   const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
-    queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView],
+    queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId],
     queryFn: async () => {
       const targetUserId = isAdminOrSupervisor ? selectedOfficerId : userId;
       
-  // Determine date range based on active view
-let startDate: Date;
-let endDate: Date;
-let dates: string[];
+      // Determine date range based on active view
+      let startDate: Date;
+      let endDate: Date;
+      let dates: string[];
 
-if (activeView === "weekly") {
-  // FIX: Ensure we're always starting from Sunday
-  const weekStart = startOfWeek(currentWeekStart, { weekStartsOn: 0 });
-  startDate = weekStart;
-  endDate = addDays(weekStart, 6);
-  dates = Array.from({ length: 7 }, (_, i) => 
-    format(addDays(weekStart, i), "yyyy-MM-dd")
-  );
-  
-  console.log("📅 WEEKLY - Start:", format(startDate, "EEE yyyy-MM-dd"), 
-              "End:", format(endDate, "EEE yyyy-MM-dd"));
-} else {
-  // Monthly view
-  startDate = startOfMonth(currentMonth);
-  endDate = endOfMonth(currentMonth);
-  const monthDays = eachDayOfInterval({ start: startDate, end: endDate });
-  dates = monthDays.map(day => format(day, "yyyy-MM-dd"));
-  
-  console.log("📅 MONTHLY - Start:", format(startDate, "EEE yyyy-MM-dd"), 
-              "End:", format(endDate, "EEE yyyy-MM-dd"),
-              "Days:", dates.length);
-}
+      if (activeView === "weekly") {
+        // FIX: Ensure we're always starting from Sunday
+        const weekStart = startOfWeek(currentWeekStart, { weekStartsOn: 0 });
+        startDate = weekStart;
+        endDate = addDays(weekStart, 6);
+        dates = Array.from({ length: 7 }, (_, i) => 
+          format(addDays(weekStart, i), "yyyy-MM-dd")
+        );
+        
+        console.log("📅 WEEKLY - Start:", format(startDate, "EEE yyyy-MM-dd"), 
+                    "End:", format(endDate, "EEE yyyy-MM-dd"));
+      } else {
+        // Monthly view
+        startDate = startOfMonth(currentMonth);
+        endDate = endOfMonth(currentMonth);
+        const monthDays = eachDayOfInterval({ start: startDate, end: endDate });
+        dates = monthDays.map(day => format(day, "yyyy-MM-dd"));
+        
+        console.log("📅 MONTHLY - Start:", format(startDate, "EEE yyyy-MM-dd"), 
+                    "End:", format(endDate, "EEE yyyy-MM-dd"),
+                    "Days:", dates.length);
+      }
 
-// Get recurring schedules - filter by active schedules for the current period
-const { data: recurringData, error: recurringError } = await supabase
-  .from("recurring_schedules")
-  .select(`
-    *,
-    shift_types(name, start_time, end_time)
-  `)
-  .eq("officer_id", targetUserId)
-  // Filter recurring schedules that are active during the current period
-  .lte("start_date", format(endDate, "yyyy-MM-dd"))
-  .or(`end_date.is.null,end_date.gte.${format(startDate, "yyyy-MM-dd")}`);
+      // Get recurring schedules - filter by active schedules for the current period
+      const recurringQuery = supabase
+        .from("recurring_schedules")
+        .select(`
+          *,
+          shift_types(name, start_time, end_time)
+        `)
+        .eq("officer_id", targetUserId)
+        // Filter recurring schedules that are active during the current period
+        .lte("start_date", format(endDate, "yyyy-MM-dd"))
+        .or(`end_date.is.null,end_date.gte.${format(startDate, "yyyy-MM-dd")}`);
 
-if (recurringError) {
-  console.error("Recurring error:", recurringError);
-  throw recurringError;
-}
+      // Add shift filter if not "all"
+      if (selectedShiftId !== "all") {
+        recurringQuery.eq("shift_type_id", selectedShiftId);
+      }
+
+      const { data: recurringData, error: recurringError } = await recurringQuery;
+
+      if (recurringError) {
+        console.error("Recurring error:", recurringError);
+        throw recurringError;
+      }
 
       // Get exceptions for the specific period
-      const { data: exceptionsData, error: exceptionsError } = await supabase
+      const exceptionsQuery = supabase
         .from("schedule_exceptions")
         .select(`
           *,
@@ -156,97 +177,104 @@ if (recurringError) {
         .eq("officer_id", targetUserId)
         .in("date", dates);
 
+      // Add shift filter if not "all"
+      if (selectedShiftId !== "all") {
+        exceptionsQuery.eq("shift_type_id", selectedShiftId);
+      }
+
+      const { data: exceptionsData, error: exceptionsError } = await exceptionsQuery;
+
       if (exceptionsError) {
         console.error("Exceptions error:", exceptionsError);
         throw exceptionsError;
       }
 
       // Build schedule for each day
-const dailySchedules = dates.map((date, idx) => {
-  const currentDate = parseISO(date);        // parse ISO (yyyy-MM-dd) safely
-  const dayOfWeek = currentDate.getDay();
-  
-  // ADD MONTHLY VIEW DEBUGGING
-  if (activeView === "monthly") {
-    console.log(`📅 MONTHLY VIEW - Date: ${date}, Day of Week: ${dayOfWeek} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]}), Recurring check for day: ${dayOfWeek}`);
-  }
-  
-  const exception = exceptionsData?.find(e => e.date === date);
-  
-  // Find recurring schedule for this day of week that's active on this date
-  const recurring = recurringData?.find(r => {
-    if (r.day_of_week !== dayOfWeek) return false;
-    
-    // Check if the recurring schedule is active on this specific date
-    const scheduleStartDate = parseISO(r.start_date);
-    const scheduleEndDate = r.end_date ? parseISO(r.end_date) : null;
-    
-    const isAfterStart = currentDate >= scheduleStartDate;
-    const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
-    
-    // ADD DEBUGGING FOR RECURRING MATCH
-    if (activeView === "monthly" && r.day_of_week === dayOfWeek) {
-      console.log(`   🔍 Recurring schedule: ${r.shift_types?.name}, DB day_of_week: ${r.day_of_week}, Matches: ${r.day_of_week === dayOfWeek}, Active: ${isAfterStart && isBeforeEnd}`);
-    }
-    
-    return isAfterStart && isBeforeEnd;
-  });
+      const dailySchedules = dates.map((date, idx) => {
+        const currentDate = parseISO(date);        // parse ISO (yyyy-MM-dd) safely
+        const dayOfWeek = currentDate.getDay();
+        
+        // ADD MONTHLY VIEW DEBUGGING
+        if (activeView === "monthly") {
+          console.log(`📅 MONTHLY VIEW - Date: ${date}, Day of Week: ${dayOfWeek} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]}), Recurring check for day: ${dayOfWeek}`);
+        }
+        
+        const exception = exceptionsData?.find(e => e.date === date);
+        
+        // Find recurring schedule for this day of week that's active on this date
+        const recurring = recurringData?.find(r => {
+          if (r.day_of_week !== dayOfWeek) return false;
+          
+          // Check if the recurring schedule is active on this specific date
+          const scheduleStartDate = parseISO(r.start_date);
+          const scheduleEndDate = r.end_date ? parseISO(r.end_date) : null;
+          
+          const isAfterStart = currentDate >= scheduleStartDate;
+          const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
+          
+          // ADD DEBUGGING FOR RECURRING MATCH
+          if (activeView === "monthly" && r.day_of_week === dayOfWeek) {
+            console.log(`   🔍 Recurring schedule: ${r.shift_types?.name}, DB day_of_week: ${r.day_of_week}, Matches: ${r.day_of_week === dayOfWeek}, Active: ${isAfterStart && isBeforeEnd}`);
+          }
+          
+          return isAfterStart && isBeforeEnd;
+        });
 
         let shiftInfo = null;
         
-if (exception) {
-  shiftInfo = {
-    type: exception.is_off ? "Off" : (exception.shift_types?.name || "Custom"),
-    time: exception.is_off ? "" : (
-      exception.custom_start_time && exception.custom_end_time
-        ? `${exception.custom_start_time} - ${exception.custom_end_time}`
-        : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`
-    ),
-    position: exception.position_name,
-    scheduleId: exception.id,
-    scheduleType: "exception" as const,
-    shift: exception.shift_types,
-    isOff: exception.is_off,
-    reason: exception.reason,
-    // Add PTO detection
-    hasPTO: exception.is_off,
-    ptoData: exception.is_off ? {
-  id: exception.id,
-  ptoType: exception.reason,
-  startTime: exception.custom_start_time || exception.shift_types?.start_time || '00:00',
-  endTime: exception.custom_end_time || exception.shift_types?.end_time || '23:59',
-  isFullShift: !exception.custom_start_time && !exception.custom_end_time,
-  shiftTypeId: exception.shift_type_id
-} : undefined
-  };
-} else if (recurring) {
-  // For recurring schedules, check if there's a PTO exception for this date
-  const ptoException = exceptionsData?.find(e => 
-    e.officer_id === targetUserId && 
-    e.date === date && 
-    e.is_off
-  );
-          
-  shiftInfo = {
-    type: recurring.shift_types?.name,
-    time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
-    position: recurring.position_name,
-    scheduleId: recurring.id,
-    scheduleType: "recurring" as const,
-    shift: recurring.shift_types,
-    isOff: false,
-    // Add PTO detection
-    hasPTO: !!ptoException,
-    ptoData: ptoException ? {
-      id: ptoException.id,
-      ptoType: ptoException.reason,
-      startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
-      endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
-      isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
-      shiftTypeId: ptoException.shift_type_id // ← ADDED THIS LINE
-    } : undefined
-  };
-}
+        if (exception) {
+          shiftInfo = {
+            type: exception.is_off ? "Off" : (exception.shift_types?.name || "Custom"),
+            time: exception.is_off ? "" : (
+              exception.custom_start_time && exception.custom_end_time
+                ? `${exception.custom_start_time} - ${exception.custom_end_time}`
+                : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`
+            ),
+            position: exception.position_name,
+            scheduleId: exception.id,
+            scheduleType: "exception" as const,
+            shift: exception.shift_types,
+            isOff: exception.is_off,
+            reason: exception.reason,
+            // Add PTO detection
+            hasPTO: exception.is_off,
+            ptoData: exception.is_off ? {
+              id: exception.id,
+              ptoType: exception.reason,
+              startTime: exception.custom_start_time || exception.shift_types?.start_time || '00:00',
+              endTime: exception.custom_end_time || exception.shift_types?.end_time || '23:59',
+              isFullShift: !exception.custom_start_time && !exception.custom_end_time,
+              shiftTypeId: exception.shift_type_id
+            } : undefined
+          };
+        } else if (recurring) {
+          // For recurring schedules, check if there's a PTO exception for this date
+          const ptoException = exceptionsData?.find(e => 
+            e.officer_id === targetUserId && 
+            e.date === date && 
+            e.is_off
+          );
+                
+          shiftInfo = {
+            type: recurring.shift_types?.name,
+            time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
+            position: recurring.position_name,
+            scheduleId: recurring.id,
+            scheduleType: "recurring" as const,
+            shift: recurring.shift_types,
+            isOff: false,
+            // Add PTO detection
+            hasPTO: !!ptoException,
+            ptoData: ptoException ? {
+              id: ptoException.id,
+              ptoType: ptoException.reason,
+              startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
+              endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
+              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+              shiftTypeId: ptoException.shift_type_id // ← ADDED THIS LINE
+            } : undefined
+          };
+        }
 
         return {
           date,
@@ -347,7 +375,7 @@ if (exception) {
         onSuccess: () => {
           // Force refresh the schedule data
           queryClient.invalidateQueries({ 
-            queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView] 
+            queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId] 
           });
           setEditingSchedule(null);
         }
@@ -373,88 +401,88 @@ if (exception) {
   };
 
   const handleRemovePTO = async (schedule: any, date: string) => {
-  if (!schedule.hasPTO || !schedule.ptoData) return;
+    if (!schedule.hasPTO || !schedule.ptoData) return;
 
-  try {
-    console.log("🔄 Attempting to remove PTO:", schedule.ptoData);
-    
-    // STRATEGY 1: Try to get shift ID from multiple possible sources
-    let shiftTypeId = schedule.shift?.id || 
-                     schedule.ptoData.shiftTypeId || 
-                     schedule.originalShiftId;
-    
-    // STRATEGY 2: If we still don't have a shift ID, try to infer it from the officer's schedule
-    if (!shiftTypeId) {
-      console.log("🔍 No direct shift ID found, inferring from officer's schedule...");
+    try {
+      console.log("🔄 Attempting to remove PTO:", schedule.ptoData);
       
-      // Get the officer's schedule for this date to find their shift
-      const { data: officerSchedule, error } = await supabase
-        .from("schedule_exceptions")
-        .select("shift_type_id")
-        .eq("officer_id", selectedOfficerId)
-        .eq("date", date)
-        .eq("is_off", false)
-        .single();
-
-      if (!error && officerSchedule?.shift_type_id) {
-        shiftTypeId = officerSchedule.shift_type_id;
-        console.log("📊 Found shift_type_id from working schedule:", shiftTypeId);
-      } else {
-        // STRATEGY 3: Try to get from recurring schedule
-        const dayOfWeek = parseISO(date).getDay();
-        const { data: recurringSchedule, error: recurringError } = await supabase
-          .from("recurring_schedules")
+      // STRATEGY 1: Try to get shift ID from multiple possible sources
+      let shiftTypeId = schedule.shift?.id || 
+                       schedule.ptoData.shiftTypeId || 
+                       schedule.originalShiftId;
+      
+      // STRATEGY 2: If we still don't have a shift ID, try to infer it from the officer's schedule
+      if (!shiftTypeId) {
+        console.log("🔍 No direct shift ID found, inferring from officer's schedule...");
+        
+        // Get the officer's schedule for this date to find their shift
+        const { data: officerSchedule, error } = await supabase
+          .from("schedule_exceptions")
           .select("shift_type_id")
           .eq("officer_id", selectedOfficerId)
-          .eq("day_of_week", dayOfWeek)
-          .is("end_date", null)
+          .eq("date", date)
+          .eq("is_off", false)
           .single();
 
-        if (!recurringError && recurringSchedule?.shift_type_id) {
-          shiftTypeId = recurringSchedule.shift_type_id;
-          console.log("📊 Found shift_type_id from recurring schedule:", shiftTypeId);
+        if (!error && officerSchedule?.shift_type_id) {
+          shiftTypeId = officerSchedule.shift_type_id;
+          console.log("📊 Found shift_type_id from working schedule:", shiftTypeId);
+        } else {
+          // STRATEGY 3: Try to get from recurring schedule
+          const dayOfWeek = parseISO(date).getDay();
+          const { data: recurringSchedule, error: recurringError } = await supabase
+            .from("recurring_schedules")
+            .select("shift_type_id")
+            .eq("officer_id", selectedOfficerId)
+            .eq("day_of_week", dayOfWeek)
+            .is("end_date", null)
+            .single();
+
+          if (!recurringError && recurringSchedule?.shift_type_id) {
+            shiftTypeId = recurringSchedule.shift_type_id;
+            console.log("📊 Found shift_type_id from recurring schedule:", shiftTypeId);
+          }
         }
       }
-    }
 
-    // STRATEGY 4: If we still don't have a shift ID, use a default or show specific error
-    if (!shiftTypeId) {
-      console.error("No shift_type_id found after all attempts for PTO:", schedule.ptoData.id);
+      // STRATEGY 4: If we still don't have a shift ID, use a default or show specific error
+      if (!shiftTypeId) {
+        console.error("No shift_type_id found after all attempts for PTO:", schedule.ptoData.id);
+        
+        // Show a more helpful error message
+        toast.error(`Cannot remove PTO: Unable to determine shift. 
+          This PTO might be assigned to a specific shift that no longer exists. 
+          Please contact support.`);
+        return;
+      }
+
+      const ptoData = {
+        id: schedule.ptoData.id,
+        officerId: selectedOfficerId,
+        date: date,
+        shiftTypeId: shiftTypeId,
+        ptoType: schedule.ptoData.ptoType,
+        startTime: schedule.ptoData.startTime,
+        endTime: schedule.ptoData.endTime
+      };
+
+      console.log("✅ Removing PTO with final data:", ptoData);
+      removePTOMutation.mutate(ptoData);
       
-      // Show a more helpful error message
-      toast.error(`Cannot remove PTO: Unable to determine shift. 
-        This PTO might be assigned to a specific shift that no longer exists. 
-        Please contact support.`);
-      return;
+    } catch (error) {
+      console.error("Error in handleRemovePTO:", error);
+      toast.error("Unexpected error while removing PTO");
     }
-
-    const ptoData = {
-      id: schedule.ptoData.id,
-      officerId: selectedOfficerId,
-      date: date,
-      shiftTypeId: shiftTypeId,
-      ptoType: schedule.ptoData.ptoType,
-      startTime: schedule.ptoData.startTime,
-      endTime: schedule.ptoData.endTime
-    };
-
-    console.log("✅ Removing PTO with final data:", ptoData);
-    removePTOMutation.mutate(ptoData);
-    
-  } catch (error) {
-    console.error("Error in handleRemovePTO:", error);
-    toast.error("Unexpected error while removing PTO");
-  }
-};
+  };
 
   // Function to refresh the schedule data
   const refreshSchedule = () => {
     queryClient.invalidateQueries({ 
-      queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView] 
+      queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId] 
     });
   };
 
-  const isLoading = schedulesLoading || (isAdminOrSupervisor && profilesLoading);
+  const isLoading = schedulesLoading || (isAdminOrSupervisor && profilesLoading) || shiftsLoading;
 
   if (isLoading) {
     return (
@@ -755,6 +783,22 @@ if (exception) {
                     ))}
                   </SelectContent>
                 </Select>
+                
+                {/* NEW: Shift Filter Dropdown */}
+                <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="All Shifts" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Shifts</SelectItem>
+                    {shiftTypes?.map((shift) => (
+                      <SelectItem key={shift.id} value={shift.id}>
+                        {shift.name} ({shift.start_time} - {shift.end_time})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 <Button onClick={() => setDialogOpen(true)} size="sm">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Schedule
@@ -762,6 +806,25 @@ if (exception) {
               </div>
             )}
           </div>
+          
+          {/* For non-admin users, show shift filter only */}
+          {!isAdminOrSupervisor && (
+            <div className="flex items-center gap-3">
+              <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="All Shifts" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Shifts</SelectItem>
+                  {shiftTypes?.map((shift) => (
+                    <SelectItem key={shift.id} value={shift.id}>
+                      {shift.name} ({shift.start_time} - {shift.end_time})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           
           <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "weekly" | "monthly")}>
             <TabsList className="grid w-full max-w-xs grid-cols-2">
@@ -826,6 +889,16 @@ if (exception) {
           {isAdminOrSupervisor && selectedOfficerId && (
             <p className="text-sm text-muted-foreground mt-2">
               Viewing schedule for: {profiles?.find(p => p.id === selectedOfficerId)?.full_name}
+              {selectedShiftId !== "all" && (
+                <span className="ml-2">
+                  • Shift: {shiftTypes?.find(s => s.id === selectedShiftId)?.name}
+                </span>
+              )}
+            </p>
+          )}
+          {!isAdminOrSupervisor && selectedShiftId !== "all" && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Viewing schedule for shift: {shiftTypes?.find(s => s.id === selectedShiftId)?.name}
             </p>
           )}
         </CardHeader>
