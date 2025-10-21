@@ -15,20 +15,22 @@ import { PositionEditor } from "./PositionEditor";
 import { usePositionMutation } from "@/hooks/usePositionMutation";
 import { toast } from "sonner";
 
-interface OfficersManagementProps {
+interface WeeklyScheduleProps {
   userId: string;
   isAdminOrSupervisor: boolean;
 }
 
-export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersManagementProps) => {
+export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklyScheduleProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
-  const [selectedOfficerId, setSelectedOfficerId] = useState<string>(userId);
+  const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
   const [selectedSchedule, setSelectedSchedule] = useState<{
     scheduleId: string;
     type: "recurring" | "exception";
     date: string;
     shift: any;
+    officerId: string;
+    officerName: string;
     existingPTO?: {
       id: string;
       ptoType: string;
@@ -69,77 +71,60 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
     setCurrentMonth(new Date());
   };
 
-  // Function to extract last name from full name
-  const getLastName = (fullName: string) => {
-    const names = fullName.trim().split(/\s+/);
-    return names[names.length - 1] || fullName;
-  };
-
-  // Fetch all profiles for admin/supervisor selection
-  const { data: profiles, isLoading: profilesLoading } = useQuery({
-    queryKey: ["profiles"],
+  // Fetch all shift types for the filter
+  const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
+    queryKey: ["shift-types"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, badge_number")
-        .order("full_name");
+        .from("shift_types")
+        .select("*")
+        .order("start_time");
       if (error) throw error;
-      
-      // Sort by last name alphabetically
-      return data.sort((a, b) => {
-        const lastNameA = getLastName(a.full_name || "").toLowerCase();
-        const lastNameB = getLastName(b.full_name || "").toLowerCase();
-        return lastNameA.localeCompare(lastNameB);
-      });
+      return data;
     },
-    enabled: isAdminOrSupervisor,
   });
 
-  // Enhanced query to fetch schedule data for both weekly and monthly views
+  // Enhanced query to fetch schedule data for ALL officers in selected shift
   const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
-    queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView],
+    queryKey: ["schedule", currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId],
     queryFn: async () => {
-      const targetUserId = isAdminOrSupervisor ? selectedOfficerId : userId;
-      
       // Determine date range based on active view
       let startDate: Date;
       let endDate: Date;
       let dates: string[];
 
       if (activeView === "weekly") {
-        // FIX: Ensure we're always starting from Sunday
         const weekStart = startOfWeek(currentWeekStart, { weekStartsOn: 0 });
         startDate = weekStart;
         endDate = addDays(weekStart, 6);
         dates = Array.from({ length: 7 }, (_, i) => 
           format(addDays(weekStart, i), "yyyy-MM-dd")
         );
-        
-        console.log("📅 WEEKLY - Start:", format(startDate, "EEE yyyy-MM-dd"), 
-                    "End:", format(endDate, "EEE yyyy-MM-dd"));
       } else {
         // Monthly view
         startDate = startOfMonth(currentMonth);
         endDate = endOfMonth(currentMonth);
         const monthDays = eachDayOfInterval({ start: startDate, end: endDate });
         dates = monthDays.map(day => format(day, "yyyy-MM-dd"));
-        
-        console.log("📅 MONTHLY - Start:", format(startDate, "EEE yyyy-MM-dd"), 
-                    "End:", format(endDate, "EEE yyyy-MM-dd"),
-                    "Days:", dates.length);
       }
 
-      // Get recurring schedules - filter by active schedules for the current period
-      const { data: recurringData, error: recurringError } = await supabase
+      // Base queries for recurring schedules and exceptions
+      const recurringQuery = supabase
         .from("recurring_schedules")
         .select(`
           *,
-          shift_types(name, start_time, end_time)
+          shift_types(name, start_time, end_time),
+          profiles!inner(id, full_name, badge_number, rank)
         `)
-        .eq("officer_id", targetUserId)
-        // Filter recurring schedules that are active during the current period
         .lte("start_date", format(endDate, "yyyy-MM-dd"))
         .or(`end_date.is.null,end_date.gte.${format(startDate, "yyyy-MM-dd")}`);
+
+      // Add shift filter if not "all"
+      if (selectedShiftId !== "all") {
+        recurringQuery.eq("shift_type_id", selectedShiftId);
+      }
+
+      const { data: recurringData, error: recurringError } = await recurringQuery;
 
       if (recurringError) {
         console.error("Recurring error:", recurringError);
@@ -147,113 +132,183 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
       }
 
       // Get exceptions for the specific period
-      const { data: exceptionsData, error: exceptionsError } = await supabase
+      const exceptionsQuery = supabase
         .from("schedule_exceptions")
         .select(`
           *,
-          shift_types(name, start_time, end_time)
+          shift_types(name, start_time, end_time),
+          profiles!inner(id, full_name, badge_number, rank)
         `)
-        .eq("officer_id", targetUserId)
         .in("date", dates);
+
+      // Add shift filter if not "all"
+      if (selectedShiftId !== "all") {
+        exceptionsQuery.eq("shift_type_id", selectedShiftId);
+      }
+
+      const { data: exceptionsData, error: exceptionsError } = await exceptionsQuery;
 
       if (exceptionsError) {
         console.error("Exceptions error:", exceptionsError);
         throw exceptionsError;
       }
 
-      // Build schedule for each day
-      const dailySchedules = dates.map((date, idx) => {
-        const currentDate = parseISO(date);        // parse ISO (yyyy-MM-dd) safely
-        const dayOfWeek = currentDate.getDay();
-        
-        // ADD MONTHLY VIEW DEBUGGING
-        if (activeView === "monthly") {
-          console.log(`📅 MONTHLY VIEW - Date: ${date}, Day of Week: ${dayOfWeek} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]}), Recurring check for day: ${dayOfWeek}`);
-        }
-        
-        const exception = exceptionsData?.find(e => e.date === date);
-        
-        // Find recurring schedule for this day of week that's active on this date
-        const recurring = recurringData?.find(r => {
-          if (r.day_of_week !== dayOfWeek) return false;
-          
-          // Check if the recurring schedule is active on this specific date
-          const scheduleStartDate = parseISO(r.start_date);
-          const scheduleEndDate = r.end_date ? parseISO(r.end_date) : null;
-          
-          const isAfterStart = currentDate >= scheduleStartDate;
-          const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
-          
-          // ADD DEBUGGING FOR RECURRING MATCH
-          if (activeView === "monthly" && r.day_of_week === dayOfWeek) {
-            console.log(`   🔍 Recurring schedule: ${r.shift_types?.name}, DB day_of_week: ${r.day_of_week}, Matches: ${r.day_of_week === dayOfWeek}, Active: ${isAfterStart && isBeforeEnd}`);
-          }
-          
-          return isAfterStart && isBeforeEnd;
-        });
+      // Build schedule structure by date and officer
+      const scheduleByDateAndOfficer: Record<string, Record<string, any>> = {};
 
-        let shiftInfo = null;
-        
-        if (exception) {
-          shiftInfo = {
-            type: exception.is_off ? "Off" : (exception.shift_types?.name || "Custom"),
-            time: exception.is_off ? "" : (
-              exception.custom_start_time && exception.custom_end_time
-                ? `${exception.custom_start_time} - ${exception.custom_end_time}`
-                : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`
-            ),
+      // Initialize structure for all dates
+      dates.forEach(date => {
+        scheduleByDateAndOfficer[date] = {};
+      });
+
+      // Process recurring schedules
+      recurringData?.forEach(recurring => {
+        dates.forEach(date => {
+          const currentDate = parseISO(date);
+          const dayOfWeek = currentDate.getDay();
+          
+          if (recurring.day_of_week === dayOfWeek) {
+            const scheduleStartDate = parseISO(recurring.start_date);
+            const scheduleEndDate = recurring.end_date ? parseISO(recurring.end_date) : null;
+            
+            const isAfterStart = currentDate >= scheduleStartDate;
+            const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
+            
+            if (isAfterStart && isBeforeEnd) {
+              // Check if there's an exception for this officer/date
+              const exception = exceptionsData?.find(e => 
+                e.officer_id === recurring.officer_id && 
+                e.date === date && 
+                !e.is_off
+              );
+
+              const ptoException = exceptionsData?.find(e => 
+                e.officer_id === recurring.officer_id && 
+                e.date === date && 
+                e.is_off
+              );
+
+              if (!scheduleByDateAndOfficer[date][recurring.officer_id]) {
+                scheduleByDateAndOfficer[date][recurring.officer_id] = {
+                  officerId: recurring.officer_id,
+                  officerName: recurring.profiles?.full_name || "Unknown",
+                  badgeNumber: recurring.profiles?.badge_number,
+                  rank: recurring.profiles?.rank,
+                  date: date,
+                  dayOfWeek: dayOfWeek,
+                  shiftInfo: {
+                    type: recurring.shift_types?.name,
+                    time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
+                    position: recurring.position_name,
+                    scheduleId: recurring.id,
+                    scheduleType: "recurring" as const,
+                    shift: recurring.shift_types,
+                    isOff: false,
+                    hasPTO: !!ptoException,
+                    ptoData: ptoException ? {
+                      id: ptoException.id,
+                      ptoType: ptoException.reason,
+                      startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
+                      endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
+                      isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+                      shiftTypeId: ptoException.shift_type_id
+                    } : undefined
+                  }
+                };
+              }
+            }
+          }
+        });
+      });
+
+      // Process working exceptions (manually added shifts)
+      exceptionsData?.filter(e => !e.is_off).forEach(exception => {
+        if (!scheduleByDateAndOfficer[exception.date]) {
+          scheduleByDateAndOfficer[exception.date] = {};
+        }
+
+        const ptoException = exceptionsData?.find(e => 
+          e.officer_id === exception.officer_id && 
+          e.date === exception.date && 
+          e.is_off
+        );
+
+        scheduleByDateAndOfficer[exception.date][exception.officer_id] = {
+          officerId: exception.officer_id,
+          officerName: exception.profiles?.full_name || "Unknown",
+          badgeNumber: exception.profiles?.badge_number,
+          rank: exception.profiles?.rank,
+          date: exception.date,
+          dayOfWeek: parseISO(exception.date).getDay(),
+          shiftInfo: {
+            type: exception.shift_types?.name || "Custom",
+            time: exception.custom_start_time && exception.custom_end_time
+              ? `${exception.custom_start_time} - ${exception.custom_end_time}`
+              : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`,
             position: exception.position_name,
             scheduleId: exception.id,
             scheduleType: "exception" as const,
             shift: exception.shift_types,
-            isOff: exception.is_off,
-            reason: exception.reason,
-            // Add PTO detection
-            hasPTO: exception.is_off,
-            ptoData: exception.is_off ? {
-              id: exception.id,
-              ptoType: exception.reason,
-              startTime: exception.custom_start_time || exception.shift_types?.start_time || '00:00',
-              endTime: exception.custom_end_time || exception.shift_types?.end_time || '23:59',
-              isFullShift: !exception.custom_start_time && !exception.custom_end_time,
-              shiftTypeId: exception.shift_type_id
-            } : undefined
-          };
-        } else if (recurring) {
-          // For recurring schedules, check if there's a PTO exception for this date
-          const ptoException = exceptionsData?.find(e => 
-            e.officer_id === targetUserId && 
-            e.date === date && 
-            e.is_off
-          );
-          
-          shiftInfo = {
-            type: recurring.shift_types?.name,
-            time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
-            position: recurring.position_name,
-            scheduleId: recurring.id,
-            scheduleType: "recurring" as const,
-            shift: recurring.shift_types,
             isOff: false,
-            // Add PTO detection
             hasPTO: !!ptoException,
             ptoData: ptoException ? {
               id: ptoException.id,
               ptoType: ptoException.reason,
-              startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
-              endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
+              startTime: ptoException.custom_start_time || exception.shift_types?.start_time,
+              endTime: ptoException.custom_end_time || exception.shift_types?.end_time,
               isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
-              shiftTypeId: ptoException.shift_type_id // ← ADDED THIS LINE
+              shiftTypeId: ptoException.shift_type_id
             } : undefined
-          };
+          }
+        };
+      });
+
+      // Process PTO-only exceptions (officers with PTO but no working schedule)
+      exceptionsData?.filter(e => e.is_off).forEach(ptoException => {
+        if (!scheduleByDateAndOfficer[ptoException.date]) {
+          scheduleByDateAndOfficer[ptoException.date] = {};
         }
 
+        // Only add if officer doesn't already have a schedule entry
+        if (!scheduleByDateAndOfficer[ptoException.date][ptoException.officer_id]) {
+          scheduleByDateAndOfficer[ptoException.date][ptoException.officer_id] = {
+            officerId: ptoException.officer_id,
+            officerName: ptoException.profiles?.full_name || "Unknown",
+            badgeNumber: ptoException.profiles?.badge_number,
+            rank: ptoException.profiles?.rank,
+            date: ptoException.date,
+            dayOfWeek: parseISO(ptoException.date).getDay(),
+            shiftInfo: {
+              type: "Off",
+              time: "",
+              position: "",
+              scheduleId: ptoException.id,
+              scheduleType: "exception" as const,
+              shift: ptoException.shift_types,
+              isOff: true,
+              reason: ptoException.reason,
+              hasPTO: true,
+              ptoData: {
+                id: ptoException.id,
+                ptoType: ptoException.reason,
+                startTime: ptoException.custom_start_time || ptoException.shift_types?.start_time || '00:00',
+                endTime: ptoException.custom_end_time || ptoException.shift_types?.end_time || '23:59',
+                isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+                shiftTypeId: ptoException.shift_type_id
+              }
+            }
+          };
+        }
+      });
+
+      // Convert to array format for rendering
+      const dailySchedules = dates.map(date => {
+        const officers = Object.values(scheduleByDateAndOfficer[date] || {});
         return {
           date,
-          dayOfWeek,
-          shiftInfo,
-          hasSchedule: !!shiftInfo,
-          isCurrentMonth: activeView === "monthly" ? isSameMonth(currentDate, currentMonth) : true
+          dayOfWeek: parseISO(date).getDay(),
+          officers: officers.sort((a, b) => a.officerName.localeCompare(b.officerName)),
+          isCurrentMonth: activeView === "monthly" ? isSameMonth(parseISO(date), currentMonth) : true
         };
       });
 
@@ -347,7 +402,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
         onSuccess: () => {
           // Force refresh the schedule data
           queryClient.invalidateQueries({ 
-            queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView] 
+            queryKey: ["schedule", currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId] 
           });
           setEditingSchedule(null);
         }
@@ -355,82 +410,71 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
     );
   };
 
-  const handleEditClick = (shiftInfo: any) => {
-    const scheduleKey = `${shiftInfo.scheduleId}-${shiftInfo.scheduleType}`;
+  const handleEditClick = (shiftInfo: any, officerId: string) => {
+    const scheduleKey = `${shiftInfo.scheduleId}-${shiftInfo.scheduleType}-${officerId}`;
     setEditingSchedule(scheduleKey);
   };
 
-  const handleAssignPTO = (schedule: any, date: string) => {
+  const handleAssignPTO = (schedule: any, date: string, officerId: string, officerName: string) => {
     setSelectedSchedule({
       scheduleId: schedule.scheduleId,
       type: schedule.scheduleType,
       date: date,
       shift: schedule.shift,
+      officerId: officerId,
+      officerName: officerName,
       // Pass existing PTO data if available
       ...(schedule.hasPTO && schedule.ptoData ? { existingPTO: schedule.ptoData } : {})
     });
     setPtoDialogOpen(true);
   };
 
-  const handleRemovePTO = async (schedule: any, date: string) => {
+  const handleRemovePTO = async (schedule: any, date: string, officerId: string) => {
     if (!schedule.hasPTO || !schedule.ptoData) return;
 
     try {
       console.log("🔄 Attempting to remove PTO:", schedule.ptoData);
       
-      // STRATEGY 1: Try to get shift ID from multiple possible sources
-      let shiftTypeId = schedule.shift?.id || 
-                       schedule.ptoData.shiftTypeId || 
-                       schedule.originalShiftId;
+      let shiftTypeId = schedule.shift?.id || schedule.ptoData.shiftTypeId;
       
-      // STRATEGY 2: If we still don't have a shift ID, try to infer it from the officer's schedule
       if (!shiftTypeId) {
         console.log("🔍 No direct shift ID found, inferring from officer's schedule...");
         
-        // Get the officer's schedule for this date to find their shift
         const { data: officerSchedule, error } = await supabase
           .from("schedule_exceptions")
           .select("shift_type_id")
-          .eq("officer_id", selectedOfficerId)
+          .eq("officer_id", officerId)
           .eq("date", date)
           .eq("is_off", false)
           .single();
 
         if (!error && officerSchedule?.shift_type_id) {
           shiftTypeId = officerSchedule.shift_type_id;
-          console.log("📊 Found shift_type_id from working schedule:", shiftTypeId);
         } else {
-          // STRATEGY 3: Try to get from recurring schedule
           const dayOfWeek = parseISO(date).getDay();
           const { data: recurringSchedule, error: recurringError } = await supabase
             .from("recurring_schedules")
             .select("shift_type_id")
-            .eq("officer_id", selectedOfficerId)
+            .eq("officer_id", officerId)
             .eq("day_of_week", dayOfWeek)
             .is("end_date", null)
             .single();
 
           if (!recurringError && recurringSchedule?.shift_type_id) {
             shiftTypeId = recurringSchedule.shift_type_id;
-            console.log("📊 Found shift_type_id from recurring schedule:", shiftTypeId);
           }
         }
       }
 
-      // STRATEGY 4: If we still don't have a shift ID, use a default or show specific error
       if (!shiftTypeId) {
         console.error("No shift_type_id found after all attempts for PTO:", schedule.ptoData.id);
-        
-        // Show a more helpful error message
-        toast.error(`Cannot remove PTO: Unable to determine shift. 
-          This PTO might be assigned to a specific shift that no longer exists. 
-          Please contact support.`);
+        toast.error(`Cannot remove PTO: Unable to determine shift. Please contact support.`);
         return;
       }
 
       const ptoData = {
         id: schedule.ptoData.id,
-        officerId: selectedOfficerId,
+        officerId: officerId,
         date: date,
         shiftTypeId: shiftTypeId,
         ptoType: schedule.ptoData.ptoType,
@@ -450,11 +494,11 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
   // Function to refresh the schedule data
   const refreshSchedule = () => {
     queryClient.invalidateQueries({ 
-      queryKey: ["schedule", selectedOfficerId, currentWeekStart.toISOString(), currentMonth.toISOString(), activeView] 
+      queryKey: ["schedule", currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId] 
     });
   };
 
-  const isLoading = schedulesLoading || (isAdminOrSupervisor && profilesLoading);
+  const isLoading = schedulesLoading || shiftsLoading;
 
   if (isLoading) {
     return (
@@ -462,7 +506,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Officer Schedule Management
+            Schedule
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -478,7 +522,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Officer Schedule Management
+            Schedule
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -515,112 +559,125 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
 
   const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
 
-  // Render weekly schedule view
+  // Render weekly schedule view - UPDATED to show multiple officers per day
   const renderWeeklyView = () => (
     <div className="space-y-4">
-      {schedules?.dailySchedules?.map(({ date, dayOfWeek, shiftInfo }) => (
-        <div
-          key={date}
-          className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-        >
-          <div className="space-y-1 flex-1">
-            <p className="font-medium">{daysOfWeek[dayOfWeek]}</p>
-            <p className="text-sm text-muted-foreground">{format(parseISO(date), "MMM d")}</p>
+      {schedules?.dailySchedules?.map(({ date, dayOfWeek, officers }) => (
+        <div key={date} className="border rounded-lg overflow-hidden">
+          <div className="bg-muted/50 p-3 border-b">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">{daysOfWeek[dayOfWeek]}</p>
+                <p className="text-sm text-muted-foreground">{format(parseISO(date), "MMM d")}</p>
+              </div>
+              <Badge variant="outline">
+                {officers.length} {officers.length === 1 ? 'officer' : 'officers'}
+              </Badge>
+            </div>
           </div>
           
-          {shiftInfo ? (
-            <div className="flex items-center gap-4">
-              {editingSchedule === `${shiftInfo.scheduleId}-${shiftInfo.scheduleType}` ? (
-                <PositionEditor
-                  currentPosition={shiftInfo.position || ""}
-                  onSave={(positionName) => handleSavePosition(shiftInfo.scheduleId, shiftInfo.scheduleType, positionName)}
-                  onCancel={() => setEditingSchedule(null)}
-                  isSaving={updatePositionMutation.isPending}
-                />
-              ) : (
-                <>
-                  <div className="text-right">
-                    <p className="font-medium">{shiftInfo.type}</p>
-                    {shiftInfo.time && <p className="text-sm text-muted-foreground">{shiftInfo.time}</p>}
-                    {shiftInfo.position && (
-                      <Badge variant="secondary" className="mt-1">
-                        {shiftInfo.position}
-                      </Badge>
-                    )}
-                    {shiftInfo.isOff && (
-                      <Badge variant="destructive" className="mt-1">
-                        {shiftInfo.reason || "Time Off"}
-                      </Badge>
-                    )}
+          <div className="p-3 space-y-2">
+            {officers.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic text-center py-4">No officers scheduled</p>
+            ) : (
+              officers.map(({ officerId, officerName, badgeNumber, rank, shiftInfo }) => (
+                <div
+                  key={`${officerId}-${date}`}
+                  className="flex items-center justify-between p-3 rounded-md bg-card border"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{officerName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {rank || 'Officer'} • Badge #{badgeNumber}
+                    </p>
                   </div>
                   
-                  {isAdminOrSupervisor && (
-                    <div className="flex items-center gap-2">
-                      {!shiftInfo.isOff && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleEditClick(shiftInfo)}
-                          title="Edit Position"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {shiftInfo.hasPTO ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => handleAssignPTO(shiftInfo, date)}
-                            title="Edit PTO"
-                          >
-                            <Clock className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleRemovePTO(shiftInfo, date)}
-                            disabled={removePTOMutation.isPending}
-                            title="Remove PTO"
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </>
+                  {shiftInfo ? (
+                    <div className="flex items-center gap-4">
+                      {editingSchedule === `${shiftInfo.scheduleId}-${shiftInfo.scheduleType}-${officerId}` ? (
+                        <PositionEditor
+                          currentPosition={shiftInfo.position || ""}
+                          onSave={(positionName) => handleSavePosition(shiftInfo.scheduleId, shiftInfo.scheduleType, positionName)}
+                          onCancel={() => setEditingSchedule(null)}
+                          isSaving={updatePositionMutation.isPending}
+                        />
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleAssignPTO(shiftInfo, date)}
-                          title="Assign PTO"
-                        >
-                          <Clock className="h-4 w-4" />
-                        </Button>
+                        <>
+                          <div className="text-right">
+                            <p className="font-medium">{shiftInfo.type}</p>
+                            {shiftInfo.time && <p className="text-sm text-muted-foreground">{shiftInfo.time}</p>}
+                            {shiftInfo.position && (
+                              <Badge variant="secondary" className="mt-1">
+                                {shiftInfo.position}
+                              </Badge>
+                            )}
+                            {shiftInfo.isOff && (
+                              <Badge variant="destructive" className="mt-1">
+                                {shiftInfo.reason || "Time Off"}
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          {isAdminOrSupervisor && (
+                            <div className="flex items-center gap-2">
+                              {!shiftInfo.isOff && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleEditClick(shiftInfo, officerId)}
+                                  title="Edit Position"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {shiftInfo.hasPTO ? (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    onClick={() => handleAssignPTO(shiftInfo, date, officerId, officerName)}
+                                    title="Edit PTO"
+                                  >
+                                    <Clock className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleRemovePTO(shiftInfo, date, officerId)}
+                                    disabled={removePTOMutation.isPending}
+                                    title="Remove PTO"
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleAssignPTO(shiftInfo, date, officerId, officerName)}
+                                  title="Assign PTO"
+                                >
+                                  <Clock className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No shift scheduled</p>
                   )}
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <p className="text-sm text-muted-foreground">No shift scheduled</p>
-              {isAdminOrSupervisor && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => toast.info("Add schedule feature coming soon")}
-                >
-                  Add Shift
-                </Button>
-              )}
-            </div>
-          )}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       ))}
     </div>
   );
 
-  // Render monthly schedule view
+  // Render monthly schedule view - UPDATED to show multiple officers per day
   const renderMonthlyView = () => (
     <div className="space-y-4">
       {/* Calendar header */}
@@ -657,72 +714,28 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
                 `}>
                   {format(day, "d")}
                 </span>
-                {isAdminOrSupervisor && daySchedule?.shiftInfo && (
-                  <div className="flex gap-1">
-                    {!daySchedule.shiftInfo.isOff && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-5 w-5"
-                        onClick={() => handleEditClick(daySchedule.shiftInfo)}
-                        title="Edit Position"
-                      >
-                        <Edit2 className="h-3 w-3" />
-                      </Button>
-                    )}
-                    {daySchedule.shiftInfo.hasPTO ? (
-                      <>
-                        <Button
-                          size="icon"
-                          variant="default"
-                          className="h-5 w-5"
-                          onClick={() => handleAssignPTO(daySchedule.shiftInfo, dateStr)}
-                          title="Edit PTO"
-                        >
-                          <Clock className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-5 w-5"
-                          onClick={() => handleRemovePTO(daySchedule.shiftInfo, dateStr)}
-                          disabled={removePTOMutation.isPending}
-                          title="Remove PTO"
-                        >
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-5 w-5"
-                        onClick={() => handleAssignPTO(daySchedule.shiftInfo, dateStr)}
-                        title="Assign PTO"
-                      >
-                        <Clock className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
+                {daySchedule && daySchedule.officers.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {daySchedule.officers.length}
+                  </Badge>
                 )}
               </div>
               
-              {daySchedule?.shiftInfo && (
-                <div className="space-y-1 text-xs">
-                  <div className="font-medium truncate">{daySchedule.shiftInfo.type}</div>
-                  {daySchedule.shiftInfo.time && (
-                    <div className="text-muted-foreground truncate">{daySchedule.shiftInfo.time}</div>
-                  )}
-                  {daySchedule.shiftInfo.position && (
-                    <Badge variant="secondary" className="text-xs">
-                      {daySchedule.shiftInfo.position}
+              {daySchedule?.officers.slice(0, 3).map(({ officerId, officerName, shiftInfo }) => (
+                <div key={officerId} className="text-xs mb-1 truncate">
+                  <div className="font-medium truncate">{officerName.split(' ')[0]}</div>
+                  <div className="text-muted-foreground truncate">{shiftInfo?.type}</div>
+                  {shiftInfo?.position && (
+                    <Badge variant="secondary" className="text-xs truncate">
+                      {shiftInfo.position}
                     </Badge>
                   )}
-                  {daySchedule.shiftInfo.isOff && (
-                    <Badge variant="destructive" className="text-xs">
-                      {daySchedule.shiftInfo.reason || "Off"}
-                    </Badge>
-                  )}
+                </div>
+              ))}
+              
+              {daySchedule?.officers.length > 3 && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  +{daySchedule.officers.length - 3} more
                 </div>
               )}
             </div>
@@ -739,22 +752,25 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Officer Schedule Management
+              Schedule
             </CardTitle>
             {isAdminOrSupervisor && (
               <div className="flex items-center gap-3">
-                <Select value={selectedOfficerId} onValueChange={setSelectedOfficerId}>
+                {/* Shift Filter Dropdown */}
+                <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
                   <SelectTrigger className="w-64">
-                    <SelectValue placeholder="Select officer" />
+                    <SelectValue placeholder="Select Shift" />
                   </SelectTrigger>
                   <SelectContent>
-                    {profiles?.map((profile) => (
-                      <SelectItem key={profile.id} value={profile.id}>
-                        {profile.full_name} (Badge: {profile.badge_number})
+                    <SelectItem value="all">All Shifts</SelectItem>
+                    {shiftTypes?.map((shift) => (
+                      <SelectItem key={shift.id} value={shift.id}>
+                        {shift.name} ({shift.start_time} - {shift.end_time})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+
                 <Button onClick={() => setDialogOpen(true)} size="sm">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Schedule
@@ -762,6 +778,25 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
               </div>
             )}
           </div>
+          
+          {/* Shift filter for non-admin users */}
+          {!isAdminOrSupervisor && (
+            <div className="flex items-center gap-3">
+              <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select Shift" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Shifts</SelectItem>
+                  {shiftTypes?.map((shift) => (
+                    <SelectItem key={shift.id} value={shift.id}>
+                      {shift.name} ({shift.start_time} - {shift.end_time})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           
           <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "weekly" | "monthly")}>
             <TabsList className="grid w-full max-w-xs grid-cols-2">
@@ -823,9 +858,9 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
             </Button>
           </div>
 
-          {isAdminOrSupervisor && selectedOfficerId && (
+          {selectedShiftId !== "all" && (
             <p className="text-sm text-muted-foreground mt-2">
-              Viewing schedule for: {profiles?.find(p => p.id === selectedOfficerId)?.full_name}
+              Viewing officers assigned to: {shiftTypes?.find(s => s.id === selectedShiftId)?.name}
             </p>
           )}
         </CardHeader>
@@ -848,8 +883,8 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
                 }
               }}
               officer={{
-                officerId: selectedOfficerId,
-                name: profiles?.find(p => p.id === selectedOfficerId)?.full_name || "Unknown",
+                officerId: selectedSchedule.officerId,
+                name: selectedSchedule.officerName,
                 scheduleId: selectedSchedule.scheduleId,
                 type: selectedSchedule.type,
                 ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
