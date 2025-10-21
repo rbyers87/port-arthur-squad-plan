@@ -46,12 +46,6 @@ const daysOfWeek = [
   { value: 6, label: "Saturday" },
 ];
 
-interface ShiftPosition {
-  id: string;
-  position_name: string;
-  position_order: number;
-}
-
 export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerScheduleManagerProps) => {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
@@ -62,22 +56,24 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
   const [unitNumber, setUnitNumber] = useState("");
   const [assignedPosition, setAssignedPosition] = useState("none");
-  const [shiftPositions, setShiftPositions] = useState<ShiftPosition[]>([]);
+  const [shiftPositions, setShiftPositions] = useState<string[]>([]);
   const [editingSchedule, setEditingSchedule] = useState<any>(null);
 
-  // Fetch shift positions
+  // Fetch unique shift positions - UPDATED TO GET UNIQUE POSITION NAMES
   useEffect(() => {
     const fetchShiftPositions = async () => {
       const { data, error } = await supabase
         .from('shift_positions')
-        .select('id, position_name, position_order')
-        .order('position_order');
+        .select('position_name')
+        .order('position_name');
 
       if (error) {
         console.error('Error fetching shift positions:', error);
         toast.error('Failed to load positions');
       } else {
-        setShiftPositions(data || []);
+        // Get unique position names using Set to remove duplicates
+        const uniquePositionNames = [...new Set(data?.map(p => p.position_name).filter(Boolean))];
+        setShiftPositions(uniquePositionNames);
       }
     };
 
@@ -593,8 +589,8 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                         <SelectContent>
                           <SelectItem value="none">No position assigned</SelectItem>
                           {shiftPositions.map((position) => (
-                            <SelectItem key={position.id} value={position.position_name}>
-                              {position.position_name}
+                            <SelectItem key={position} value={position}>
+                              {position}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -769,8 +765,8 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                         <SelectContent>
                           <SelectItem value="none">No position assigned</SelectItem>
                           {shiftPositions.map((position) => (
-                            <SelectItem key={position.id} value={position.position_name}>
-                              {position.position_name}
+                            <SelectItem key={position} value={position}>
+                              {position}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -827,7 +823,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                           mode="single"
                           selected={endDate}
                           onSelect={setEndDate}
-                          initialFocus
+                          initialFocus>
                           disabled={(date) => date < startDate}
                           className="pointer-events-auto"
                         />
