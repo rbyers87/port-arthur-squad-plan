@@ -1,5 +1,5 @@
 // components/admin/VacancyManagement.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, Plus, Users } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Users, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -21,7 +21,33 @@ export const VacancyManagement = () => {
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedShift, setSelectedShift] = useState<string>();
   const [minimumRequired, setMinimumRequired] = useState<string>("2");
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const queryClient = useQueryClient();
+
+  // Add real-time subscription for vacancy alerts
+  useEffect(() => {
+    const subscription = supabase
+      .channel('vacancy-alerts-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'vacancy_alerts'
+        },
+        () => {
+          // Invalidate and refetch when any changes occur
+          queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+          queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
+          setLastRefreshed(new Date());
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [queryClient]);
 
   const { data: shiftTypes } = useQuery({
     queryKey: ["shift-types"],
@@ -35,9 +61,10 @@ export const VacancyManagement = () => {
     },
   });
 
-  const { data: alerts } = useQuery({
+  const { data: alerts, isLoading: alertsLoading, refetch: refetchAlerts } = useQuery({
     queryKey: ["all-vacancy-alerts"],
     queryFn: async () => {
+      console.log("🔄 Fetching vacancy alerts...");
       const { data, error } = await supabase
         .from("vacancy_alerts")
         .select(`
@@ -46,12 +73,20 @@ export const VacancyManagement = () => {
         `)
         .order("date", { ascending: false })
         .limit(20);
-      if (error) throw error;
+      
+      if (error) {
+        console.error("Error fetching vacancy alerts:", error);
+        throw error;
+      }
+      
+      console.log("✅ Fetched vacancy alerts:", data);
       return data;
     },
+    staleTime: 30000, // Consider data stale after 30 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
-  const { data: responses } = useQuery({
+  const { data: responses, refetch: refetchResponses } = useQuery({
     queryKey: ["vacancy-responses-admin"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -66,6 +101,13 @@ export const VacancyManagement = () => {
       return data;
     },
   });
+
+  const handleRefreshAll = () => {
+    refetchAlerts();
+    refetchResponses();
+    setLastRefreshed(new Date());
+    toast.success("Data refreshed");
+  };
 
   const createAlertMutation = useMutation({
     mutationFn: async () => {
@@ -84,8 +126,10 @@ export const VacancyManagement = () => {
       if (error) throw error;
     },
     onSuccess: () => {
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       toast.success("Vacancy alert created");
       setDialogOpen(false);
       setSelectedDate(undefined);
@@ -106,14 +150,30 @@ export const VacancyManagement = () => {
       if (error) throw error;
     },
     onSuccess: () => {
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       toast.success("Alert closed");
     },
   });
 
   return (
     <div className="space-y-6">
+      {/* Refresh Button */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">Vacancy Management</h2>
+          <p className="text-sm text-muted-foreground">
+            Last refreshed: {lastRefreshed.toLocaleTimeString()}
+          </p>
+        </div>
+        <Button variant="outline" onClick={handleRefreshAll}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh All
+        </Button>
+      </div>
+
       {/* Automatic Understaffed Detection */}
       <UnderstaffedDetection />
 
@@ -207,11 +267,15 @@ export const VacancyManagement = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {!alerts || alerts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No vacancy alerts created yet.</p>
-            ) : (
-              alerts.map((alert) => (
+          {alertsLoading ? (
+            <div className="text-center py-4">
+              <p className="text-sm text-muted-foreground">Loading alerts...</p>
+            </div>
+          ) : !alerts || alerts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No vacancy alerts created yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {alerts.map((alert) => (
                 <div key={alert.id} className="p-4 border rounded-lg space-y-2">
                   <div className="flex items-start justify-between">
                     <div>
@@ -246,9 +310,9 @@ export const VacancyManagement = () => {
                     </div>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
