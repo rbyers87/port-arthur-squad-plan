@@ -175,7 +175,7 @@ export const UnderstaffedDetection = () => {
             console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
             console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
 
-            // Get recurring officers for this shift
+            // Get recurring officers for this shift - FIXED: Check position_name, not profile rank
             const recurringOfficers = recurringData
               ?.filter(r => r.shift_types?.id === shift.id)
               .map(r => {
@@ -190,18 +190,20 @@ export const UnderstaffedDetection = () => {
                   return null;
                 }
 
+                // FIXED: Check position_name for supervisor role, not profile rank
                 const isSupervisor = r.position_name?.toLowerCase().includes('supervisor');
-                console.log(`✅ ${r.profiles?.full_name} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Recurring`);
+                console.log(`✅ ${r.profiles?.full_name} - Position: ${r.position_name || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Recurring`);
 
                 return {
                   officerId: r.officer_id,
                   name: r.profiles?.full_name,
+                  position: r.position_name,
                   isSupervisor: isSupervisor
                 };
               })
               .filter(officer => officer !== null) || [];
 
-            // Get additional officers from working exceptions
+            // Get additional officers from working exceptions - FIXED: Check position_name, not profile rank
             const additionalOfficers = workingExceptions
               ?.filter(e => 
                 e.shift_types?.id === shift.id &&
@@ -219,12 +221,14 @@ export const UnderstaffedDetection = () => {
                   return null;
                 }
 
+                // FIXED: Check position_name for supervisor role, not profile rank
                 const isSupervisor = e.position_name?.toLowerCase().includes('supervisor');
-                console.log(`✅ ${e.profiles?.full_name} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Added Shift`);
+                console.log(`✅ ${e.profiles?.full_name} - Position: ${e.position_name || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Added Shift`);
 
                 return {
                   officerId: e.officer_id,
                   name: e.profiles?.full_name,
+                  position: e.position_name,
                   isSupervisor: isSupervisor
                 };
               })
@@ -237,6 +241,11 @@ export const UnderstaffedDetection = () => {
             const currentOfficers = allOfficers.filter(o => !o.isSupervisor).length;
 
             console.log(`👥 Current staffing: ${currentSupervisors} supervisors, ${currentOfficers} officers`);
+            console.log(`📋 All assigned officers:`, allOfficers.map(o => ({
+              name: o.name,
+              position: o.position,
+              isSupervisor: o.isSupervisor
+            })));
 
             const supervisorsUnderstaffed = currentSupervisors < minSupervisors;
             const officersUnderstaffed = currentOfficers < minOfficers;
@@ -270,7 +279,11 @@ export const UnderstaffedDetection = () => {
                 day_of_week: dayOfWeek,
                 isSupervisorsUnderstaffed: supervisorsUnderstaffed,
                 isOfficersUnderstaffed: officersUnderstaffed,
-                assigned_officers: allOfficers.map(o => o.name) // For debugging
+                assigned_officers: allOfficers.map(o => ({
+                  name: o.name,
+                  position: o.position,
+                  isSupervisor: o.isSupervisor
+                })) // For debugging
               };
 
               console.log("📊 Storing understaffed shift data:", shiftData);
@@ -573,7 +586,7 @@ export const UnderstaffedDetection = () => {
               Automatic Understaffed Shift Detection
             </CardTitle>
             <CardDescription>
-              Automatically detect shifts with insufficient staffing based on minimum staffing requirements
+              Automatically detect shifts with insufficient staffing based on assigned positions
             </CardDescription>
           </div>
           <div className="flex gap-2">
@@ -684,7 +697,7 @@ export const UnderstaffedDetection = () => {
                           <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
                         </p>
                         <p className="text-gray-500 mt-1">
-                          <strong>Assigned Officers:</strong> {shift.assigned_officers?.join(', ') || 'None'}
+                          <strong>Assigned Officers:</strong> {shift.assigned_officers?.map(o => `${o.name} (${o.position || 'No position'})`).join(', ') || 'None'}
                         </p>
                       </div>
 
