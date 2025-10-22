@@ -588,7 +588,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     return getLastName(officer.officerName);
   };
 
-// Updated Schedule Cell Component - Shows "Special Assignment" badge
+// Updated Schedule Cell Component - Shows edit pencil for special assignments
 const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, officerId, officerName }: any) => {
   // Check if this officer has any schedule data for this date
   const hasSchedule = !!officer;
@@ -659,6 +659,24 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
       {/* Action buttons for admin/supervisor */}
       {isAdminOrSupervisor && officer.shiftInfo && (
         <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+          {/* EDIT PENCIL ICON - Show for all assignments except days off */}
+          {!isOff && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={(e) => {
+                e.stopPropagation();
+                // You'll need to implement an edit handler here
+                // For now, we'll use the PTO assignment as a placeholder
+                // You might want to create a separate edit assignment dialog
+                onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
+              }}
+              title="Edit Assignment"
+            >
+              <Edit2 className="h-3 w-3" />
+            </Button>
+          )}
           {!isOff && (
             <Button
               size="icon"
