@@ -588,103 +588,100 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     return getLastName(officer.officerName);
   };
 
-  // Schedule Cell Component
-  const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, onAddShift, officerId, officerName }: any) => {
-    // Check if this officer has any schedule data for this date
-    const hasSchedule = !!officer;
-    const isOff = officer?.shiftInfo?.isOff;
-    const hasPTO = officer?.shiftInfo?.hasPTO;
-    const position = officer?.shiftInfo?.position;
+  // Schedule Cell Component - Updated to show extra shifts
+const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, officerId, officerName }: any) => {
+  // Check if this officer has any schedule data for this date
+  const hasSchedule = !!officer;
+  const isOff = officer?.shiftInfo?.isOff;
+  const hasPTO = officer?.shiftInfo?.hasPTO;
+  const position = officer?.shiftInfo?.position;
+  const isException = officer?.shiftInfo?.scheduleType === "exception";
+  const isExtraShift = isException && !isOff && !hasPTO;
 
-    // If no officer data at all, this is an unscheduled day (dark gray)
-    if (!hasSchedule) {
-      return (
-        <div className="p-2 border-r bg-gray-300 dark:bg-gray-600 min-h-10 relative group">
-          {isAdminOrSupervisor && (
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-6 text-xs bg-white/90 hover:bg-white"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddShift(officerId, officerName, dateStr);
-                }}
-                title="Add Shift"
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
+  // If no officer data at all, this is an unscheduled day (dark gray)
+  if (!hasSchedule) {
+    return (
+      <div className="p-2 border-r bg-gray-300 dark:bg-gray-600 min-h-10 relative">
+        {/* Dark gray for unscheduled days - no add button */}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`
+      p-2 border-r min-h-10 relative group
+      ${isOff ? 'bg-muted/50' : hasPTO ? 'bg-yellow-100 border-yellow-200' : 'bg-white'}
+    `}>
+      {isOff ? (
+        <div className="text-center text-muted-foreground font-medium">DD</div>
+      ) : hasPTO ? (
+        <div className="text-center">
+          <Badge variant="outline" className="bg-yellow-500/20 text-xs">
+            PTO
+          </Badge>
+          {position && (
+            <div className="text-xs text-muted-foreground mt-1 truncate">
+              {position}
             </div>
           )}
         </div>
-      );
-    }
-
-    return (
-      <div className={`
-        p-2 border-r min-h-10 relative group
-        ${isOff ? 'bg-muted/50' : hasPTO ? 'bg-yellow-100 border-yellow-200' : 'bg-white'}
-      `}>
-        {isOff ? (
-          <div className="text-center text-muted-foreground font-medium">DD</div>
-        ) : hasPTO ? (
-          <div className="text-center">
-            <Badge variant="outline" className="bg-yellow-500/20 text-xs">
-              PTO
+      ) : (
+        <div className="text-center">
+          {isExtraShift && (
+            <Badge variant="secondary" className="bg-blue-500/20 text-xs mb-1">
+              Extra
             </Badge>
-            {position && (
-              <div className="text-xs text-muted-foreground mt-1 truncate">
-                {position}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-center">
-            {position && (
-              <div className="text-sm font-medium truncate">
-                {position}
-              </div>
-            )}
-          </div>
-        )}
+          )}
+          {position && (
+            <div className="text-sm font-medium truncate">
+              {position}
+            </div>
+          )}
+          {!position && isExtraShift && (
+            <div className="text-xs text-muted-foreground">
+              Extra Shift
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* Action buttons for admin/supervisor */}
-        {isAdminOrSupervisor && officer.shiftInfo && (
-          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-            {!isOff && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
-                }}
-                title={hasPTO ? "Edit PTO" : "Assign PTO"}
-              >
-                <Clock className="h-3 w-3" />
-              </Button>
-            )}
-            {hasPTO && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
-                }}
-                disabled={removePTOMutation.isPending}
-                title="Remove PTO"
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
+      {/* Action buttons for admin/supervisor */}
+      {isAdminOrSupervisor && officer.shiftInfo && (
+        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+          {!isOff && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
+              }}
+              title={hasPTO ? "Edit PTO" : "Assign PTO"}
+            >
+              <Clock className="h-3 w-3" />
+            </Button>
+          )}
+          {hasPTO && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
+              }}
+              disabled={removePTOMutation.isPending}
+              title="Remove PTO"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
   // NEW: Excel-style weekly view with table layout
   const renderExcelStyleWeeklyView = () => {
