@@ -588,7 +588,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     return getLastName(officer.officerName);
   };
 
-  // Updated Schedule Cell Component - Matches DailyScheduleView logic
+  // Updated Schedule Cell Component - Shows "extra shift" for any schedule outside recurring pattern
 const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, officerId, officerName }: any) => {
   // Check if this officer has any schedule data for this date
   const hasSchedule = !!officer;
@@ -596,7 +596,8 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
   const hasPTO = officer?.shiftInfo?.hasPTO;
   const position = officer?.shiftInfo?.position;
   
-  // MATCH DAILY SCHEDULE VIEW LOGIC: Extra shift = exception type and not off/PTO
+  // NEW LOGIC: Extra shift = ANY schedule exception (working) that's outside their recurring pattern
+  // This includes both manually added shifts AND recurring officers working on non-recurring days
   const isExtraShift = officer?.shiftInfo?.scheduleType === "exception" && !isOff && !hasPTO;
 
   // If no officer data at all, this is an unscheduled day (dark gray)
@@ -628,7 +629,7 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
         </div>
       ) : (
         <div className="text-center">
-          {/* EXACTLY MATCHES DAILY SCHEDULE VIEW: Orange badge for extra shifts */}
+          {/* Show "Extra Shift" for ANY schedule exception (working) outside recurring pattern */}
           {isExtraShift && (
             <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
               Extra Shift
@@ -637,11 +638,6 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
           {position && (
             <div className="text-sm font-medium truncate">
               {position}
-            </div>
-          )}
-          {!position && isExtraShift && (
-            <div className="text-xs text-muted-foreground">
-              Extra Shift
             </div>
           )}
         </div>
@@ -684,7 +680,6 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
     </div>
   );
 };
-
   // NEW: Excel-style weekly view with table layout
   const renderExcelStyleWeeklyView = () => {
     const weekDays = Array.from({ length: 7 }, (_, i) => {
