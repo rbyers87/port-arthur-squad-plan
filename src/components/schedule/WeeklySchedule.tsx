@@ -775,7 +775,7 @@ const renderExcelStyleWeeklyView = () => {
 
       {/* Main schedule table */}
       <div className="border rounded-lg overflow-hidden">
-{/* Table header with staffing badges */}
+{/* Table header with staffing badges - Supervisor on top, Officer below */}
 <div className="grid grid-cols-9 bg-muted/50 border-b">
   <div className="p-2 font-semibold border-r">Empl#</div>
   <div className="p-2 font-semibold border-r">SUPERVISORS</div>
@@ -800,30 +800,27 @@ const renderExcelStyleWeeklyView = () => {
     
     const isOfficersUnderstaffed = officerCount < minimumOfficers;
     const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
-    const isAnyUnderstaffed = isOfficersUnderstaffed || isSupervisorsUnderstaffed;
 
     return (
       <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
         <div>{dayName}</div>
         <div className="text-xs text-muted-foreground mb-1">{formattedDate}</div>
         
-        {/* EXACT SAME BADGE AS DAILY SCHEDULE */}
+        {/* Supervisor Badge - ON TOP */}
         <Badge 
-          variant={isAnyUnderstaffed ? "destructive" : "outline"} 
-          className="text-xs"
+          variant={isSupervisorsUnderstaffed ? "destructive" : "outline"} 
+          className="text-xs mb-1"
         >
-          {officerCount} / {minimumOfficers}
+          {supervisorCount} / {minimumSupervisors} Sup
         </Badge>
         
-        {/* Optional: Show supervisor count if you want both */}
-         <div className="mt-1">
-          <Badge 
-            variant={isSupervisorsUnderstaffed ? "destructive" : "outline"} 
-            className="text-xs"
-          >
-            {supervisorCount} / {minimumSupervisors} Sup
-          </Badge>
-        </div> 
+        {/* Officer Badge - BELOW */}
+        <Badge 
+          variant={isOfficersUnderstaffed ? "destructive" : "outline"} 
+          className="text-xs"
+        >
+          {officerCount} / {minimumOfficers} Ofc
+        </Badge>
       </div>
     );
   })}
