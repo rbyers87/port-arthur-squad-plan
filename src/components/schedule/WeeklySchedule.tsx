@@ -775,7 +775,7 @@ const renderExcelStyleWeeklyView = () => {
 
       {/* Main schedule table */}
       <div className="border rounded-lg overflow-hidden">
-{/* Table header */}
+{/* Table header with detailed understaffing info */}
 <div className="grid grid-cols-9 bg-muted/50 border-b">
   <div className="p-2 font-semibold border-r">Empl#</div>
   <div className="p-2 font-semibold border-r">SUPERVISORS</div>
@@ -797,23 +797,29 @@ const renderExcelStyleWeeklyView = () => {
     
     const minimumOfficers = minimumStaffing[dayName as keyof typeof minimumStaffing];
     const isUnderstaffed = officerCount < minimumOfficers;
-    const isSupervisorUnderstaffed = supervisorCount < 1; // Assuming minimum 1 supervisor
+    const isSupervisorUnderstaffed = supervisorCount < 1;
     
     return (
       <div key={dateStr} className={`p-2 text-center font-semibold border-r relative ${isToday ? 'bg-primary/10' : ''}`}>
-        <div>{dayName}</div>
+        <div className="flex items-center justify-center gap-1">
+          {dayName}
+          {(isUnderstaffed || isSupervisorUnderstaffed) && (
+            <Badge 
+              variant="destructive" 
+              className="h-4 text-xs"
+              title={
+                isUnderstaffed && isSupervisorUnderstaffed 
+                  ? `Understaffed: ${officerCount}/${minimumOfficers} officers, ${supervisorCount}/1 supervisors`
+                  : isUnderstaffed 
+                  ? `Understaffed: ${officerCount}/${minimumOfficers} officers`
+                  : `Understaffed: ${supervisorCount}/1 supervisors`
+              }
+            >
+              {isUnderstaffed && isSupervisorUnderstaffed ? '2' : '1'}
+            </Badge>
+          )}
+        </div>
         <div className="text-xs text-muted-foreground">{formattedDate}</div>
-        
-        {/* Understaffed Badge */}
-        {(isUnderstaffed || isSupervisorUnderstaffed) && (
-          <Badge 
-            variant="destructive" 
-            className="absolute -top-1 -right-1 text-xs h-4 w-4 p-0 flex items-center justify-center"
-            title={`Understaffed: ${officerCount}/${minimumOfficers} officers`}
-          >
-            !
-          </Badge>
-        )}
       </div>
     );
   })}
