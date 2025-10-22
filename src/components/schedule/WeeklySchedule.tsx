@@ -683,138 +683,211 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
 };
 
   
-  // NEW: Excel-style weekly view with table layout
-  const renderExcelStyleWeeklyView = () => {
-    const weekDays = Array.from({ length: 7 }, (_, i) => {
-      const date = addDays(currentWeekStart, i);
-      return {
-        date,
-        dateStr: format(date, "yyyy-MM-dd"),
-        dayName: format(date, "EEE").toUpperCase(),
-        formattedDate: format(date, "MMM d"),
-        isToday: isSameDay(date, new Date())
-      };
-    });
-
-// Get all unique officers across the week for consistent rows
-const allOfficers = new Map();
-
-// First, get all recurring schedules to know each officer's normal pattern
-const recurringSchedulesByOfficer = new Map();
-schedules?.recurring?.forEach(recurring => {
-  if (!recurringSchedulesByOfficer.has(recurring.officer_id)) {
-    recurringSchedulesByOfficer.set(recurring.officer_id, new Set());
-  }
-  recurringSchedulesByOfficer.get(recurring.officer_id).add(recurring.day_of_week);
-});
-
-schedules?.dailySchedules?.forEach(day => {
-  day.officers.forEach((officer: any) => {
-    if (!allOfficers.has(officer.officerId)) {
-      allOfficers.set(officer.officerId, {
-        ...officer,
-        recurringDays: recurringSchedulesByOfficer.get(officer.officerId) || new Set(),
-        weeklySchedule: {} as Record<string, any>
-      });
-    }
-    
-    // Store the day schedule with proper recurring flag
-    const daySchedule = {
-      ...officer,
-      isRegularRecurringDay: recurringSchedulesByOfficer.get(officer.officerId)?.has(day.dayOfWeek) || false
+// NEW: Excel-style weekly view with table layout
+const renderExcelStyleWeeklyView = () => {
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(currentWeekStart, i);
+    return {
+      date,
+      dateStr: format(date, "yyyy-MM-dd"),
+      dayName: format(date, "EEE").toUpperCase(),
+      formattedDate: format(date, "MMM d"),
+      isToday: isSameDay(date, new Date())
     };
-    
-    allOfficers.get(officer.officerId).weeklySchedule[day.date] = daySchedule;
   });
-});
 
-const supervisors = Array.from(allOfficers.values()).filter(o => 
-  o.shiftInfo?.position?.toLowerCase().includes('supervisor')
-).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+  // Get all unique officers across the week for consistent rows
+  const allOfficers = new Map();
 
-const officers = Array.from(allOfficers.values()).filter(o => 
-  !o.shiftInfo?.position?.toLowerCase().includes('supervisor')
-).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+  // First, get all recurring schedules to know each officer's normal pattern
+  const recurringSchedulesByOfficer = new Map();
+  schedules?.recurring?.forEach(recurring => {
+    if (!recurringSchedulesByOfficer.has(recurring.officer_id)) {
+      recurringSchedulesByOfficer.set(recurring.officer_id, new Set());
+    }
+    recurringSchedulesByOfficer.get(recurring.officer_id).add(recurring.day_of_week);
+  });
 
-// Calculate minimum staffing (you might want to make this dynamic)
-const minimumStaffing = {
-  MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 9, SAT: 9, SUN: 8
-};
+  schedules?.dailySchedules?.forEach(day => {
+    day.officers.forEach((officer: any) => {
+      if (!allOfficers.has(officer.officerId)) {
+        allOfficers.set(officer.officerId, {
+          ...officer,
+          recurringDays: recurringSchedulesByOfficer.get(officer.officerId) || new Set(),
+          weeklySchedule: {} as Record<string, any>
+        });
+      }
+      
+      // Store the day schedule with proper recurring flag
+      const daySchedule = {
+        ...officer,
+        isRegularRecurringDay: recurringSchedulesByOfficer.get(officer.officerId)?.has(day.dayOfWeek) || false
+      };
+      
+      allOfficers.get(officer.officerId).weeklySchedule[day.date] = daySchedule;
+    });
+  });
 
-return (
-  <div className="space-y-4">
-    {/* Calendar header */}
-    <div className="flex justify-between items-center">
-      <div className="text-lg font-bold">
-        {format(currentWeekStart, "MMM d")} - {format(addDays(currentWeekStart, 6), "MMM d, yyyy")}
+  const supervisors = Array.from(allOfficers.values()).filter(o => 
+    o.shiftInfo?.position?.toLowerCase().includes('supervisor')
+  ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+
+  const officers = Array.from(allOfficers.values()).filter(o => 
+    !o.shiftInfo?.position?.toLowerCase().includes('supervisor')
+  ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+
+  // Calculate minimum staffing (you might want to make this dynamic)
+  const minimumStaffing = {
+    MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 9, SAT: 9, SUN: 8
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Calendar header */}
+      <div className="flex justify-between items-center">
+        <div className="text-lg font-bold">
+          {format(currentWeekStart, "MMM d")} - {format(addDays(currentWeekStart, 6), "MMM d, yyyy")}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
+            Today
+          </Button>
+          <Button variant="outline" size="sm" onClick={goToNextWeek}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
-          Today
-        </Button>
-        <Button variant="outline" size="sm" onClick={goToNextWeek}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
 
-    {/* Main schedule table */}
-    <div className="border rounded-lg overflow-hidden">
-      {/* Table header */}
-      <div className="grid grid-cols-9 bg-muted/50 border-b">
-        <div className="p-2 font-semibold border-r">Empl#</div>
-        <div className="p-2 font-semibold border-r">SUPERVISORS</div>
-        {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => (
-          <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
-            <div>{dayName}</div>
-            <div className="text-xs text-muted-foreground">{formattedDate}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Supervisors section */}
-      <div className="border-b">
-        {/* Supervisor count row */}
-        <div className="grid grid-cols-9 border-b">
-          <div className="p-2 border-r"></div>
-          <div className="p-2 border-r text-sm font-medium">COUNT</div>
-          {weekDays.map(({ dateStr }) => {
-            const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-            const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.length || 0;
-            return (
-              <div key={dateStr} className="p-2 text-center border-r text-sm">
-                {supervisorCount}
-              </div>
-            );
-          })}
+      {/* Main schedule table */}
+      <div className="border rounded-lg overflow-hidden">
+        {/* Table header */}
+        <div className="grid grid-cols-9 bg-muted/50 border-b">
+          <div className="p-2 font-semibold border-r">Empl#</div>
+          <div className="p-2 font-semibold border-r">SUPERVISORS</div>
+          {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => (
+            <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
+              <div>{dayName}</div>
+              <div className="text-xs text-muted-foreground">{formattedDate}</div>
+            </div>
+          ))}
         </div>
 
-        {/* Individual supervisors */}
-        {supervisors.map((officer) => (
-          <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
-            <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
-            <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+        {/* Supervisors section */}
+        <div className="border-b">
+          {/* Supervisor count row */}
+          <div className="grid grid-cols-9 border-b">
+            <div className="p-2 border-r"></div>
+            <div className="p-2 border-r text-sm font-medium">COUNT</div>
             {weekDays.map(({ dateStr }) => {
-              const dayOfficer = officer.weeklySchedule[dateStr];
+              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+              const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.length || 0;
               return (
-                <ScheduleCell
-                  key={dateStr}
-                  officer={dayOfficer}
-                  dateStr={dateStr}
-                  officerId={officer.officerId}
-                  officerName={officer.officerName}
-                  isAdminOrSupervisor={isAdminOrSupervisor}
-                  onAssignPTO={handleAssignPTO}
-                  onRemovePTO={handleRemovePTO}
-                />
+                <div key={dateStr} className="p-2 text-center border-r text-sm">
+                  {supervisorCount}
+                </div>
               );
             })}
           </div>
-        ))}
+
+          {/* Individual supervisors */}
+          {supervisors.map((officer) => (
+            <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
+              <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
+              <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+              {weekDays.map(({ dateStr }) => {
+                const dayOfficer = officer.weeklySchedule[dateStr];
+                return (
+                  <ScheduleCell
+                    key={dateStr}
+                    officer={dayOfficer}
+                    dateStr={dateStr}
+                    officerId={officer.officerId}
+                    officerName={officer.officerName}
+                    isAdminOrSupervisor={isAdminOrSupervisor}
+                    onAssignPTO={handleAssignPTO}
+                    onRemovePTO={handleRemovePTO}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* Officers section */}
+        <div>
+          {/* Officer count row */}
+          <div className="grid grid-cols-9 border-b bg-muted/30">
+            <div className="p-2 border-r"></div>
+            <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
+            {weekDays.map(({ dateStr }) => {
+              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+              const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.length || 0;
+              return (
+                <div key={dateStr} className="p-2 text-center border-r text-sm">
+                  {officerCount}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Staffing minimum row */}
+          <div className="grid grid-cols-9 border-b bg-muted/20">
+            <div className="p-2 border-r"></div>
+            <div className="p-2 border-r text-sm font-medium">MINIMUM</div>
+            {weekDays.map(({ dayName }) => (
+              <div key={dayName} className="p-2 text-center border-r text-sm font-bold">
+                {minimumStaffing[dayName as keyof typeof minimumStaffing]}
+              </div>
+            ))}
+          </div>
+
+          {/* Officer surplus row */}
+          <div className="grid grid-cols-9 border-b bg-muted/10">
+            <div className="p-2 border-r"></div>
+            <div className="p-2 border-r text-sm font-medium">OFC SURPLUS</div>
+            {weekDays.map(({ dateStr, dayName }) => {
+              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+              const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.length || 0;
+              const minimum = minimumStaffing[dayName as keyof typeof minimumStaffing];
+              const surplus = officerCount - minimum;
+              return (
+                <div key={dateStr} className={`p-2 text-center border-r text-sm font-medium ${surplus < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {surplus}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Individual officers */}
+          {officers.map((officer) => (
+            <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
+              <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
+              <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+              {weekDays.map(({ dateStr }) => {
+                const dayOfficer = officer.weeklySchedule[dateStr];
+                return (
+                  <ScheduleCell
+                    key={dateStr}
+                    officer={dayOfficer}
+                    dateStr={dateStr}
+                    officerId={officer.officerId}
+                    officerName={officer.officerName}
+                    isAdminOrSupervisor={isAdminOrSupervisor}
+                    onAssignPTO={handleAssignPTO}
+                    onRemovePTO={handleRemovePTO}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
       </div>
+    </div>
+  );
+};
 
       {/* Officers section */}
       <div>
