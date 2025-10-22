@@ -588,7 +588,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     return getLastName(officer.officerName);
   };
 
-  // Updated Schedule Cell Component - Properly distinguishes assignment changes vs extra shifts
+// Updated Schedule Cell Component - Shows "Special Assignment" badge
 const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, officerId, officerName }: any) => {
   // Check if this officer has any schedule data for this date
   const hasSchedule = !!officer;
@@ -600,6 +600,12 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
   const isException = officer?.shiftInfo?.scheduleType === "exception";
   const isRegularDay = officer?.isRegularRecurringDay; // This comes from our new data structure
   const isExtraShift = isException && !isOff && !hasPTO && !isRegularDay;
+
+  // NEW: Check if this is a special assignment
+  const isSpecialAssignment = position && (
+    position.toLowerCase().includes('other') ||
+    (position && !predefinedPositions.includes(position))
+  );
 
   // If no officer data at all, this is an unscheduled day (dark gray)
   if (!hasSchedule) {
@@ -630,10 +636,16 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
         </div>
       ) : (
         <div className="text-center">
-          {/* Only show "Extra Shift" for true extra days (not assignment changes on regular days) */}
+          {/* Show "Extra Shift" for true extra days (not assignment changes on regular days) */}
           {isExtraShift && (
             <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
               Extra Shift
+            </Badge>
+          )}
+          {/* NEW: Show "Special Assignment" badge */}
+          {isSpecialAssignment && !isExtraShift && (
+            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200 mb-1">
+              Special
             </Badge>
           )}
           {position && (
