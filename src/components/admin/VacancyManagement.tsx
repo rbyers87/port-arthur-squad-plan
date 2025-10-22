@@ -676,11 +676,11 @@ export const VacancyManagement = () => {
             <div className="space-y-4">
               {understaffedShifts.map((shift, index) => {
   console.log("🔄 RENDERING SHIFT - ACTUAL DATA:", {
-    date: shift.date,
+    rawDate: shift.date,
+    formattedDate: format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy"),
     shiftName: shift.shift_types?.name,
     supervisors: shift.current_supervisors,
-    officers: shift.current_officers,
-    assignedOfficers: shift.assigned_officers
+    officers: shift.current_officers
   });
   
   const alertExists = isAlertCreated(shift);
@@ -699,7 +699,7 @@ export const VacancyManagement = () => {
         <div className="space-y-1">
           <p className="font-medium">{shiftName}</p>
           <p className="text-sm text-muted-foreground">
-            {format(new Date(shift.date), "EEEE, MMM d, yyyy")} • {shiftTime}
+            {format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy")} • {shiftTime}
           </p>
           
           <div className="bg-gray-100 p-2 rounded text-xs mt-2">
