@@ -164,7 +164,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
     queryKey: ["schedule", currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId],
     queryFn: async () => {
-      if (!selectedShiftId) return { dailySchedules: [], dates: [] };
+      if (!selectedShiftId) return { dailySchedules: [], dates: [], allOfficers: [] };
 
       // Determine date range based on active view
       let startDate: Date;
@@ -588,200 +588,37 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     return getLastName(officer.officerName);
   };
 
-  // NEW: Excel-style weekly view with table layout
-  const renderExcelStyleWeeklyView = () => {
-    const weekDays = Array.from({ length: 7 }, (_, i) => {
-      const date = addDays(currentWeekStart, i);
-      return {
-        date,
-        dateStr: format(date, "yyyy-MM-dd"),
-        dayName: format(date, "EEE").toUpperCase(),
-        formattedDate: format(date, "MMM d"),
-        isToday: isSameDay(date, new Date())
-      };
-    });
-
-    // Get all unique officers across the week for consistent rows
-    const allOfficers = new Map();
-    
-    schedules?.dailySchedules?.forEach(day => {
-      day.officers.forEach((officer: any) => {
-        if (!allOfficers.has(officer.officerId)) {
-          allOfficers.set(officer.officerId, {
-            ...officer,
-            weeklySchedule: {} as Record<string, any>
-          });
-        }
-        allOfficers.get(officer.officerId).weeklySchedule[day.date] = officer;
-      });
-    });
-
-    const supervisors = Array.from(allOfficers.values()).filter(o => 
-      o.shiftInfo?.position?.toLowerCase().includes('supervisor')
-    ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
-
-    const officers = Array.from(allOfficers.values()).filter(o => 
-      !o.shiftInfo?.position?.toLowerCase().includes('supervisor')
-    ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
-
-    // Calculate minimum staffing (you might want to make this dynamic)
-    const minimumStaffing = {
-      Mon: 8, Tue: 8, Wed: 8, Thu: 8, Fri: 9, Sat: 9, Sun: 8
-    };
-
-    return (
-      <div className="space-y-4">
-        {/* Calendar header */}
-        <div className="flex justify-between items-center">
-          <div className="text-lg font-bold">
-            {format(currentWeekStart, "MMM d")} - {format(addDays(currentWeekStart, 6), "MMM d, yyyy")}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
-              Today
-            </Button>
-            <Button variant="outline" size="sm" onClick={goToNextWeek}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Main schedule table */}
-        <div className="border rounded-lg overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-9 bg-muted/50 border-b">
-            <div className="p-2 font-semibold border-r">Empl#</div>
-            <div className="p-2 font-semibold border-r">SUPERVISORS</div>
-            {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => (
-              <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
-                <div>{dayName}</div>
-                <div className="text-xs text-muted-foreground">{formattedDate}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Supervisors section */}
-          <div className="border-b">
-            {/* Supervisor count row */}
-            <div className="grid grid-cols-9 border-b">
-              <div className="p-2 border-r"></div>
-              <div className="p-2 border-r text-sm font-medium">COUNT</div>
-              {weekDays.map(({ dateStr }) => {
-                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-                const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.length || 0;
-                return (
-                  <div key={dateStr} className="p-2 text-center border-r text-sm">
-                    {supervisorCount}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Individual supervisors */}
-            {supervisors.map((officer) => (
-              <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
-                <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
-                <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
-                {weekDays.map(({ dateStr }) => {
-                  const dayOfficer = officer.weeklySchedule[dateStr];
-                  return (
-                    <ScheduleCell
-                      key={dateStr}
-                      officer={dayOfficer}
-                      dateStr={dateStr}
-                      isAdminOrSupervisor={isAdminOrSupervisor}
-                      onAssignPTO={handleAssignPTO}
-                      onRemovePTO={handleRemovePTO}
-                    />
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-
-          {/* Officers section */}
-          <div>
-            {/* Officer count row */}
-            <div className="grid grid-cols-9 border-b bg-muted/30">
-              <div className="p-2 border-r"></div>
-              <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
-              {weekDays.map(({ dateStr, dayName }) => {
-                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-                const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.length || 0;
-                return (
-                  <div key={dateStr} className="p-2 text-center border-r text-sm">
-                    {officerCount}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Staffing minimum row */}
-            <div className="grid grid-cols-9 border-b bg-muted/20">
-              <div className="p-2 border-r"></div>
-              <div className="p-2 border-r text-sm font-medium">MINIMUM</div>
-              {weekDays.map(({ dayName }) => (
-                <div key={dayName} className="p-2 text-center border-r text-sm font-bold">
-                  {minimumStaffing[dayName as keyof typeof minimumStaffing]}
-                </div>
-              ))}
-            </div>
-
-            {/* Officer surplus row */}
-            <div className="grid grid-cols-9 border-b bg-muted/10">
-              <div className="p-2 border-r"></div>
-              <div className="p-2 border-r text-sm font-medium">OFC SURPLUS</div>
-              {weekDays.map(({ dateStr, dayName }) => {
-                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-                const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.length || 0;
-                const minimum = minimumStaffing[dayName as keyof typeof minimumStaffing];
-                const surplus = officerCount - minimum;
-                return (
-                  <div key={dateStr} className={`p-2 text-center border-r text-sm font-medium ${surplus < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {surplus}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Individual officers */}
-            {officers.map((officer) => (
-              <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
-                <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
-                <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
-                {weekDays.map(({ dateStr }) => {
-                  const dayOfficer = officer.weeklySchedule[dateStr];
-                  return (
-                    <ScheduleCell
-                      key={dateStr}
-                      officer={dayOfficer}
-                      dateStr={dateStr}
-                      isAdminOrSupervisor={isAdminOrSupervisor}
-                      onAssignPTO={handleAssignPTO}
-                      onRemovePTO={handleRemovePTO}
-                    />
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // Schedule Cell Component
-  const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO }: any) => {
-    if (!officer) {
-      return <div className="p-2 border-r bg-muted/20 min-h-10"></div>;
-    }
+  const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, onAddShift, officerId, officerName }: any) => {
+    // Check if this officer has any schedule data for this date
+    const hasSchedule = !!officer;
+    const isOff = officer?.shiftInfo?.isOff;
+    const hasPTO = officer?.shiftInfo?.hasPTO;
+    const position = officer?.shiftInfo?.position;
 
-    const isOff = officer.shiftInfo?.isOff;
-    const hasPTO = officer.shiftInfo?.hasPTO;
-    const position = officer.shiftInfo?.position;
+    // If no officer data at all, this is an unscheduled day (dark gray)
+    if (!hasSchedule) {
+      return (
+        <div className="p-2 border-r bg-gray-300 dark:bg-gray-600 min-h-10 relative group">
+          {isAdminOrSupervisor && (
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-6 text-xs bg-white/90 hover:bg-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddShift(officerId, officerName, dateStr);
+                }}
+                title="Add Shift"
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+        </div>
+      );
+    }
 
     return (
       <div className={`
@@ -849,10 +686,339 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     );
   };
 
-  // Keep your existing monthly view
-  const renderMonthlyView = () => (
-    <div>Monthly view implementation...</div>
-  );
+  // NEW: Excel-style weekly view with table layout
+  const renderExcelStyleWeeklyView = () => {
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
+      const date = addDays(currentWeekStart, i);
+      return {
+        date,
+        dateStr: format(date, "yyyy-MM-dd"),
+        dayName: format(date, "EEE").toUpperCase(),
+        formattedDate: format(date, "MMM d"),
+        isToday: isSameDay(date, new Date())
+      };
+    });
+
+    // Get all unique officers across the week for consistent rows
+    const allOfficers = new Map();
+    
+    schedules?.dailySchedules?.forEach(day => {
+      day.officers.forEach((officer: any) => {
+        if (!allOfficers.has(officer.officerId)) {
+          allOfficers.set(officer.officerId, {
+            ...officer,
+            weeklySchedule: {} as Record<string, any>
+          });
+        }
+        allOfficers.get(officer.officerId).weeklySchedule[day.date] = officer;
+      });
+    });
+
+    const supervisors = Array.from(allOfficers.values()).filter(o => 
+      o.shiftInfo?.position?.toLowerCase().includes('supervisor')
+    ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+
+    const officers = Array.from(allOfficers.values()).filter(o => 
+      !o.shiftInfo?.position?.toLowerCase().includes('supervisor')
+    ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+
+    // Calculate minimum staffing (you might want to make this dynamic)
+    const minimumStaffing = {
+      MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 9, SAT: 9, SUN: 8
+    };
+
+    // Add handler for adding shifts
+    const handleAddShift = (officerId: string, officerName: string, date: string) => {
+      setSelectedSchedule({
+        scheduleId: "",
+        type: "exception",
+        date: date,
+        shift: shiftTypes?.find(s => s.id === selectedShiftId),
+        officerId: officerId,
+        officerName: officerName,
+      });
+      setDialogOpen(true);
+    };
+
+    return (
+      <div className="space-y-4">
+        {/* Calendar header */}
+        <div className="flex justify-between items-center">
+          <div className="text-lg font-bold">
+            {format(currentWeekStart, "MMM d")} - {format(addDays(currentWeekStart, 6), "MMM d, yyyy")}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
+              Today
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToNextWeek}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Main schedule table */}
+        <div className="border rounded-lg overflow-hidden">
+          {/* Table header */}
+          <div className="grid grid-cols-9 bg-muted/50 border-b">
+            <div className="p-2 font-semibold border-r">Empl#</div>
+            <div className="p-2 font-semibold border-r">SUPERVISORS</div>
+            {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => (
+              <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
+                <div>{dayName}</div>
+                <div className="text-xs text-muted-foreground">{formattedDate}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Supervisors section */}
+          <div className="border-b">
+            {/* Supervisor count row */}
+            <div className="grid grid-cols-9 border-b">
+              <div className="p-2 border-r"></div>
+              <div className="p-2 border-r text-sm font-medium">COUNT</div>
+              {weekDays.map(({ dateStr }) => {
+                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+                const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.length || 0;
+                return (
+                  <div key={dateStr} className="p-2 text-center border-r text-sm">
+                    {supervisorCount}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Individual supervisors */}
+            {supervisors.map((officer) => (
+              <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
+                <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
+                <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+                {weekDays.map(({ dateStr }) => {
+                  const dayOfficer = officer.weeklySchedule[dateStr];
+                  return (
+                    <ScheduleCell
+                      key={dateStr}
+                      officer={dayOfficer}
+                      dateStr={dateStr}
+                      officerId={officer.officerId}
+                      officerName={officer.officerName}
+                      isAdminOrSupervisor={isAdminOrSupervisor}
+                      onAssignPTO={handleAssignPTO}
+                      onRemovePTO={handleRemovePTO}
+                      onAddShift={handleAddShift}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          {/* Officers section */}
+          <div>
+            {/* Officer count row */}
+            <div className="grid grid-cols-9 border-b bg-muted/30">
+              <div className="p-2 border-r"></div>
+              <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
+              {weekDays.map(({ dateStr }) => {
+                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+                const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.length || 0;
+                return (
+                  <div key={dateStr} className="p-2 text-center border-r text-sm">
+                    {officerCount}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Staffing minimum row */}
+            <div className="grid grid-cols-9 border-b bg-muted/20">
+              <div className="p-2 border-r"></div>
+              <div className="p-2 border-r text-sm font-medium">MINIMUM</div>
+              {weekDays.map(({ dayName }) => (
+                <div key={dayName} className="p-2 text-center border-r text-sm font-bold">
+                  {minimumStaffing[dayName as keyof typeof minimumStaffing]}
+                </div>
+              ))}
+            </div>
+
+            {/* Officer surplus row */}
+            <div className="grid grid-cols-9 border-b bg-muted/10">
+              <div className="p-2 border-r"></div>
+              <div className="p-2 border-r text-sm font-medium">OFC SURPLUS</div>
+              {weekDays.map(({ dateStr, dayName }) => {
+                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+                const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.length || 0;
+                const minimum = minimumStaffing[dayName as keyof typeof minimumStaffing];
+                const surplus = officerCount - minimum;
+                return (
+                  <div key={dateStr} className={`p-2 text-center border-r text-sm font-medium ${surplus < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {surplus}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Individual officers */}
+            {officers.map((officer) => (
+              <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
+                <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
+                <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+                {weekDays.map(({ dateStr }) => {
+                  const dayOfficer = officer.weeklySchedule[dateStr];
+                  return (
+                    <ScheduleCell
+                      key={dateStr}
+                      officer={dayOfficer}
+                      dateStr={dateStr}
+                      officerId={officer.officerId}
+                      officerName={officer.officerName}
+                      isAdminOrSupervisor={isAdminOrSupervisor}
+                      onAssignPTO={handleAssignPTO}
+                      onRemovePTO={handleRemovePTO}
+                      onAddShift={handleAddShift}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Fixed Monthly View
+  const renderMonthlyView = () => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    
+    // Get days from previous and next month to fill the calendar grid
+    const startDay = monthStart.getDay();
+    const endDay = monthEnd.getDay();
+    
+    const previousMonthDays = Array.from({ length: startDay }, (_, i) => 
+      addDays(monthStart, -startDay + i)
+    );
+    
+    const nextMonthDays = Array.from({ length: 6 - endDay }, (_, i) => 
+      addDays(monthEnd, i + 1)
+    );
+
+    const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
+
+    return (
+      <div className="space-y-4">
+        {/* Calendar header */}
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+            <div key={day} className="text-center font-medium text-sm py-2 bg-muted/50 rounded">
+              {day}
+            </div>
+          ))}
+        </div>
+        
+        {/* Calendar grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {allCalendarDays.map((day, index) => {
+            const dateStr = format(day, "yyyy-MM-dd");
+            const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+            const isCurrentMonthDay = isSameMonth(day, currentMonth);
+            const isToday = isSameDay(day, new Date());
+            const totalOfficers = daySchedule?.officers.length || 0;
+            
+            return (
+              <div
+                key={day.toISOString()}
+                className={`
+                  min-h-32 p-2 border rounded-lg text-sm
+                  ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/20 text-muted-foreground'}
+                  ${isToday ? 'border-primary ring-2 ring-primary' : 'border-border'}
+                  hover:bg-accent/50 transition-colors
+                `}
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <span className={`
+                    text-xs font-medium
+                    ${isToday ? 'bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center' : ''}
+                  `}>
+                    {format(day, "d")}
+                  </span>
+                  {totalOfficers > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {totalOfficers}
+                    </Badge>
+                  )}
+                </div>
+                
+                <div className="space-y-1 max-h-20 overflow-y-auto">
+                  {daySchedule?.officers.slice(0, 4).map((officer: any) => (
+                    <div key={officer.officerId} className="text-xs">
+                      <div className="font-medium truncate">
+                        {getLastName(officer.officerName)}
+                      </div>
+                      <div className="text-muted-foreground truncate text-[10px]">
+                        {officer.shiftInfo?.position || officer.shiftInfo?.type}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {totalOfficers > 4 && (
+                    <div className="text-xs text-muted-foreground text-center">
+                      +{totalOfficers - 4} more
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const weekEnd = addDays(currentWeekStart, 6);
+  const isCurrentWeek = startOfWeek(new Date(), { weekStartsOn: 0 }).getTime() === currentWeekStart.getTime();
+  const isCurrentMonth = isSameMonth(currentMonth, new Date());
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Schedule
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Schedule
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-red-500">Error loading schedule: {(error as Error).message}</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Please check the console for more details.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <>
@@ -917,6 +1083,59 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
               </TabsTrigger>
             </TabsList>
           </Tabs>
+          
+          {/* Navigation */}
+          <div className="flex items-center justify-between mt-4">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={activeView === "weekly" ? goToPreviousWeek : goToPreviousMonth}
+                title={activeView === "weekly" ? "Previous Week" : "Previous Month"}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="text-center">
+                <h3 className="text-lg font-semibold">
+                  {activeView === "weekly" 
+                    ? `${format(currentWeekStart, "MMM d")} - ${format(weekEnd, "MMM d, yyyy")}`
+                    : format(currentMonth, "MMMM yyyy")
+                  }
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {activeView === "weekly" 
+                    ? `Week of ${format(currentWeekStart, "MMMM d, yyyy")}`
+                    : `Month of ${format(currentMonth, "MMMM yyyy")}`
+                  }
+                </p>
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={activeView === "weekly" ? goToNextWeek : goToNextMonth}
+                title={activeView === "weekly" ? "Next Week" : "Next Month"}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <Button
+              variant={(activeView === "weekly" && isCurrentWeek) || (activeView === "monthly" && isCurrentMonth) ? "outline" : "default"}
+              size="sm"
+              onClick={activeView === "weekly" ? goToCurrentWeek : goToCurrentMonth}
+              disabled={(activeView === "weekly" && isCurrentWeek) || (activeView === "monthly" && isCurrentMonth)}
+            >
+              Today
+            </Button>
+          </div>
+
+          {selectedShiftId !== "all" && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Viewing officers assigned to: {shiftTypes?.find(s => s.id === selectedShiftId)?.name}
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           {!selectedShiftId ? (
