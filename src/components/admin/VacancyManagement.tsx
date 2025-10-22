@@ -109,281 +109,294 @@ export const VacancyManagement = () => {
     },
   });
 
-// Understaffed Detection Query - FIXED to properly handle position detection
-const { 
-  data: understaffedShifts, 
-  isLoading: understaffedLoading, 
-  error: understaffedError,
-  refetch: refetchUnderstaffed
-} = useQuery({
-  queryKey: ["understaffed-shifts-detection", selectedShiftId],
-  queryFn: async () => {
-    console.log("🔍 Starting understaffed shift detection...");
-    
-    // Get dates for the next 7 days
-    const dates = [];
-    const today = new Date();
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      dates.push({
-        date: date.toISOString().split('T')[0],
-        dayOfWeek: date.getDay()
-      });
-    }
-
-    try {
-      const allUnderstaffedShifts = [];
-
-      // Check each date in the next 7 days
-      for (const { date, dayOfWeek } of dates) {
-        console.log(`\n📋 Checking date: ${date}, dayOfWeek: ${dayOfWeek}`);
-
-        // Get all shift types or just the selected one
-        let shiftTypesToCheck;
-        if (selectedShiftId === "all") {
-          const { data, error: shiftError } = await supabase
-            .from("shift_types")
-            .select("*")
-            .order("start_time");
-          if (shiftError) throw shiftError;
-          shiftTypesToCheck = data;
-        } else {
-          const { data, error: shiftError } = await supabase
-            .from("shift_types")
-            .select("*")
-            .eq("id", selectedShiftId);
-          if (shiftError) throw shiftError;
-          shiftTypesToCheck = data;
-        }
-
-        console.log(`🔄 Checking ${shiftTypesToCheck?.length} shifts for ${date}`);
-
-        // Get minimum staffing requirements for this day of week
-        const { data: minimumStaffing, error: minError } = await supabase
-          .from("minimum_staffing")
-          .select("minimum_officers, minimum_supervisors, shift_type_id")
-          .eq("day_of_week", dayOfWeek);
-        if (minError) throw minError;
-
-        console.log("📊 Minimum staffing requirements:", minimumStaffing);
-
-        // Get ALL schedule data for this date - USING THE SAME LOGIC AS DailyScheduleView
-        const { data: recurringData, error: recurringError } = await supabase
-          .from("recurring_schedules")
-          .select(`
-            *,
-            profiles!inner (
-              id, 
-              full_name, 
-              badge_number, 
-              rank
-            ),
-            shift_types (
-              id, 
-              name, 
-              start_time, 
-              end_time
-            )
-          `)
-          .eq("day_of_week", dayOfWeek)
-          .is("end_date", null);
-
-        if (recurringError) {
-          console.error("❌ Recurring schedules error:", recurringError);
-          throw recurringError;
-        }
-
-        // Get schedule exceptions for this specific date
-        const { data: exceptionsData, error: exceptionsError } = await supabase
-          .from("schedule_exceptions")
-          .select(`
-            *,
-            profiles!inner (
-              id, 
-              full_name, 
-              badge_number, 
-              rank
-            ),
-            shift_types (
-              id, 
-              name, 
-              start_time, 
-              end_time
-            )
-          `)
-          .eq("date", date);
-
-        if (exceptionsError) {
-          console.error("❌ Schedule exceptions error:", exceptionsError);
-          throw exceptionsError;
-        }
-
-        // Separate PTO exceptions from regular exceptions
-        const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
-        const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
-
-        console.log(`📝 Total exceptions: ${exceptionsData?.length || 0} (PTO: ${ptoExceptions.length}, Working: ${workingExceptions.length})`);
-
-        // Check each shift type for understaffing
-        for (const shift of shiftTypesToCheck || []) {
-          const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
-          const minSupervisors = minStaff?.minimum_supervisors || 1;
-          const minOfficers = minStaff?.minimum_officers || 8;
-
-          console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
-          console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
-
-          // Build the schedule exactly like DailyScheduleView does
-          const allAssignedOfficers = [];
-
-          // Process recurring officers - check if they have working exceptions that override their position
-          const recurringOfficers = recurringData
-            ?.filter(r => r.shift_types?.id === shift.id) || [];
-
-          for (const recurringOfficer of recurringOfficers) {
-            // Check if this officer has a working exception for today that overrides their position
-            const workingException = workingExceptions?.find(e => 
-              e.officer_id === recurringOfficer.officer_id && 
-              e.shift_types?.id === shift.id
-            );
-
-            // Check if this officer has PTO for today
-            const ptoException = ptoExceptions?.find(e => 
-              e.officer_id === recurringOfficer.officer_id && 
-              e.shift_types?.id === shift.id
-            );
-
-            // Skip officers with full-day PTO
-            if (ptoException?.is_off && !ptoException.custom_start_time && !ptoException.custom_end_time) {
-              console.log(`➖ Skipping ${recurringOfficer.profiles?.full_name} - Full day PTO`);
-              continue;
-            }
-
-            // Use the position from the working exception if it exists, otherwise use recurring position
-            const actualPosition = workingException?.position_name || recurringOfficer.position_name;
-            
-            // FIXED: Better supervisor detection that handles null/undefined positions
-            const isSupervisor = actualPosition ? 
-              actualPosition.toLowerCase().includes('supervisor') : 
-              false;
-
-            console.log(`✅ ${recurringOfficer.profiles?.full_name} - Position: ${actualPosition || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - ${workingException ? 'Exception Override' : 'Recurring'}`);
-
-            allAssignedOfficers.push({
-              officerId: recurringOfficer.officer_id,
-              name: recurringOfficer.profiles?.full_name,
-              position: actualPosition,
-              isSupervisor: isSupervisor,
-              type: workingException ? 'exception' : 'recurring'
-            });
-          }
-
-          // Process additional officers from working exceptions (manually added shifts)
-          const additionalOfficers = workingExceptions
-            ?.filter(e => 
-              e.shift_types?.id === shift.id &&
-              !recurringData?.some(r => r.officer_id === e.officer_id)
-            ) || [];
-
-          for (const additionalOfficer of additionalOfficers) {
-            // Check if this officer has PTO for today
-            const ptoException = ptoExceptions?.find(p => 
-              p.officer_id === additionalOfficer.officer_id && 
-              p.shift_types?.id === shift.id
-            );
-
-            // Skip officers with full-day PTO
-            if (ptoException?.is_off && !ptoException.custom_start_time && !ptoException.custom_end_time) {
-              console.log(`➖ Skipping ${additionalOfficer.profiles?.full_name} - Full day PTO (Added Shift)`);
-              continue;
-            }
-
-            // FIXED: Better supervisor detection that handles null/undefined positions
-            const isSupervisor = additionalOfficer.position_name ? 
-              additionalOfficer.position_name.toLowerCase().includes('supervisor') : 
-              false;
-            
-            console.log(`✅ ${additionalOfficer.profiles?.full_name} - Position: ${additionalOfficer.position_name || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Added Shift`);
-
-            allAssignedOfficers.push({
-              officerId: additionalOfficer.officer_id,
-              name: additionalOfficer.profiles?.full_name,
-              position: additionalOfficer.position_name,
-              isSupervisor: isSupervisor,
-              type: 'added'
-            });
-          }
-
-          // Count supervisors and officers based on ACTUAL assigned positions
-          const currentSupervisors = allAssignedOfficers.filter(o => o.isSupervisor).length;
-          const currentOfficers = allAssignedOfficers.filter(o => !o.isSupervisor).length;
-
-          console.log(`👥 Final staffing: ${currentSupervisors} supervisors, ${currentOfficers} officers`);
-          console.log(`📋 All assigned officers:`, allAssignedOfficers.map(o => ({
-            name: o.name,
-            position: o.position,
-            isSupervisor: o.isSupervisor,
-            type: o.type
-          })));
-
-          const supervisorsUnderstaffed = currentSupervisors < minSupervisors;
-          const officersUnderstaffed = currentOfficers < minOfficers;
-          const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
-
-          if (isUnderstaffed) {
-            console.log("🚨 UNDERSTAFFED SHIFT FOUND:", {
-              date,
-              shift: shift.name,
-              supervisors: `${currentSupervisors}/${minSupervisors}`,
-              officers: `${currentOfficers}/${minOfficers}`,
-              dayOfWeek
-            });
-
-            const shiftData = {
-              date,
-              shift_type_id: shift.id,
-              shift_types: {
-                id: shift.id,
-                name: shift.name,
-                start_time: shift.start_time,
-                end_time: shift.end_time
-              },
-              current_staffing: currentSupervisors + currentOfficers,
-              minimum_required: minSupervisors + minOfficers,
-              current_supervisors: currentSupervisors,
-              current_officers: currentOfficers,
-              min_supervisors: minSupervisors,
-              min_officers: minOfficers,
-              day_of_week: dayOfWeek,
-              isSupervisorsUnderstaffed: supervisorsUnderstaffed,
-              isOfficersUnderstaffed: officersUnderstaffed,
-              assigned_officers: allAssignedOfficers.map(o => ({
-                name: o.name,
-                position: o.position,
-                isSupervisor: o.isSupervisor,
-                type: o.type
-              }))
-            };
-
-            console.log("📊 Storing understaffed shift data:", shiftData);
-            allUnderstaffedShifts.push(shiftData);
-          } else {
-            console.log("✅ Shift is properly staffed");
-          }
-        }
+  // Understaffed Detection Query - FIXED to handle null positions properly
+  const { 
+    data: understaffedShifts, 
+    isLoading: understaffedLoading, 
+    error: understaffedError,
+    refetch: refetchUnderstaffed
+  } = useQuery({
+    queryKey: ["understaffed-shifts-detection", selectedShiftId],
+    queryFn: async () => {
+      console.log("🔍 Starting understaffed shift detection...");
+      
+      // Get dates for the next 7 days
+      const dates = [];
+      const today = new Date();
+      
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        dates.push({
+          date: date.toISOString().split('T')[0],
+          dayOfWeek: date.getDay()
+        });
       }
 
-      console.log("🎯 Total understaffed shifts found:", allUnderstaffedShifts.length);
-      return allUnderstaffedShifts;
+      try {
+        const allUnderstaffedShifts = [];
 
-    } catch (err) {
-      console.error("❌ Error in understaffed detection:", err);
-      throw err;
-    }
-  },
-});
+        // Check each date in the next 7 days
+        for (const { date, dayOfWeek } of dates) {
+          console.log(`\n📋 Checking date: ${date}, dayOfWeek: ${dayOfWeek}`);
+
+          // Get all shift types or just the selected one
+          let shiftTypesToCheck;
+          if (selectedShiftId === "all") {
+            const { data, error: shiftError } = await supabase
+              .from("shift_types")
+              .select("*")
+              .order("start_time");
+            if (shiftError) throw shiftError;
+            shiftTypesToCheck = data;
+          } else {
+            const { data, error: shiftError } = await supabase
+              .from("shift_types")
+              .select("*")
+              .eq("id", selectedShiftId);
+            if (shiftError) throw shiftError;
+            shiftTypesToCheck = data;
+          }
+
+          console.log(`🔄 Checking ${shiftTypesToCheck?.length} shifts for ${date}`);
+
+          // Get minimum staffing requirements for this day of week
+          const { data: minimumStaffing, error: minError } = await supabase
+            .from("minimum_staffing")
+            .select("minimum_officers, minimum_supervisors, shift_type_id")
+            .eq("day_of_week", dayOfWeek);
+          if (minError) throw minError;
+
+          console.log("📊 Minimum staffing requirements:", minimumStaffing);
+
+          // Get ALL schedule data for this date - USING THE SAME LOGIC AS DailyScheduleView
+          const { data: recurringData, error: recurringError } = await supabase
+            .from("recurring_schedules")
+            .select(`
+              *,
+              profiles!inner (
+                id, 
+                full_name, 
+                badge_number, 
+                rank
+              ),
+              shift_types (
+                id, 
+                name, 
+                start_time, 
+                end_time
+              )
+            `)
+            .eq("day_of_week", dayOfWeek)
+            .is("end_date", null);
+
+          if (recurringError) {
+            console.error("❌ Recurring schedules error:", recurringError);
+            throw recurringError;
+          }
+
+          // Get schedule exceptions for this specific date
+          const { data: exceptionsData, error: exceptionsError } = await supabase
+            .from("schedule_exceptions")
+            .select(`
+              *,
+              profiles!inner (
+                id, 
+                full_name, 
+                badge_number, 
+                rank
+              ),
+              shift_types (
+                id, 
+                name, 
+                start_time, 
+                end_time
+              )
+            `)
+            .eq("date", date);
+
+          if (exceptionsError) {
+            console.error("❌ Schedule exceptions error:", exceptionsError);
+            throw exceptionsError;
+          }
+
+          // Separate PTO exceptions from regular exceptions
+          const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
+          const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
+
+          console.log(`📝 Total exceptions: ${exceptionsData?.length || 0} (PTO: ${ptoExceptions.length}, Working: ${workingExceptions.length})`);
+
+          // Check each shift type for understaffing
+          for (const shift of shiftTypesToCheck || []) {
+            const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
+            const minSupervisors = minStaff?.minimum_supervisors || 1;
+            const minOfficers = minStaff?.minimum_officers || 8;
+
+            console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
+            console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
+
+            // Build the schedule exactly like DailyScheduleView does
+            const allAssignedOfficers = [];
+
+            // Process recurring officers - check if they have working exceptions that override their position
+            const recurringOfficers = recurringData
+              ?.filter(r => r.shift_types?.id === shift.id) || [];
+
+            for (const recurringOfficer of recurringOfficers) {
+              // Check if this officer has a working exception for today that overrides their position
+              const workingException = workingExceptions?.find(e => 
+                e.officer_id === recurringOfficer.officer_id && 
+                e.shift_types?.id === shift.id
+              );
+
+              // Check if this officer has PTO for today
+              const ptoException = ptoExceptions?.find(e => 
+                e.officer_id === recurringOfficer.officer_id && 
+                e.shift_types?.id === shift.id
+              );
+
+              // Skip officers with full-day PTO
+              if (ptoException?.is_off && !ptoException.custom_start_time && !ptoException.custom_end_time) {
+                console.log(`➖ Skipping ${recurringOfficer.profiles?.full_name} - Full day PTO`);
+                continue;
+              }
+
+              // Use the position from the working exception if it exists, otherwise use recurring position
+              const actualPosition = workingException?.position_name || recurringOfficer.position_name;
+              
+              // FIXED: Better supervisor detection that handles null/undefined positions
+              const isSupervisor = actualPosition ? 
+                actualPosition.toLowerCase().includes('supervisor') : 
+                false;
+
+              console.log(`✅ ${recurringOfficer.profiles?.full_name} - Position: ${actualPosition || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - ${workingException ? 'Exception Override' : 'Recurring'}`);
+
+              allAssignedOfficers.push({
+                officerId: recurringOfficer.officer_id,
+                name: recurringOfficer.profiles?.full_name,
+                position: actualPosition,
+                isSupervisor: isSupervisor,
+                type: workingException ? 'exception' : 'recurring'
+              });
+            }
+
+            // Process additional officers from working exceptions (manually added shifts)
+            const additionalOfficers = workingExceptions
+              ?.filter(e => 
+                e.shift_types?.id === shift.id &&
+                !recurringData?.some(r => r.officer_id === e.officer_id)
+              ) || [];
+
+            for (const additionalOfficer of additionalOfficers) {
+              // Check if this officer has PTO for today
+              const ptoException = ptoExceptions?.find(p => 
+                p.officer_id === additionalOfficer.officer_id && 
+                p.shift_types?.id === shift.id
+              );
+
+              // Skip officers with full-day PTO
+              if (ptoException?.is_off && !ptoException.custom_start_time && !ptoException.custom_end_time) {
+                console.log(`➖ Skipping ${additionalOfficer.profiles?.full_name} - Full day PTO (Added Shift)`);
+                continue;
+              }
+
+              // FIXED: Better supervisor detection that handles null/undefined positions
+              const isSupervisor = additionalOfficer.position_name ? 
+                additionalOfficer.position_name.toLowerCase().includes('supervisor') : 
+                false;
+              
+              console.log(`✅ ${additionalOfficer.profiles?.full_name} - Position: ${additionalOfficer.position_name || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Added Shift`);
+
+              allAssignedOfficers.push({
+                officerId: additionalOfficer.officer_id,
+                name: additionalOfficer.profiles?.full_name,
+                position: additionalOfficer.position_name,
+                isSupervisor: isSupervisor,
+                type: 'added'
+              });
+            }
+
+            // Count supervisors and officers based on ACTUAL assigned positions
+            const currentSupervisors = allAssignedOfficers.filter(o => o.isSupervisor).length;
+            const currentOfficers = allAssignedOfficers.filter(o => !o.isSupervisor).length;
+
+            console.log(`👥 Final staffing: ${currentSupervisors} supervisors, ${currentOfficers} officers`);
+            console.log(`📋 All assigned officers:`, allAssignedOfficers.map(o => ({
+              name: o.name,
+              position: o.position,
+              isSupervisor: o.isSupervisor,
+              type: o.type
+            })));
+
+            const supervisorsUnderstaffed = currentSupervisors < minSupervisors;
+            const officersUnderstaffed = currentOfficers < minOfficers;
+            const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
+
+            console.log(`🚨🚨🚨 FINAL CHECK for ${shift.name} on ${date}:`, {
+              currentSupervisors,
+              currentOfficers,
+              minSupervisors,
+              minOfficers,
+              isUnderstaffed,
+              assignedOfficers: allAssignedOfficers.map(o => ({
+                name: o.name,
+                position: o.position,
+                isSupervisor: o.isSupervisor
+              }))
+            });
+
+            if (isUnderstaffed) {
+              console.log("🚨 UNDERSTAFFED SHIFT FOUND:", {
+                date,
+                shift: shift.name,
+                supervisors: `${currentSupervisors}/${minSupervisors}`,
+                officers: `${currentOfficers}/${minOfficers}`,
+                dayOfWeek
+              });
+
+              const shiftData = {
+                date,
+                shift_type_id: shift.id,
+                shift_types: {
+                  id: shift.id,
+                  name: shift.name,
+                  start_time: shift.start_time,
+                  end_time: shift.end_time
+                },
+                current_staffing: currentSupervisors + currentOfficers,
+                minimum_required: minSupervisors + minOfficers,
+                current_supervisors: currentSupervisors,
+                current_officers: currentOfficers,
+                min_supervisors: minSupervisors,
+                min_officers: minOfficers,
+                day_of_week: dayOfWeek,
+                isSupervisorsUnderstaffed: supervisorsUnderstaffed,
+                isOfficersUnderstaffed: officersUnderstaffed,
+                assigned_officers: allAssignedOfficers.map(o => ({
+                  name: o.name,
+                  position: o.position,
+                  isSupervisor: o.isSupervisor,
+                  type: o.type
+                }))
+              };
+
+              console.log("📊 Storing understaffed shift data:", shiftData);
+              allUnderstaffedShifts.push(shiftData);
+            } else {
+              console.log("✅ Shift is properly staffed");
+            }
+          }
+        }
+
+        console.log("🎯 Total understaffed shifts found:", allUnderstaffedShifts.length);
+        return allUnderstaffedShifts;
+
+      } catch (err) {
+        console.error("❌ Error in understaffed detection:", err);
+        throw err;
+      }
+    },
+  });
 
   const { data: existingAlerts } = useQuery({
     queryKey: ["existing-vacancy-alerts"],
@@ -662,55 +675,57 @@ const {
           ) : (
             <div className="space-y-4">
               {understaffedShifts.map((shift, index) => {
-  const alertExists = isAlertCreated(shift);
-  
-  const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
-  const shiftTime = shift.shift_types 
-    ? `${shift.shift_types.start_time} - ${shift.shift_types.end_time}`
-    : "Time not available";
+                console.log("🔄 RENDERING SHIFT:", shift);
+                
+                const alertExists = isAlertCreated(shift);
+                
+                const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
+                const shiftTime = shift.shift_types 
+                  ? `${shift.shift_types.start_time} - ${shift.shift_types.end_time}`
+                  : "Time not available";
 
-  return (
-    <div
-      key={`${shift.date}-${shift.shift_type_id}-${index}`}
-      className="p-4 border rounded-lg space-y-3"
-    >
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
-          <p className="font-medium">{shiftName}</p>
-          <p className="text-sm text-muted-foreground">
-            {format(new Date(shift.date), "EEEE, MMM d, yyyy")} • {shiftTime}
-          </p>
-          
-          {/* THIS IS THE DISPLAY SECTION FOR ASSIGNED OFFICERS */}
-          <div className="bg-gray-100 p-2 rounded text-xs mt-2">
-            <p className="text-gray-600">
-              <strong>Staffing:</strong> {shift.current_staffing}/{shift.minimum_required} |
-              <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
-              <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
-            </p>
-            <p className="text-gray-500 mt-1">
-              <strong>Assigned:</strong> {shift.assigned_officers?.map(o => `${o.name} (${o.position || 'No position'})`).join(', ') || 'None'}
-            </p>
-          </div>
-          {/* END OF DISPLAY SECTION */}
+                return (
+                  <div
+                    key={`${shift.date}-${shift.shift_type_id}-${index}`}
+                    className="p-4 border rounded-lg space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <p className="font-medium">{shiftName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(shift.date), "EEEE, MMM d, yyyy")} • {shiftTime}
+                        </p>
+                        
+                        <div className="bg-gray-100 p-2 rounded text-xs mt-2">
+                          <p className="text-gray-600">
+                            <strong>Staffing:</strong> {shift.current_staffing}/{shift.minimum_required} |
+                            <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
+                            <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
+                          </p>
+                          <p className="text-gray-500 mt-1">
+                            <strong>Assigned:</strong> {shift.assigned_officers?.map(o => 
+                              `${o.name} (${o.position || 'No position'} - ${o.isSupervisor ? 'Supervisor' : 'Officer'})`
+                            ).join(', ') || 'None'}
+                          </p>
+                        </div>
 
-          <div className="flex items-center gap-2 mt-2">
-            <Badge variant="destructive">
-              Total: {shift.current_staffing}/{shift.minimum_required}
-            </Badge>
-            {shift.isSupervisorsUnderstaffed && (
-              <Badge variant="destructive">
-                Needs {shift.min_supervisors - shift.current_supervisors} supervisor(s)
-              </Badge>
-            )}
-            {shift.isOfficersUnderstaffed && (
-              <Badge variant="destructive">
-                Needs {shift.min_officers - shift.current_officers} officer(s)
-              </Badge>
-            )}
-            {alertExists && (
-              <Badge variant="outline" className="bg-green-500/10 text-green-700">
-                Alert Created
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="destructive">
+                            Total: {shift.current_staffing}/{shift.minimum_required}
+                          </Badge>
+                          {shift.isSupervisorsUnderstaffed && (
+                            <Badge variant="destructive">
+                              Needs {shift.min_supervisors - shift.current_supervisors} supervisor(s)
+                            </Badge>
+                          )}
+                          {shift.isOfficersUnderstaffed && (
+                            <Badge variant="destructive">
+                              Needs {shift.min_officers - shift.current_officers} officer(s)
+                            </Badge>
+                          )}
+                          {alertExists && (
+                            <Badge variant="outline" className="bg-green-500/10 text-green-700">
+                              Alert Created
                             </Badge>
                           )}
                         </div>
