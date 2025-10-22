@@ -24,6 +24,13 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
+  // Add these state variables near your other state declarations
+const [editingAssignment, setEditingAssignment] = useState<{
+  officer: any;
+  dateStr: string;
+} | null>(null);
+const [editPosition, setEditPosition] = useState("");
+const [customPosition, setCustomPosition] = useState("");
   const [selectedSchedule, setSelectedSchedule] = useState<{
     scheduleId: string;
     type: "recurring" | "exception";
@@ -39,10 +46,10 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
       isFullShift: boolean;
     };
   } | null>(null);
-  const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
-  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [activeView, setActiveView] = useState<"weekly" | "monthly">("weekly");
+  const [editingSchedule, setEditingSchedule] = <string | null>(null);
+  const [currentWeekStart, setCurrentWeekStart] = <Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
+  const [currentMonth, setCurrentMonth] = <Date>(new Date());
+  const [activeView, setActiveView] = <"weekly" | "monthly">("weekly");
   const queryClient = useQueryClient();
 
   // Predefined positions for grouping
@@ -511,6 +518,49 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     });
     setPtoDialogOpen(true);
   };
+    
+    // Add this handler function near your other handlers
+const handleEditAssignment = (officer: any, dateStr: string) => {
+  setEditingAssignment({ officer, dateStr });
+  
+  // Pre-fill the current position for editing
+  const currentPosition = officer.shiftInfo?.position;
+  const isCustomPosition = currentPosition && !predefinedPositions.includes(currentPosition);
+  
+  if (isCustomPosition) {
+    setEditPosition("Other (Custom)");
+    setCustomPosition(currentPosition);
+  } else {
+    setEditPosition(currentPosition || "");
+    setCustomPosition("");
+  }
+};
+
+const handleSaveAssignment = () => {
+  if (!editingAssignment) return;
+
+  const { officer, dateStr } = editingAssignment;
+  const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
+  
+  if (!finalPosition) {
+    toast.error("Please select or enter a position");
+    return;
+  }
+
+  updatePositionMutation.mutate({
+    scheduleId: officer.shiftInfo.scheduleId,
+    type: officer.shiftInfo.scheduleType,
+    positionName: finalPosition,
+    date: dateStr,
+    officerId: officer.officerId,
+    shiftTypeId: selectedShiftId,
+    currentPosition: officer.shiftInfo.position
+  });
+
+  setEditingAssignment(null);
+  setEditPosition("");
+  setCustomPosition("");
+};
 
   const handleRemovePTO = async (schedule: any, date: string, officerId: string) => {
     if (!schedule.hasPTO || !schedule.ptoData) return;
