@@ -835,7 +835,7 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
   );
 };
 
-  // NEW: Excel-style weekly view with table layout
+// NEW: Excel-style weekly view with table layout
 const renderExcelStyleWeeklyView = () => {
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const date = addDays(currentWeekStart, i);
@@ -880,9 +880,35 @@ const renderExcelStyleWeeklyView = () => {
     });
   });
 
+  // UPDATED: Categorize officers based on their MOST COMMON role for the week
+  // This prevents a single non-supervisor day from moving them out of supervisor section
+  const officerCategories = new Map();
+  
+  Array.from(allOfficers.values()).forEach(officer => {
+    let supervisorDays = 0;
+    let regularDays = 0;
+    
+    // Count supervisor vs regular days for this officer across the week
+    weekDays.forEach(({ dateStr }) => {
+      const dayOfficer = officer.weeklySchedule[dateStr];
+      if (dayOfficer?.shiftInfo?.position?.toLowerCase().includes('supervisor')) {
+        supervisorDays++;
+      } else if (dayOfficer?.shiftInfo?.position) {
+        regularDays++;
+      }
+    });
+    
+    // Categorize based on majority role
+    if (supervisorDays > regularDays) {
+      officerCategories.set(officer.officerId, 'supervisor');
+    } else {
+      officerCategories.set(officer.officerId, 'officer');
+    }
+  });
+
   // UPDATED: Sort supervisors by rank first, then by last name (same as DailyScheduleView)
   const supervisors = Array.from(allOfficers.values())
-    .filter(o => o.shiftInfo?.position?.toLowerCase().includes('supervisor'))
+    .filter(o => officerCategories.get(o.officerId) === 'supervisor')
     .sort((a, b) => {
       // First sort by rank (same as DailyScheduleView)
       const rankA = a.rank || 'Officer';
@@ -899,7 +925,7 @@ const renderExcelStyleWeeklyView = () => {
     });
 
   const officers = Array.from(allOfficers.values())
-    .filter(o => !o.shiftInfo?.position?.toLowerCase().includes('supervisor'))
+    .filter(o => officerCategories.get(o.officerId) === 'officer')
     .sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
 
   // Calculate minimum staffing (you might want to make this dynamic)
