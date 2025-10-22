@@ -775,17 +775,49 @@ const renderExcelStyleWeeklyView = () => {
 
       {/* Main schedule table */}
       <div className="border rounded-lg overflow-hidden">
-        {/* Table header */}
-        <div className="grid grid-cols-9 bg-muted/50 border-b">
-          <div className="p-2 font-semibold border-r">Empl#</div>
-          <div className="p-2 font-semibold border-r">SUPERVISORS</div>
-          {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => (
-            <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
-              <div>{dayName}</div>
-              <div className="text-xs text-muted-foreground">{formattedDate}</div>
-            </div>
-          ))}
-        </div>
+{/* Table header */}
+<div className="grid grid-cols-9 bg-muted/50 border-b">
+  <div className="p-2 font-semibold border-r">Empl#</div>
+  <div className="p-2 font-semibold border-r">SUPERVISORS</div>
+  {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => {
+    const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+    
+    // Calculate staffing for this day
+    const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
+      !officer.shiftInfo?.hasPTO
+    ).length || 0;
+    
+    const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
+      const isSpecialAssignment = officer.shiftInfo?.position && (
+        officer.shiftInfo.position.toLowerCase().includes('other') ||
+        (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
+      );
+      return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+    }).length || 0;
+    
+    const minimumOfficers = minimumStaffing[dayName as keyof typeof minimumStaffing];
+    const isUnderstaffed = officerCount < minimumOfficers;
+    const isSupervisorUnderstaffed = supervisorCount < 1; // Assuming minimum 1 supervisor
+    
+    return (
+      <div key={dateStr} className={`p-2 text-center font-semibold border-r relative ${isToday ? 'bg-primary/10' : ''}`}>
+        <div>{dayName}</div>
+        <div className="text-xs text-muted-foreground">{formattedDate}</div>
+        
+        {/* Understaffed Badge */}
+        {(isUnderstaffed || isSupervisorUnderstaffed) && (
+          <Badge 
+            variant="destructive" 
+            className="absolute -top-1 -right-1 text-xs h-4 w-4 p-0 flex items-center justify-center"
+            title={`Understaffed: ${officerCount}/${minimumOfficers} officers`}
+          >
+            !
+          </Badge>
+        )}
+      </div>
+    );
+  })}
+</div>
 
         {/* Supervisors section */}
         <div className="border-b">
