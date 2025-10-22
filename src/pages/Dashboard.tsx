@@ -17,7 +17,7 @@ import { TimeOffRequests } from "@/components/time-off/TimeOffRequests";
 import { VacancyManagement } from "@/components/admin/VacancyManagement";
 import { StaffManagement } from "@/components/admin/StaffManagement";
 import { PTOManagement } from "@/components/admin/PTOManagement";
-import { logoBase64 } from "../../utils/constants";
+import { logoBase64 } from "../utils/constants";
 
 const Dashboard = () => {
   const navigate = useNavigate();
