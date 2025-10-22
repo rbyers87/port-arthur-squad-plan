@@ -788,47 +788,46 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
               })}
             </div>
 
-            {/* Individual supervisors */}
-            {supervisors.map((officer) => (
-              <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
-                <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
-                <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
-                {weekDays.map(({ dateStr }) => {
-                  const dayOfficer = officer.weeklySchedule[dateStr];
-                  return (
-                    <ScheduleCell
-                      key={dateStr}
-                      officer={dayOfficer}
-                      dateStr={dateStr}
-                      officerId={officer.officerId}
-                      officerName={officer.officerName}
-                      isAdminOrSupervisor={isAdminOrSupervisor}
-                      onAssignPTO={handleAssignPTO}
-                      onRemovePTO={handleRemovePTO}
-                      onAddShift={handleAddShift}
-                    />
-                  );
-                })}
-              </div>
-            ))}
-          </div>
+           {/* Individual supervisors */}
+{supervisors.map((officer) => (
+  <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
+    <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
+    <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+    {weekDays.map(({ dateStr }) => {
+      const dayOfficer = officer.weeklySchedule[dateStr];
+      return (
+        <ScheduleCell
+          key={dateStr}
+          officer={dayOfficer}
+          dateStr={dateStr}
+          officerId={officer.officerId}
+          officerName={officer.officerName}
+          isAdminOrSupervisor={isAdminOrSupervisor}
+          onAssignPTO={handleAssignPTO}
+          onRemovePTO={handleRemovePTO}
+        />
+      );
+    })}
+  </div>
+))}
+</div>
 
-          {/* Officers section */}
-          <div>
-            {/* Officer count row */}
-            <div className="grid grid-cols-9 border-b bg-muted/30">
-              <div className="p-2 border-r"></div>
-              <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
-              {weekDays.map(({ dateStr }) => {
-                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-                const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.length || 0;
-                return (
-                  <div key={dateStr} className="p-2 text-center border-r text-sm">
-                    {officerCount}
-                  </div>
-                );
-              })}
-            </div>
+{/* Officers section */}
+<div>
+  {/* Officer count row */}
+  <div className="grid grid-cols-9 border-b bg-muted/30">
+    <div className="p-2 border-r"></div>
+    <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
+    {weekDays.map(({ dateStr }) => {
+      const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+      const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.length || 0;
+      return (
+        <div key={dateStr} className="p-2 text-center border-r text-sm">
+          {officerCount}
+        </div>
+      );
+    })}
+  </div>
 
             {/* Staffing minimum row */}
             <div className="grid grid-cols-9 border-b bg-muted/20">
