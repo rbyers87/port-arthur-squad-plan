@@ -603,7 +603,8 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
   // IMPROVED LOGIC: Extra shift = schedule exception AND not their regular recurring day
   const isException = officer?.shiftInfo?.scheduleType === "exception";
   const isRecurringDay = officer?.dayOfWeek === dayOfWeek; // This should be their recurring day pattern
-  const isExtraShift = isException && !isOff && !hasPTO && !isRecurringDay;
+  // Alternative approach - check if this would normally be their day off
+const isExtraShift = isException && !isOff && !hasPTO && !officer.shiftInfo?.isRecurring;
 
   // If no officer data at all, this is an unscheduled day (dark gray)
   if (!hasSchedule) {
