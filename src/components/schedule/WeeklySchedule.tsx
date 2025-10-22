@@ -790,24 +790,24 @@ const renderExcelStyleWeeklyView = () => {
         {/* Supervisors section */}
         <div className="border-b">
           {/* Supervisor count row */}
-<div className="grid grid-cols-9 border-b">
-  <div className="p-2 border-r"></div>
-  <div className="p-2 border-r text-sm font-medium">COUNT</div>
-  {weekDays.map(({ dateStr }) => {
-    const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-    
-    // UPDATED: Only count supervisors who are not on PTO
-    const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
-      !officer.shiftInfo?.hasPTO
-    ).length || 0;
-    
-    return (
-      <div key={dateStr} className="p-2 text-center border-r text-sm">
-        {supervisorCount}
-      </div>
-    );
-  })}
-</div>
+          <div className="grid grid-cols-9 border-b">
+            <div className="p-2 border-r"></div>
+            <div className="p-2 border-r text-sm font-medium">COUNT</div>
+            {weekDays.map(({ dateStr }) => {
+              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+              
+              // UPDATED: Only count supervisors who are not on PTO
+              const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
+                !officer.shiftInfo?.hasPTO
+              ).length || 0;
+              
+              return (
+                <div key={dateStr} className="p-2 text-center border-r text-sm">
+                  {supervisorCount}
+                </div>
+              );
+            })}
+          </div>
 
           {/* Individual supervisors */}
           {supervisors.map((officer) => (
@@ -833,29 +833,31 @@ const renderExcelStyleWeeklyView = () => {
           ))}
         </div>
 
-{/* Officer count row */}
-<div className="grid grid-cols-9 border-b bg-muted/30">
-  <div className="p-2 border-r"></div>
-  <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
-  {weekDays.map(({ dateStr }) => {
-    const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-    
-    // UPDATED: Only count regular officers (not PTO, not special assignments)
-    const regularOfficersCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
-      const isSpecialAssignment = officer.shiftInfo?.position && (
-        officer.shiftInfo.position.toLowerCase().includes('other') ||
-        (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
-      );
-      return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-    }).length || 0;
-    
-    return (
-      <div key={dateStr} className="p-2 text-center border-r text-sm">
-        {regularOfficersCount}
-      </div>
-    );
-  })}
-</div>
+        {/* Officers section */}
+        <div>
+          {/* Officer count row */}
+          <div className="grid grid-cols-9 border-b bg-muted/30">
+            <div className="p-2 border-r"></div>
+            <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
+            {weekDays.map(({ dateStr }) => {
+              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+              
+              // UPDATED: Only count regular officers (not PTO, not special assignments)
+              const regularOfficersCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
+                const isSpecialAssignment = officer.shiftInfo?.position && (
+                  officer.shiftInfo.position.toLowerCase().includes('other') ||
+                  (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
+                );
+                return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+              }).length || 0;
+              
+              return (
+                <div key={dateStr} className="p-2 text-center border-r text-sm">
+                  {regularOfficersCount}
+                </div>
+              );
+            })}
+          </div>
 
           {/* Staffing minimum row */}
           <div className="grid grid-cols-9 border-b bg-muted/20">
@@ -868,31 +870,31 @@ const renderExcelStyleWeeklyView = () => {
             ))}
           </div>
 
-{/* Officer surplus row */}
-<div className="grid grid-cols-9 border-b bg-muted/10">
-  <div className="p-2 border-r"></div>
-  <div className="p-2 border-r text-sm font-medium">OFC SURPLUS</div>
-  {weekDays.map(({ dateStr, dayName }) => {
-    const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-    
-    // UPDATED: Only count regular officers (not PTO, not special assignments)
-    const regularOfficersCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
-      const isSpecialAssignment = officer.shiftInfo?.position && (
-        officer.shiftInfo.position.toLowerCase().includes('other') ||
-        (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
-      );
-      return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-    }).length || 0;
-    
-    const minimum = minimumStaffing[dayName as keyof typeof minimumStaffing];
-    const surplus = regularOfficersCount - minimum;
-    return (
-      <div key={dateStr} className={`p-2 text-center border-r text-sm font-medium ${surplus < 0 ? 'text-red-600' : 'text-green-600'}`}>
-        {surplus}
-      </div>
-    );
-  })}
-</div>
+          {/* Officer surplus row */}
+          <div className="grid grid-cols-9 border-b bg-muted/10">
+            <div className="p-2 border-r"></div>
+            <div className="p-2 border-r text-sm font-medium">OFC SURPLUS</div>
+            {weekDays.map(({ dateStr, dayName }) => {
+              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+              
+              // UPDATED: Only count regular officers (not PTO, not special assignments)
+              const regularOfficersCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
+                const isSpecialAssignment = officer.shiftInfo?.position && (
+                  officer.shiftInfo.position.toLowerCase().includes('other') ||
+                  (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
+                );
+                return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+              }).length || 0;
+              
+              const minimum = minimumStaffing[dayName as keyof typeof minimumStaffing];
+              const surplus = regularOfficersCount - minimum;
+              return (
+                <div key={dateStr} className={`p-2 text-center border-r text-sm font-medium ${surplus < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {surplus}
+                </div>
+              );
+            })}
+          </div>
 
           {/* Individual officers */}
           {officers.map((officer) => (
