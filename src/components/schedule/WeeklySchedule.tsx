@@ -873,94 +873,33 @@ const renderExcelStyleWeeklyView = () => {
         </div>
 
         {/* Officers section */}
-        <div>
-          {/* Officer count row */}
-          <div className="grid grid-cols-9 border-b bg-muted/30">
-            <div className="p-2 border-r"></div>
-            <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
-            {weekDays.map(({ dateStr }) => {
-              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-              
-              // UPDATED: Only count regular officers (not PTO, not special assignments)
-              const regularOfficersCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
-                const isSpecialAssignment = officer.shiftInfo?.position && (
-                  officer.shiftInfo.position.toLowerCase().includes('other') ||
-                  (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
-                );
-                return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-              }).length || 0;
-              
-              return (
-                <div key={dateStr} className="p-2 text-center border-r text-sm">
-                  {regularOfficersCount}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Staffing minimum row */}
-          <div className="grid grid-cols-9 border-b bg-muted/20">
-            <div className="p-2 border-r"></div>
-            <div className="p-2 border-r text-sm font-medium">MINIMUM</div>
-            {weekDays.map(({ dayName }) => (
-              <div key={dayName} className="p-2 text-center border-r text-sm font-bold">
-                {minimumStaffing[dayName as keyof typeof minimumStaffing]}
-              </div>
-            ))}
-          </div>
-
-          {/* Officer surplus row */}
-          <div className="grid grid-cols-9 border-b bg-muted/10">
-            <div className="p-2 border-r"></div>
-            <div className="p-2 border-r text-sm font-medium">OFC SURPLUS</div>
-            {weekDays.map(({ dateStr, dayName }) => {
-              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-              
-              // UPDATED: Only count regular officers (not PTO, not special assignments)
-              const regularOfficersCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
-                const isSpecialAssignment = officer.shiftInfo?.position && (
-                  officer.shiftInfo.position.toLowerCase().includes('other') ||
-                  (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
-                );
-                return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-              }).length || 0;
-              
-              const minimum = minimumStaffing[dayName as keyof typeof minimumStaffing];
-              const surplus = regularOfficersCount - minimum;
-              return (
-                <div key={dateStr} className={`p-2 text-center border-r text-sm font-medium ${surplus < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {surplus}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Individual officers */}
-          {officers.map((officer) => (
-            <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
-              <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
-              <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
-              {weekDays.map(({ dateStr }) => {
-                const dayOfficer = officer.weeklySchedule[dateStr];
-                return (
-                  <ScheduleCell
-                    key={dateStr}
-                    officer={dayOfficer}
-                    dateStr={dateStr}
-                    officerId={officer.officerId}
-                    officerName={officer.officerName}
-                    isAdminOrSupervisor={isAdminOrSupervisor}
-                    onAssignPTO={handleAssignPTO}
-                    onRemovePTO={handleRemovePTO}
-                  />
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
+<div>
+  {/* Individual officers - NO header rows above them */}
+  {officers.map((officer) => (
+    <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
+      <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
+      <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+      {weekDays.map(({ dateStr }) => {
+        const dayOfficer = officer.weeklySchedule[dateStr];
+        return (
+          <ScheduleCell
+            key={dateStr}
+            officer={dayOfficer}
+            dateStr={dateStr}
+            officerId={officer.officerId}
+            officerName={officer.officerName}
+            isAdminOrSupervisor={isAdminOrSupervisor}
+            onAssignPTO={handleAssignPTO}
+            onRemovePTO={handleRemovePTO}
+          />
+        );
+      })}
     </div>
-  );
+  ))}
+</div>
+</div>
+</div>
+);
 };
 
   // Fixed Monthly View
