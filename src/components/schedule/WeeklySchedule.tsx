@@ -588,7 +588,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     return getLastName(officer.officerName);
   };
 
-  // Updated Schedule Cell Component - Only shows "extra shift" for true extra days
+  // Updated Schedule Cell Component - Properly distinguishes assignment changes vs extra shifts
 const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, officerId, officerName }: any) => {
   // Check if this officer has any schedule data for this date
   const hasSchedule = !!officer;
@@ -596,15 +596,10 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
   const hasPTO = officer?.shiftInfo?.hasPTO;
   const position = officer?.shiftInfo?.position;
   
-  // Get the day of week for this date
-  const currentDate = parseISO(dateStr);
-  const dayOfWeek = currentDate.getDay();
-  
-  // IMPROVED LOGIC: Extra shift = schedule exception AND not their regular recurring day
+  // PROPER LOGIC: Extra shift = schedule exception AND not their regular recurring day
   const isException = officer?.shiftInfo?.scheduleType === "exception";
-  const isRecurringDay = officer?.dayOfWeek === dayOfWeek; // This should be their recurring day pattern
-  // Alternative approach - check if this would normally be their day off
-const isExtraShift = isException && !isOff && !hasPTO && !officer.shiftInfo?.isRecurring;
+  const isRegularDay = officer?.isRegularRecurringDay; // This comes from our new data structure
+  const isExtraShift = isException && !isOff && !hasPTO && !isRegularDay;
 
   // If no officer data at all, this is an unscheduled day (dark gray)
   if (!hasSchedule) {
@@ -635,7 +630,7 @@ const isExtraShift = isException && !isOff && !hasPTO && !officer.shiftInfo?.isR
         </div>
       ) : (
         <div className="text-center">
-          {/* Only show "Extra Shift" for true extra days (not regular days with assignment changes) */}
+          {/* Only show "Extra Shift" for true extra days (not assignment changes on regular days) */}
           {isExtraShift && (
             <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
               Extra Shift
