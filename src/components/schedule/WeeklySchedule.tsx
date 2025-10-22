@@ -638,8 +638,8 @@ const handleSaveAssignment = () => {
     return getLastName(officer.officerName);
   };
 
-// Updated Schedule Cell Component - Shows edit pencil for special assignments
-const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, officerId, officerName }: any) => {
+// Updated Schedule Cell Component - Proper pencil and clock functionality
+const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, onEditAssignment, officerId, officerName }: any) => {
   // Check if this officer has any schedule data for this date
   const hasSchedule = !!officer;
   const isOff = officer?.shiftInfo?.isOff;
@@ -648,10 +648,10 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
   
   // PROPER LOGIC: Extra shift = schedule exception AND not their regular recurring day
   const isException = officer?.shiftInfo?.scheduleType === "exception";
-  const isRegularDay = officer?.isRegularRecurringDay; // This comes from our new data structure
+  const isRegularDay = officer?.isRegularRecurringDay;
   const isExtraShift = isException && !isOff && !hasPTO && !isRegularDay;
 
-  // NEW: Check if this is a special assignment
+  // Check if this is a special assignment
   const isSpecialAssignment = position && (
     position.toLowerCase().includes('other') ||
     (position && !predefinedPositions.includes(position))
@@ -686,13 +686,13 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
         </div>
       ) : (
         <div className="text-center">
-          {/* Show "Extra Shift" for true extra days (not assignment changes on regular days) */}
+          {/* Show "Extra Shift" for true extra days */}
           {isExtraShift && (
             <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
               Extra Shift
             </Badge>
           )}
-          {/* NEW: Show "Special Assignment" badge */}
+          {/* Show "Special Assignment" badge */}
           {isSpecialAssignment && !isExtraShift && (
             <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200 mb-1">
               Special
@@ -709,7 +709,7 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
       {/* Action buttons for admin/supervisor */}
       {isAdminOrSupervisor && officer.shiftInfo && (
         <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-          {/* EDIT PENCIL ICON - Show for all assignments except days off */}
+          {/* PENCIL ICON - Edit Assignment (like DailyScheduleView) */}
           {!isOff && (
             <Button
               size="icon"
@@ -717,16 +717,14 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
               className="h-6 w-6"
               onClick={(e) => {
                 e.stopPropagation();
-                // You'll need to implement an edit handler here
-                // For now, we'll use the PTO assignment as a placeholder
-                // You might want to create a separate edit assignment dialog
-                onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
+                onEditAssignment(officer, dateStr);
               }}
               title="Edit Assignment"
             >
               <Edit2 className="h-3 w-3" />
             </Button>
           )}
+          {/* CLOCK ICON - PTO Management (like DailyScheduleView) */}
           {!isOff && (
             <Button
               size="icon"
@@ -741,6 +739,7 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
               <Clock className="h-3 w-3" />
             </Button>
           )}
+          {/* TRASH ICON - Remove PTO (like DailyScheduleView) */}
           {hasPTO && (
             <Button
               size="icon"
@@ -925,15 +924,16 @@ const renderExcelStyleWeeklyView = () => {
                 const dayOfficer = officer.weeklySchedule[dateStr];
                 return (
                   <ScheduleCell
-                    key={dateStr}
-                    officer={dayOfficer}
-                    dateStr={dateStr}
-                    officerId={officer.officerId}
-                    officerName={officer.officerName}
-                    isAdminOrSupervisor={isAdminOrSupervisor}
-                    onAssignPTO={handleAssignPTO}
-                    onRemovePTO={handleRemovePTO}
-                  />
+  key={dateStr}
+  officer={dayOfficer}
+  dateStr={dateStr}
+  officerId={officer.officerId}
+  officerName={officer.officerName}
+  isAdminOrSupervisor={isAdminOrSupervisor}
+  onAssignPTO={handleAssignPTO}
+  onRemovePTO={handleRemovePTO}
+  onEditAssignment={handleEditAssignment}
+/>
                 );
               })}
             </div>
@@ -951,15 +951,16 @@ const renderExcelStyleWeeklyView = () => {
         const dayOfficer = officer.weeklySchedule[dateStr];
         return (
           <ScheduleCell
-            key={dateStr}
-            officer={dayOfficer}
-            dateStr={dateStr}
-            officerId={officer.officerId}
-            officerName={officer.officerName}
-            isAdminOrSupervisor={isAdminOrSupervisor}
-            onAssignPTO={handleAssignPTO}
-            onRemovePTO={handleRemovePTO}
-          />
+  key={dateStr}
+  officer={dayOfficer}
+  dateStr={dateStr}
+  officerId={officer.officerId}
+  officerName={officer.officerName}
+  isAdminOrSupervisor={isAdminOrSupervisor}
+  onAssignPTO={handleAssignPTO}
+  onRemovePTO={handleRemovePTO}
+  onEditAssignment={handleEditAssignment}
+/>
         );
       })}
     </div>
