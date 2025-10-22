@@ -775,14 +775,14 @@ const renderExcelStyleWeeklyView = () => {
 
       {/* Main schedule table */}
       <div className="border rounded-lg overflow-hidden">
-{/* Table header with detailed understaffing info */}
+{/* Table header with staffing badges */}
 <div className="grid grid-cols-9 bg-muted/50 border-b">
   <div className="p-2 font-semibold border-r">Empl#</div>
   <div className="p-2 font-semibold border-r">SUPERVISORS</div>
   {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => {
     const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
     
-    // Calculate staffing for this day
+    // Calculate staffing for this day (same logic as Daily Schedule)
     const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
       !officer.shiftInfo?.hasPTO
     ).length || 0;
@@ -796,30 +796,34 @@ const renderExcelStyleWeeklyView = () => {
     }).length || 0;
     
     const minimumOfficers = minimumStaffing[dayName as keyof typeof minimumStaffing];
-    const isUnderstaffed = officerCount < minimumOfficers;
-    const isSupervisorUnderstaffed = supervisorCount < 1;
+    const minimumSupervisors = 1; // Assuming minimum 1 supervisor like Daily Schedule
     
+    const isOfficersUnderstaffed = officerCount < minimumOfficers;
+    const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
+    const isAnyUnderstaffed = isOfficersUnderstaffed || isSupervisorsUnderstaffed;
+
     return (
-      <div key={dateStr} className={`p-2 text-center font-semibold border-r relative ${isToday ? 'bg-primary/10' : ''}`}>
-        <div className="flex items-center justify-center gap-1">
-          {dayName}
-          {(isUnderstaffed || isSupervisorUnderstaffed) && (
-            <Badge 
-              variant="destructive" 
-              className="h-4 text-xs"
-              title={
-                isUnderstaffed && isSupervisorUnderstaffed 
-                  ? `Understaffed: ${officerCount}/${minimumOfficers} officers, ${supervisorCount}/1 supervisors`
-                  : isUnderstaffed 
-                  ? `Understaffed: ${officerCount}/${minimumOfficers} officers`
-                  : `Understaffed: ${supervisorCount}/1 supervisors`
-              }
-            >
-              {isUnderstaffed && isSupervisorUnderstaffed ? '2' : '1'}
-            </Badge>
-          )}
-        </div>
-        <div className="text-xs text-muted-foreground">{formattedDate}</div>
+      <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
+        <div>{dayName}</div>
+        <div className="text-xs text-muted-foreground mb-1">{formattedDate}</div>
+        
+        {/* EXACT SAME BADGE AS DAILY SCHEDULE */}
+        <Badge 
+          variant={isAnyUnderstaffed ? "destructive" : "outline"} 
+          className="text-xs"
+        >
+          {officerCount} / {minimumOfficers}
+        </Badge>
+        
+        {/* Optional: Show supervisor count if you want both */}
+         <div className="mt-1">
+          <Badge 
+            variant={isSupervisorsUnderstaffed ? "destructive" : "outline"} 
+            className="text-xs"
+          >
+            {supervisorCount} / {minimumSupervisors} Sup
+          </Badge>
+        </div> 
       </div>
     );
   })}
