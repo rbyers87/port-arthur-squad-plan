@@ -33,23 +33,89 @@ const Dashboard = () => {
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
       const today = new Date().toISOString().split("T")[0];
+      const dayOfWeek = new Date().getDay();
         
-      // Count active officers (those with schedules today)
-      const { count: activeOfficers } = await supabase
+      // Get all shift types first
+      const { data: shiftTypes, error: shiftError } = await supabase
+        .from("shift_types")
+        .select("*")
+        .order("start_time");
+      if (shiftError) throw shiftError;
+
+      // Count active officers by shift
+      const shiftBreakdown: { [key: string]: number } = {};
+      let totalActiveOfficers = 0;
+
+      // Get recurring schedules for today
+      const { data: recurringData, error: recurringError } = await supabase
         .from("recurring_schedules")
-        .select("*", { count: "exact", head: true })
-        .eq("day_of_week", new Date().getDay())
+        .select(`
+          *,
+          profiles!inner (
+            id, 
+            full_name
+          ),
+          shift_types (
+            id, 
+            name
+          )
+        `)
+        .eq("day_of_week", dayOfWeek)
         .is("end_date", null);
 
-      // Count open vacancies - ensure this is fresh
+      if (recurringError) throw recurringError;
+
+      // Get schedule exceptions for today
+      const { data: exceptionsData, error: exceptionsError } = await supabase
+        .from("schedule_exceptions")
+        .select(`
+          *,
+          profiles!inner (
+            id, 
+            full_name
+          ),
+          shift_types (
+            id, 
+            name
+          )
+        `)
+        .eq("date", today);
+
+      if (exceptionsError) throw exceptionsError;
+
+      // Initialize shift breakdown with all shifts
+      shiftTypes?.forEach(shift => {
+        shiftBreakdown[shift.name] = 0;
+      });
+
+      // Count officers from recurring schedules
+      recurringData?.forEach(schedule => {
+        if (schedule.shift_types?.name) {
+          shiftBreakdown[schedule.shift_types.name]++;
+          totalActiveOfficers++;
+        }
+      });
+
+      // Count officers from working exceptions (excluding PTO)
+      exceptionsData
+        ?.filter(exception => !exception.is_off)
+        .forEach(exception => {
+          if (exception.shift_types?.name) {
+            shiftBreakdown[exception.shift_types.name]++;
+            totalActiveOfficers++;
+          }
+        });
+
+      // Count open vacancies
       const { count: openVacancies } = await supabase
         .from("vacancy_alerts")
         .select("*", { count: "exact", head: true })
         .eq("status", "open");
 
       return { 
-        activeOfficers: activeOfficers || 0, 
-        openVacancies: openVacancies || 0 
+        activeOfficers: totalActiveOfficers, 
+        openVacancies: openVacancies || 0,
+        shiftBreakdown 
       };
     },
     enabled: isAdminOrSupervisor,
@@ -196,7 +262,15 @@ const Dashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{stats?.activeOfficers ?? "--"}</div>
-                  <p className="text-xs text-muted-foreground">On duty today</p>
+                  <div className="space-y-1 mt-2">
+                    {stats?.shiftBreakdown && Object.entries(stats.shiftBreakdown).map(([shiftName, count]) => (
+                      <div key={shiftName} className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">{shiftName}:</span>
+                        <span className="font-semibold">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">On duty today by shift</p>
                 </CardContent>
               </Card>
 
@@ -239,7 +313,7 @@ const Dashboard = () => {
               <OfficersManagement 
                 userId={user!.id} 
                 isAdminOrSupervisor={isAdminOrSupervisor} 
-                  />
+              />
             </TabsContent>
 
             <TabsContent value="vacancies" className="space-y-6">
