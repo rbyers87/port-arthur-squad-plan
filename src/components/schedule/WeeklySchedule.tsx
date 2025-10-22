@@ -542,30 +542,42 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   };
 
   const handleSaveAssignment = () => {
-    if (!editingAssignment) return;
+  if (!editingAssignment) return;
 
-    const { officer, dateStr } = editingAssignment;
-    const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
-    
-    if (!finalPosition) {
-      toast.error("Please select or enter a position");
-      return;
+  const { officer, dateStr } = editingAssignment;
+  const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
+  
+  if (!finalPosition) {
+    toast.error("Please select or enter a position");
+    return;
+  }
+
+  updatePositionMutation.mutate({
+    scheduleId: officer.shiftInfo.scheduleId,
+    type: officer.shiftInfo.scheduleType,
+    positionName: finalPosition,
+    date: dateStr,
+    officerId: officer.officerId,
+    shiftTypeId: selectedShiftId,
+    currentPosition: officer.shiftInfo.position
+  }, {
+    onSuccess: () => {
+      // Refresh the schedule data immediately after successful update
+      queryClient.invalidateQueries({ 
+        queryKey: ["schedule", currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId] 
+      });
+      toast.success("Assignment updated successfully");
+      
+      // Reset the editing state
+      setEditingAssignment(null);
+      setEditPosition("");
+      setCustomPosition("");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update assignment");
     }
-
-    updatePositionMutation.mutate({
-      scheduleId: officer.shiftInfo.scheduleId,
-      type: officer.shiftInfo.scheduleType,
-      positionName: finalPosition,
-      date: dateStr,
-      officerId: officer.officerId,
-      shiftTypeId: selectedShiftId,
-      currentPosition: officer.shiftInfo.position
-    });
-
-    setEditingAssignment(null);
-    setEditPosition("");
-    setCustomPosition("");
-  };
+  });
+};
 
   const handleRemovePTO = async (schedule: any, date: string, officerId: string) => {
     if (!schedule.hasPTO || !schedule.ptoData) return;
