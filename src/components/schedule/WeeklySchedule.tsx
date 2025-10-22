@@ -588,7 +588,7 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     return getLastName(officer.officerName);
   };
 
-  // Updated Schedule Cell Component - Shows "extra shift" for any schedule outside recurring pattern
+  // Updated Schedule Cell Component - Only shows "extra shift" for true extra days
 const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, officerId, officerName }: any) => {
   // Check if this officer has any schedule data for this date
   const hasSchedule = !!officer;
@@ -596,9 +596,14 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
   const hasPTO = officer?.shiftInfo?.hasPTO;
   const position = officer?.shiftInfo?.position;
   
-  // NEW LOGIC: Extra shift = ANY schedule exception (working) that's outside their recurring pattern
-  // This includes both manually added shifts AND recurring officers working on non-recurring days
-  const isExtraShift = officer?.shiftInfo?.scheduleType === "exception" && !isOff && !hasPTO;
+  // Get the day of week for this date
+  const currentDate = parseISO(dateStr);
+  const dayOfWeek = currentDate.getDay();
+  
+  // IMPROVED LOGIC: Extra shift = schedule exception AND not their regular recurring day
+  const isException = officer?.shiftInfo?.scheduleType === "exception";
+  const isRecurringDay = officer?.dayOfWeek === dayOfWeek; // This should be their recurring day pattern
+  const isExtraShift = isException && !isOff && !hasPTO && !isRecurringDay;
 
   // If no officer data at all, this is an unscheduled day (dark gray)
   if (!hasSchedule) {
@@ -629,7 +634,7 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
         </div>
       ) : (
         <div className="text-center">
-          {/* Show "Extra Shift" for ANY schedule exception (working) outside recurring pattern */}
+          {/* Only show "Extra Shift" for true extra days (not regular days with assignment changes) */}
           {isExtraShift && (
             <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
               Extra Shift
@@ -680,6 +685,8 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
     </div>
   );
 };
+
+  
   // NEW: Excel-style weekly view with table layout
   const renderExcelStyleWeeklyView = () => {
     const weekDays = Array.from({ length: 7 }, (_, i) => {
