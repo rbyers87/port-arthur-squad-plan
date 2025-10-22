@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO } from "date-fns";
 import { Calendar, Plus, Edit2, Clock, Trash2, ChevronLeft, ChevronRight, Grid, Calendar as CalendarIcon } from "lucide-react";
 import { ScheduleManagementDialog } from "./ScheduleManagementDialog";
@@ -24,13 +27,15 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
-  // Add these state variables near your other state declarations
-const [editingAssignment, setEditingAssignment] = useState<{
-  officer: any;
-  dateStr: string;
-} | null>(null);
-const [editPosition, setEditPosition] = useState("");
-const [customPosition, setCustomPosition] = useState("");
+  
+  // Assignment editing state
+  const [editingAssignment, setEditingAssignment] = useState<{
+    officer: any;
+    dateStr: string;
+  } | null>(null);
+  const [editPosition, setEditPosition] = useState("");
+  const [customPosition, setCustomPosition] = useState("");
+  
   const [selectedSchedule, setSelectedSchedule] = useState<{
     scheduleId: string;
     type: "recurring" | "exception";
@@ -46,10 +51,10 @@ const [customPosition, setCustomPosition] = useState("");
       isFullShift: boolean;
     };
   } | null>(null);
-  const [editingSchedule, setEditingSchedule] = <string | null>(null);
-  const [currentWeekStart, setCurrentWeekStart] = <Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
-  const [currentMonth, setCurrentMonth] = <Date>(new Date());
-  const [activeView, setActiveView] = <"weekly" | "monthly">("weekly");
+  const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
+  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 0 }));
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [activeView, setActiveView] = useState<"weekly" | "monthly">("weekly");
   const queryClient = useQueryClient();
 
   // Predefined positions for grouping
@@ -519,48 +524,48 @@ const [customPosition, setCustomPosition] = useState("");
     setPtoDialogOpen(true);
   };
     
-    // Add this handler function near your other handlers
-const handleEditAssignment = (officer: any, dateStr: string) => {
-  setEditingAssignment({ officer, dateStr });
-  
-  // Pre-fill the current position for editing
-  const currentPosition = officer.shiftInfo?.position;
-  const isCustomPosition = currentPosition && !predefinedPositions.includes(currentPosition);
-  
-  if (isCustomPosition) {
-    setEditPosition("Other (Custom)");
-    setCustomPosition(currentPosition);
-  } else {
-    setEditPosition(currentPosition || "");
+  // Assignment editing handler
+  const handleEditAssignment = (officer: any, dateStr: string) => {
+    setEditingAssignment({ officer, dateStr });
+    
+    // Pre-fill the current position for editing
+    const currentPosition = officer.shiftInfo?.position;
+    const isCustomPosition = currentPosition && !predefinedPositions.includes(currentPosition);
+    
+    if (isCustomPosition) {
+      setEditPosition("Other (Custom)");
+      setCustomPosition(currentPosition);
+    } else {
+      setEditPosition(currentPosition || "");
+      setCustomPosition("");
+    }
+  };
+
+  const handleSaveAssignment = () => {
+    if (!editingAssignment) return;
+
+    const { officer, dateStr } = editingAssignment;
+    const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
+    
+    if (!finalPosition) {
+      toast.error("Please select or enter a position");
+      return;
+    }
+
+    updatePositionMutation.mutate({
+      scheduleId: officer.shiftInfo.scheduleId,
+      type: officer.shiftInfo.scheduleType,
+      positionName: finalPosition,
+      date: dateStr,
+      officerId: officer.officerId,
+      shiftTypeId: selectedShiftId,
+      currentPosition: officer.shiftInfo.position
+    });
+
+    setEditingAssignment(null);
+    setEditPosition("");
     setCustomPosition("");
-  }
-};
-
-const handleSaveAssignment = () => {
-  if (!editingAssignment) return;
-
-  const { officer, dateStr } = editingAssignment;
-  const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
-  
-  if (!finalPosition) {
-    toast.error("Please select or enter a position");
-    return;
-  }
-
-  updatePositionMutation.mutate({
-    scheduleId: officer.shiftInfo.scheduleId,
-    type: officer.shiftInfo.scheduleType,
-    positionName: finalPosition,
-    date: dateStr,
-    officerId: officer.officerId,
-    shiftTypeId: selectedShiftId,
-    currentPosition: officer.shiftInfo.position
-  });
-
-  setEditingAssignment(null);
-  setEditPosition("");
-  setCustomPosition("");
-};
+  };
 
   const handleRemovePTO = async (schedule: any, date: string, officerId: string) => {
     if (!schedule.hasPTO || !schedule.ptoData) return;
@@ -638,338 +643,337 @@ const handleSaveAssignment = () => {
     return getLastName(officer.officerName);
   };
 
-// Updated Schedule Cell Component - Proper pencil and clock functionality
-const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, onEditAssignment, officerId, officerName }: any) => {
-  // Check if this officer has any schedule data for this date
-  const hasSchedule = !!officer;
-  const isOff = officer?.shiftInfo?.isOff;
-  const hasPTO = officer?.shiftInfo?.hasPTO;
-  const position = officer?.shiftInfo?.position;
-  
-  // PROPER LOGIC: Extra shift = schedule exception AND not their regular recurring day
-  const isException = officer?.shiftInfo?.scheduleType === "exception";
-  const isRegularDay = officer?.isRegularRecurringDay;
-  const isExtraShift = isException && !isOff && !hasPTO && !isRegularDay;
+  // Updated Schedule Cell Component - Proper pencil and clock functionality
+  const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, onEditAssignment, officerId, officerName }: any) => {
+    // Check if this officer has any schedule data for this date
+    const hasSchedule = !!officer;
+    const isOff = officer?.shiftInfo?.isOff;
+    const hasPTO = officer?.shiftInfo?.hasPTO;
+    const position = officer?.shiftInfo?.position;
+    
+    // PROPER LOGIC: Extra shift = schedule exception AND not their regular recurring day
+    const isException = officer?.shiftInfo?.scheduleType === "exception";
+    const isRegularDay = officer?.isRegularRecurringDay;
+    const isExtraShift = isException && !isOff && !hasPTO && !isRegularDay;
 
-  // Check if this is a special assignment
-  const isSpecialAssignment = position && (
-    position.toLowerCase().includes('other') ||
-    (position && !predefinedPositions.includes(position))
-  );
+    // Check if this is a special assignment
+    const isSpecialAssignment = position && (
+      position.toLowerCase().includes('other') ||
+      (position && !predefinedPositions.includes(position))
+    );
 
-  // If no officer data at all, this is an unscheduled day (dark gray)
-  if (!hasSchedule) {
+    // If no officer data at all, this is an unscheduled day (dark gray)
+    if (!hasSchedule) {
+      return (
+        <div className="p-2 border-r bg-gray-300 dark:bg-gray-600 min-h-10 relative">
+          {/* Dark gray for unscheduled days */}
+        </div>
+      );
+    }
+
     return (
-      <div className="p-2 border-r bg-gray-300 dark:bg-gray-600 min-h-10 relative">
-        {/* Dark gray for unscheduled days */}
+      <div className={`
+        p-2 border-r min-h-10 relative group
+        ${isOff ? 'bg-muted/50' : hasPTO ? 'bg-yellow-100 border-yellow-200' : 'bg-white'}
+      `}>
+        {isOff ? (
+          <div className="text-center text-muted-foreground font-medium">DD</div>
+        ) : hasPTO ? (
+          <div className="text-center">
+            <Badge variant="outline" className="bg-yellow-500/20 text-xs">
+              PTO
+            </Badge>
+            {position && (
+              <div className="text-xs text-muted-foreground mt-1 truncate">
+                {position}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center">
+            {/* Show "Extra Shift" for true extra days */}
+            {isExtraShift && (
+              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
+                Extra Shift
+              </Badge>
+            )}
+            {/* Show "Special Assignment" badge */}
+            {isSpecialAssignment && !isExtraShift && (
+              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200 mb-1">
+                Special
+              </Badge>
+            )}
+            {position && (
+              <div className="text-sm font-medium truncate">
+                {position}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Action buttons for admin/supervisor */}
+        {isAdminOrSupervisor && officer.shiftInfo && (
+          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+            {/* PENCIL ICON - Edit Assignment (like DailyScheduleView) */}
+            {!isOff && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditAssignment(officer, dateStr);
+                }}
+                title="Edit Assignment"
+              >
+                <Edit2 className="h-3 w-3" />
+              </Button>
+            )}
+            {/* CLOCK ICON - PTO Management (like DailyScheduleView) */}
+            {!isOff && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
+                }}
+                title={hasPTO ? "Edit PTO" : "Assign PTO"}
+              >
+                <Clock className="h-3 w-3" />
+              </Button>
+            )}
+            {/* TRASH ICON - Remove PTO (like DailyScheduleView) */}
+            {hasPTO && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
+                }}
+                disabled={removePTOMutation.isPending}
+                title="Remove PTO"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     );
-  }
-
-  return (
-    <div className={`
-      p-2 border-r min-h-10 relative group
-      ${isOff ? 'bg-muted/50' : hasPTO ? 'bg-yellow-100 border-yellow-200' : 'bg-white'}
-    `}>
-      {isOff ? (
-        <div className="text-center text-muted-foreground font-medium">DD</div>
-      ) : hasPTO ? (
-        <div className="text-center">
-          <Badge variant="outline" className="bg-yellow-500/20 text-xs">
-            PTO
-          </Badge>
-          {position && (
-            <div className="text-xs text-muted-foreground mt-1 truncate">
-              {position}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="text-center">
-          {/* Show "Extra Shift" for true extra days */}
-          {isExtraShift && (
-            <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
-              Extra Shift
-            </Badge>
-          )}
-          {/* Show "Special Assignment" badge */}
-          {isSpecialAssignment && !isExtraShift && (
-            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200 mb-1">
-              Special
-            </Badge>
-          )}
-          {position && (
-            <div className="text-sm font-medium truncate">
-              {position}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Action buttons for admin/supervisor */}
-      {isAdminOrSupervisor && officer.shiftInfo && (
-        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-          {/* PENCIL ICON - Edit Assignment (like DailyScheduleView) */}
-          {!isOff && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEditAssignment(officer, dateStr);
-              }}
-              title="Edit Assignment"
-            >
-              <Edit2 className="h-3 w-3" />
-            </Button>
-          )}
-          {/* CLOCK ICON - PTO Management (like DailyScheduleView) */}
-          {!isOff && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
-              }}
-              title={hasPTO ? "Edit PTO" : "Assign PTO"}
-            >
-              <Clock className="h-3 w-3" />
-            </Button>
-          )}
-          {/* TRASH ICON - Remove PTO (like DailyScheduleView) */}
-          {hasPTO && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
-              }}
-              disabled={removePTOMutation.isPending}
-              title="Remove PTO"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-  
-// NEW: Excel-style weekly view with table layout
-const renderExcelStyleWeeklyView = () => {
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const date = addDays(currentWeekStart, i);
-    return {
-      date,
-      dateStr: format(date, "yyyy-MM-dd"),
-      dayName: format(date, "EEE").toUpperCase(),
-      formattedDate: format(date, "MMM d"),
-      isToday: isSameDay(date, new Date())
-    };
-  });
-
-  // Get all unique officers across the week for consistent rows
-  const allOfficers = new Map();
-
-  // First, get all recurring schedules to know each officer's normal pattern
-  const recurringSchedulesByOfficer = new Map();
-  schedules?.recurring?.forEach(recurring => {
-    if (!recurringSchedulesByOfficer.has(recurring.officer_id)) {
-      recurringSchedulesByOfficer.set(recurring.officer_id, new Set());
-    }
-    recurringSchedulesByOfficer.get(recurring.officer_id).add(recurring.day_of_week);
-  });
-
-  schedules?.dailySchedules?.forEach(day => {
-    day.officers.forEach((officer: any) => {
-      if (!allOfficers.has(officer.officerId)) {
-        allOfficers.set(officer.officerId, {
-          ...officer,
-          recurringDays: recurringSchedulesByOfficer.get(officer.officerId) || new Set(),
-          weeklySchedule: {} as Record<string, any>
-        });
-      }
-      
-      // Store the day schedule with proper recurring flag
-      const daySchedule = {
-        ...officer,
-        isRegularRecurringDay: recurringSchedulesByOfficer.get(officer.officerId)?.has(day.dayOfWeek) || false
-      };
-      
-      allOfficers.get(officer.officerId).weeklySchedule[day.date] = daySchedule;
-    });
-  });
-
-  const supervisors = Array.from(allOfficers.values()).filter(o => 
-    o.shiftInfo?.position?.toLowerCase().includes('supervisor')
-  ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
-
-  const officers = Array.from(allOfficers.values()).filter(o => 
-    !o.shiftInfo?.position?.toLowerCase().includes('supervisor')
-  ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
-
-  // Calculate minimum staffing (you might want to make this dynamic)
-  const minimumStaffing = {
-    MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 9, SAT: 9, SUN: 8
   };
 
-  return (
-    <div className="space-y-4">
-      {/* Calendar header */}
-      <div className="flex justify-between items-center">
-        <div className="text-lg font-bold">
-          {format(currentWeekStart, "MMM d")} - {format(addDays(currentWeekStart, 6), "MMM d, yyyy")}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
-            Today
-          </Button>
-          <Button variant="outline" size="sm" onClick={goToNextWeek}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+  // NEW: Excel-style weekly view with table layout
+  const renderExcelStyleWeeklyView = () => {
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
+      const date = addDays(currentWeekStart, i);
+      return {
+        date,
+        dateStr: format(date, "yyyy-MM-dd"),
+        dayName: format(date, "EEE").toUpperCase(),
+        formattedDate: format(date, "MMM d"),
+        isToday: isSameDay(date, new Date())
+      };
+    });
 
-      {/* Main schedule table */}
-      <div className="border rounded-lg overflow-hidden">
-{/* Table header with staffing badges - Supervisor on top, Officer below */}
-<div className="grid grid-cols-9 bg-muted/50 border-b">
-  <div className="p-2 font-semibold border-r">Empl#</div>
-  <div className="p-2 font-semibold border-r">SUPERVISORS</div>
-  {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => {
-    const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-    
-    // Calculate staffing for this day (same logic as Daily Schedule)
-    const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
-      !officer.shiftInfo?.hasPTO
-    ).length || 0;
-    
-    const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
-      const isSpecialAssignment = officer.shiftInfo?.position && (
-        officer.shiftInfo.position.toLowerCase().includes('other') ||
-        (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
-      );
-      return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-    }).length || 0;
-    
-    const minimumOfficers = minimumStaffing[dayName as keyof typeof minimumStaffing];
-    const minimumSupervisors = 1; // Assuming minimum 1 supervisor like Daily Schedule
-    
-    const isOfficersUnderstaffed = officerCount < minimumOfficers;
-    const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
+    // Get all unique officers across the week for consistent rows
+    const allOfficers = new Map();
+
+    // First, get all recurring schedules to know each officer's normal pattern
+    const recurringSchedulesByOfficer = new Map();
+    schedules?.recurring?.forEach(recurring => {
+      if (!recurringSchedulesByOfficer.has(recurring.officer_id)) {
+        recurringSchedulesByOfficer.set(recurring.officer_id, new Set());
+      }
+      recurringSchedulesByOfficer.get(recurring.officer_id).add(recurring.day_of_week);
+    });
+
+    schedules?.dailySchedules?.forEach(day => {
+      day.officers.forEach((officer: any) => {
+        if (!allOfficers.has(officer.officerId)) {
+          allOfficers.set(officer.officerId, {
+            ...officer,
+            recurringDays: recurringSchedulesByOfficer.get(officer.officerId) || new Set(),
+            weeklySchedule: {} as Record<string, any>
+          });
+        }
+        
+        // Store the day schedule with proper recurring flag
+        const daySchedule = {
+          ...officer,
+          isRegularRecurringDay: recurringSchedulesByOfficer.get(officer.officerId)?.has(day.dayOfWeek) || false
+        };
+        
+        allOfficers.get(officer.officerId).weeklySchedule[day.date] = daySchedule;
+      });
+    });
+
+    const supervisors = Array.from(allOfficers.values()).filter(o => 
+      o.shiftInfo?.position?.toLowerCase().includes('supervisor')
+    ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+
+    const officers = Array.from(allOfficers.values()).filter(o => 
+      !o.shiftInfo?.position?.toLowerCase().includes('supervisor')
+    ).sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+
+    // Calculate minimum staffing (you might want to make this dynamic)
+    const minimumStaffing = {
+      MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 9, SAT: 9, SUN: 8
+    };
 
     return (
-      <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
-        <div>{dayName}</div>
-        <div className="text-xs text-muted-foreground mb-1">{formattedDate}</div>
-        
-        {/* Supervisor Badge - ON TOP */}
-        <Badge 
-          variant={isSupervisorsUnderstaffed ? "destructive" : "outline"} 
-          className="text-xs mb-1"
-        >
-          {supervisorCount} / {minimumSupervisors} Sup
-        </Badge>
-        
-        {/* Officer Badge - BELOW */}
-        <Badge 
-          variant={isOfficersUnderstaffed ? "destructive" : "outline"} 
-          className="text-xs"
-        >
-          {officerCount} / {minimumOfficers} Ofc
-        </Badge>
-      </div>
-    );
-  })}
-</div>
+      <div className="space-y-4">
+        {/* Calendar header */}
+        <div className="flex justify-between items-center">
+          <div className="text-lg font-bold">
+            {format(currentWeekStart, "MMM d")} - {format(addDays(currentWeekStart, 6), "MMM d, yyyy")}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
+              Today
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToNextWeek}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
 
-        {/* Supervisors section */}
-        <div className="border-b">
-          {/* Supervisor count row */}
-          <div className="grid grid-cols-9 border-b">
-            <div className="p-2 border-r"></div>
-            <div className="p-2 border-r text-sm font-medium">COUNT</div>
-            {weekDays.map(({ dateStr }) => {
+        {/* Main schedule table */}
+        <div className="border rounded-lg overflow-hidden">
+          {/* Table header with staffing badges - Supervisor on top, Officer below */}
+          <div className="grid grid-cols-9 bg-muted/50 border-b">
+            <div className="p-2 font-semibold border-r">Empl#</div>
+            <div className="p-2 font-semibold border-r">SUPERVISORS</div>
+            {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => {
               const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
               
-              // UPDATED: Only count supervisors who are not on PTO
+              // Calculate staffing for this day (same logic as Daily Schedule)
               const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
                 !officer.shiftInfo?.hasPTO
               ).length || 0;
               
+              const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
+                const isSpecialAssignment = officer.shiftInfo?.position && (
+                  officer.shiftInfo.position.toLowerCase().includes('other') ||
+                  (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
+                );
+                return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+              }).length || 0;
+              
+              const minimumOfficers = minimumStaffing[dayName as keyof typeof minimumStaffing];
+              const minimumSupervisors = 1; // Assuming minimum 1 supervisor like Daily Schedule
+              
+              const isOfficersUnderstaffed = officerCount < minimumOfficers;
+              const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
+
               return (
-                <div key={dateStr} className="p-2 text-center border-r text-sm">
-                  {supervisorCount}
+                <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
+                  <div>{dayName}</div>
+                  <div className="text-xs text-muted-foreground mb-1">{formattedDate}</div>
+                  
+                  {/* Supervisor Badge - ON TOP */}
+                  <Badge 
+                    variant={isSupervisorsUnderstaffed ? "destructive" : "outline"} 
+                    className="text-xs mb-1"
+                  >
+                    {supervisorCount} / {minimumSupervisors} Sup
+                  </Badge>
+                  
+                  {/* Officer Badge - BELOW */}
+                  <Badge 
+                    variant={isOfficersUnderstaffed ? "destructive" : "outline"} 
+                    className="text-xs"
+                  >
+                    {officerCount} / {minimumOfficers} Ofc
+                  </Badge>
                 </div>
               );
             })}
           </div>
 
-          {/* Individual supervisors */}
-          {supervisors.map((officer) => (
-            <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
-              <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
-              <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+          {/* Supervisors section */}
+          <div className="border-b">
+            {/* Supervisor count row */}
+            <div className="grid grid-cols-9 border-b">
+              <div className="p-2 border-r"></div>
+              <div className="p-2 border-r text-sm font-medium">COUNT</div>
               {weekDays.map(({ dateStr }) => {
-                const dayOfficer = officer.weeklySchedule[dateStr];
+                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+                
+                // UPDATED: Only count supervisors who are not on PTO
+                const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
+                  !officer.shiftInfo?.hasPTO
+                ).length || 0;
+                
                 return (
-                  <ScheduleCell
-  key={dateStr}
-  officer={dayOfficer}
-  dateStr={dateStr}
-  officerId={officer.officerId}
-  officerName={officer.officerName}
-  isAdminOrSupervisor={isAdminOrSupervisor}
-  onAssignPTO={handleAssignPTO}
-  onRemovePTO={handleRemovePTO}
-  onEditAssignment={handleEditAssignment}
-/>
+                  <div key={dateStr} className="p-2 text-center border-r text-sm">
+                    {supervisorCount}
+                  </div>
                 );
               })}
             </div>
-          ))}
-        </div>
 
-        {/* Officers section */}
-<div>
-  {/* Individual officers - NO header rows above them */}
-  {officers.map((officer) => (
-    <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
-      <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
-      <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
-      {weekDays.map(({ dateStr }) => {
-        const dayOfficer = officer.weeklySchedule[dateStr];
-        return (
-          <ScheduleCell
-  key={dateStr}
-  officer={dayOfficer}
-  dateStr={dateStr}
-  officerId={officer.officerId}
-  officerName={officer.officerName}
-  isAdminOrSupervisor={isAdminOrSupervisor}
-  onAssignPTO={handleAssignPTO}
-  onRemovePTO={handleRemovePTO}
-  onEditAssignment={handleEditAssignment}
-/>
-        );
-      })}
-    </div>
-  ))}
-</div>
-</div>
-</div>
-);
-};
+            {/* Individual supervisors */}
+            {supervisors.map((officer) => (
+              <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
+                <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
+                <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+                {weekDays.map(({ dateStr }) => {
+                  const dayOfficer = officer.weeklySchedule[dateStr];
+                  return (
+                    <ScheduleCell
+                      key={dateStr}
+                      officer={dayOfficer}
+                      dateStr={dateStr}
+                      officerId={officer.officerId}
+                      officerName={officer.officerName}
+                      isAdminOrSupervisor={isAdminOrSupervisor}
+                      onAssignPTO={handleAssignPTO}
+                      onRemovePTO={handleRemovePTO}
+                      onEditAssignment={handleEditAssignment}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          {/* Officers section */}
+          <div>
+            {/* Individual officers - NO header rows above them */}
+            {officers.map((officer) => (
+              <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
+                <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
+                <div className="p-2 border-r font-medium">{getOfficerDisplayName(officer)}</div>
+                {weekDays.map(({ dateStr }) => {
+                  const dayOfficer = officer.weeklySchedule[dateStr];
+                  return (
+                    <ScheduleCell
+                      key={dateStr}
+                      officer={dayOfficer}
+                      dateStr={dateStr}
+                      officerId={officer.officerId}
+                      officerName={officer.officerName}
+                      isAdminOrSupervisor={isAdminOrSupervisor}
+                      onAssignPTO={handleAssignPTO}
+                      onRemovePTO={handleRemovePTO}
+                      onEditAssignment={handleEditAssignment}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Fixed Monthly View
   const renderMonthlyView = () => {
@@ -1226,6 +1230,47 @@ const renderExcelStyleWeeklyView = () => {
           ) : activeView === "weekly" ? renderExcelStyleWeeklyView() : renderMonthlyView()}
         </CardContent>
       </Card>
+
+      {/* Assignment Editing Dialog */}
+      <Dialog open={!!editingAssignment} onOpenChange={(open) => !open && setEditingAssignment(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Assignment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="position-select">Position</Label>
+              <Select value={editPosition} onValueChange={setEditPosition}>
+                <SelectTrigger id="position-select">
+                  <SelectValue placeholder="Select position" />
+                </SelectTrigger>
+                <SelectContent>
+                  {predefinedPositions.map((pos) => (
+                    <SelectItem key={pos} value={pos}>
+                      {pos}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {editPosition === "Other (Custom)" && (
+                <Input
+                  placeholder="Custom position"
+                  value={customPosition}
+                  onChange={(e) => setCustomPosition(e.target.value)}
+                  className="mt-2"
+                />
+              )}
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleSaveAssignment}
+              disabled={updatePositionMutation.isPending}
+            >
+              {updatePositionMutation.isPending ? "Saving..." : "Save Assignment"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {isAdminOrSupervisor && (
         <>
