@@ -588,21 +588,22 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
     return getLastName(officer.officerName);
   };
 
-  // Schedule Cell Component - Updated to show extra shifts
+  // Updated Schedule Cell Component - Matches DailyScheduleView logic
 const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, officerId, officerName }: any) => {
   // Check if this officer has any schedule data for this date
   const hasSchedule = !!officer;
   const isOff = officer?.shiftInfo?.isOff;
   const hasPTO = officer?.shiftInfo?.hasPTO;
   const position = officer?.shiftInfo?.position;
-  const isException = officer?.shiftInfo?.scheduleType === "exception";
-  const isExtraShift = isException && !isOff && !hasPTO;
+  
+  // MATCH DAILY SCHEDULE VIEW LOGIC: Extra shift = exception type and not off/PTO
+  const isExtraShift = officer?.shiftInfo?.scheduleType === "exception" && !isOff && !hasPTO;
 
   // If no officer data at all, this is an unscheduled day (dark gray)
   if (!hasSchedule) {
     return (
       <div className="p-2 border-r bg-gray-300 dark:bg-gray-600 min-h-10 relative">
-        {/* Dark gray for unscheduled days - no add button */}
+        {/* Dark gray for unscheduled days */}
       </div>
     );
   }
@@ -627,9 +628,10 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
         </div>
       ) : (
         <div className="text-center">
+          {/* EXACTLY MATCHES DAILY SCHEDULE VIEW: Orange badge for extra shifts */}
           {isExtraShift && (
-            <Badge variant="secondary" className="bg-blue-500/20 text-xs mb-1">
-              Extra
+            <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
+              Extra Shift
             </Badge>
           )}
           {position && (
