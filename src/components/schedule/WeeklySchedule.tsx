@@ -141,6 +141,7 @@ const rankOrder = {
 
 // ADD THE NAVIGATION FUNCTION RIGHT HERE - after rankOrder but before sortSupervisorsByRank
 const navigateToDailySchedule = (dateStr: string) => {
+  navigate(`/daily-schedule?date=${dateStr}`);
   // You'll need to implement this based on your navigation setup
   // For now, we'll show a toast and log to console
   console.log("Navigate to daily schedule for:", dateStr);
