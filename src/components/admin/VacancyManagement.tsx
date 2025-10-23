@@ -867,25 +867,29 @@ const handleCreateManualAlert = () => {
           ) : (
             <div className="space-y-4">
               {alerts.map((alert) => {
-                const shiftName = alert.shift_types?.name || `Shift ID: ${alert.shift_type_id}`;
-                const shiftTime = alert.shift_types 
-                  ? `${alert.shift_types.start_time} - ${alert.shift_types.end_time}`
-                  : "Time not available";
+  const shiftName = alert.shift_types?.name || `Shift ID: ${alert.shift_type_id}`;
+  const shiftTime = alert.shift_types 
+    ? `${alert.shift_types.start_time} - ${alert.shift_types.end_time}`
+    : "Time not available";
 
-                return (
-                  <div key={alert.id} className="p-4 border rounded-lg space-y-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <p className="font-medium">{shiftName}</p>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Staffing: {alert.current_staffing} / {alert.minimum_required}
-                        </p>
-                      </div>
+  return (
+    <div key={alert.id} className="p-4 border rounded-lg space-y-2">
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="font-medium">{shiftName}</p>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Staffing: {alert.current_staffing} / {alert.minimum_required}
+          </p>
+          {/* Add custom message display */}
+          {alert.custom_message && (
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-sm text-blue-800">{alert.custom_message}</p>
+            </div>
                       <div className="flex flex-col items-end gap-2 ml-4">
                         <span
                           className={cn(
