@@ -177,7 +177,7 @@ const { data: responses, refetch: refetchResponses } = useQuery({
   },
 });
 
-// Mutation for approving/denying responses
+// Mutation for approving/denying responses - with automatic shift assignment
 const updateResponseMutation = useMutation({
   mutationFn: async ({ 
     responseId, 
@@ -213,6 +213,11 @@ const updateResponseMutation = useMutation({
       throw error;
     }
 
+    // If approved, create a schedule exception to add the officer to the shift
+    if (status === "approved") {
+      await addOfficerToShift(responseId);
+    }
+
     // Send notification to officer (use our original status for user-friendly messaging)
     const response = responses?.find(r => r.id === responseId);
     if (response) {
@@ -221,6 +226,8 @@ const updateResponseMutation = useMutation({
   },
   onSuccess: () => {
     queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] });
+    queryClient.invalidateQueries({ queryKey: ["understaffed-shifts-detection"] });
+    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
     toast.success("Response updated successfully");
   },
   onError: (error) => {
@@ -229,60 +236,113 @@ const updateResponseMutation = useMutation({
   },
 });
 
-// Function to send notification to officer
-const sendResponseNotification = async (
-  response: any, 
-  status: string,
-  rejectionReason?: string
-) => {
+// Function to add officer to shift as an extra assignment
+const addOfficerToShift = async (responseId: string) => {
   try {
-    const alert = response.vacancy_alerts;
-    const shiftName = alert?.shift_types?.name || "Unknown Shift";
-    const date = alert?.date ? format(new Date(alert.date), "MMM d, yyyy") : "Unknown Date";
+    // Get the response details with alert information
+    const { data: response, error: responseError } = await supabase
+      .from("vacancy_responses")
+      .select(`
+        *,
+        vacancy_alerts(
+          date,
+          shift_type_id,
+          shift_types(
+            name,
+            start_time,
+            end_time
+          )
+        ),
+        profiles(
+          full_name,
+          badge_number
+        )
+      `)
+      .eq("id", responseId)
+      .single();
 
-    let title = "";
-    let message = "";
-
-    if (status === "approved") {
-      title = "Vacancy Response Approved";
-      message = `Your request for ${shiftName} on ${date} has been approved. Please report for duty as scheduled.`;
-    } else if (status === "denied") {
-      title = "Vacancy Response Not Approved";
-      message = `Your request for ${shiftName} on ${date} was not approved.`;
-      if (rejectionReason) {
-        message += ` Reason: ${rejectionReason}`;
-      }
+    if (responseError) {
+      console.error("Error fetching response details:", responseError);
+      throw responseError;
     }
 
-    // Use the database function to bypass RLS
-    const { data, error } = await supabase.rpc('create_vacancy_notification', {
-      officer_id: response.officer_id,
-      notification_title: title,
-      notification_message: message,
-      notification_type: 'vacancy_response_update'
+    if (!response || !response.vacancy_alerts) {
+      console.error("No response or alert data found");
+      return;
+    }
+
+    const alert = response.vacancy_alerts;
+    const officer = response.profiles;
+
+    console.log("Adding officer to shift:", {
+      officer: officer?.full_name,
+      shift: alert.shift_types?.name,
+      date: alert.date
     });
 
-    if (error) {
-      console.error("Error creating notification via function:", error);
-      // Fallback: Try direct insert (might still fail due to RLS)
-      const { error: directError } = await supabase
-        .from("notifications")
-        .insert({
-          officer_id: response.officer_id,
-          title: title,
-          message: message,
-          type: "vacancy_response_update",
-          is_read: false
-        });
-      
-      if (directError) {
-        console.error("Fallback notification also failed:", directError);
-      }
-    } else {
-      console.log("Notification created successfully with ID:", data);
+    // Create a schedule exception for this officer
+    const { error: exceptionError } = await supabase
+      .from("schedule_exceptions")
+      .insert({
+        officer_id: response.officer_id,
+        shift_type_id: alert.shift_type_id,
+        date: alert.date,
+        is_off: false, // This is a working shift
+        position_name: "Extra Coverage", // or use officer's regular position
+        notes: `Added via vacancy alert response - Approved by supervisor`,
+        created_by: userId
+      });
+
+    if (exceptionError) {
+      console.error("Error creating schedule exception:", exceptionError);
+      throw exceptionError;
     }
-  } catch (err) {
-    console.error("Unexpected error in sendResponseNotification:", err);
+
+    console.log("Successfully added officer to shift via schedule exception");
+
+    // Optional: Update the vacancy alert staffing count
+    await updateVacancyAlertStaffing(alert.id, response.officer_id);
+
+  } catch (error) {
+    console.error("Error in addOfficerToShift:", error);
+    throw error;
+  }
+};
+
+// Optional: Update vacancy alert staffing count
+const updateVacancyAlertStaffing = async (alertId: string, officerId: string) => {
+  try {
+    // Get current alert data
+    const { data: alert, error: alertError } = await supabase
+      .from("vacancy_alerts")
+      .select("current_staffing, minimum_required")
+      .eq("id", alertId)
+      .single();
+
+    if (alertError) {
+      console.error("Error fetching alert data:", alertError);
+      return;
+    }
+
+    // Increment current staffing by 1
+    const newStaffing = (alert.current_staffing || 0) + 1;
+    
+    const { error: updateError } = await supabase
+      .from("vacancy_alerts")
+      .update({
+        current_staffing: newStaffing,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", alertId);
+
+    if (updateError) {
+      console.error("Error updating alert staffing:", updateError);
+    } else {
+      console.log(`Updated alert staffing to ${newStaffing}`);
+    }
+
+  } catch (error) {
+    console.error("Error in updateVacancyAlertStaffing:", error);
   }
 };
 
