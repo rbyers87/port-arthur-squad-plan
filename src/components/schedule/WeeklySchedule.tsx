@@ -37,7 +37,11 @@ export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklySchedulePr
   } | null>(null);
   const [editPosition, setEditPosition] = useState("");
   const [customPosition, setCustomPosition] = useState("");
+
   
+  // Add these states near your existing state declarations
+  const [selectedDailyDate, setSelectedDailyDate] = useState<Date>(new Date());
+  const [selectedDailyShiftId, setSelectedDailyShiftId] = useState<string>("");
   const [selectedSchedule, setSelectedSchedule] = useState<{
     scheduleId: string;
     type: "recurring" | "exception";
@@ -141,18 +145,25 @@ const rankOrder = {
 
 // ADD THE NAVIGATION FUNCTION RIGHT HERE - after rankOrder but before sortSupervisorsByRank
 const navigateToDailySchedule = (dateStr: string) => {
-  navigate(`/daily-schedule?date=${dateStr}`);
-  // You'll need to implement this based on your navigation setup
-  // For now, we'll show a toast and log to console
-  console.log("Navigate to daily schedule for:", dateStr);
-  toast.info(`Navigating to daily schedule for ${format(parseISO(dateStr), "MMM d, yyyy")}`);
+  // Parse the date string to a Date object
+  const date = parseISO(dateStr);
   
-  // If using React Router, you would do:
-  // navigate(`/daily-schedule?date=${dateStr}`);
+  // Set the date for Daily Schedule
+  setSelectedDailyDate(date);
   
-  // If using state to switch views, you would do:
-  // setSelectedDate(dateStr);
-  // setActiveTab('daily'); // assuming you have a daily schedule tab
+  // Set the same shift filter for Daily Schedule
+  setSelectedDailyShiftId(selectedShiftId);
+  
+  // Switch to the Daily Schedule tab
+  setActiveView("daily");
+  
+  console.log("Navigated to Daily Schedule:", {
+    date: dateStr,
+    shiftId: selectedShiftId,
+    shiftName: shiftTypes?.find(s => s.id === selectedShiftId)?.name
+  });
+  
+  toast.success(`Daily Schedule loaded for ${format(date, "MMM d, yyyy")}`);
 };
 
 // Function to sort supervisors by rank ONLY (same as daily schedule)
