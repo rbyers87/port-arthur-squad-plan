@@ -46,6 +46,7 @@ export const useCreateVacancyAlert = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["understaffed-shifts"] });
       toast.success("Vacancy alert created and notifications sent to all officers");
     },
     onError: (error: any) => {
