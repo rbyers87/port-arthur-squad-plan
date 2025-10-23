@@ -232,7 +232,7 @@ const updateResponseMutation = useMutation({
 // Function to send notification to officer
 const sendResponseNotification = async (
   response: any, 
-  status: string, 
+  status: string,
   rejectionReason?: string
 ) => {
   const alert = response.vacancy_alerts;
@@ -253,19 +253,18 @@ const sendResponseNotification = async (
     }
   }
 
-  // Create notification for the officer
-  const { error } = await supabase
-    .from("notifications")
-    .insert({
-      officer_id: response.officer_id,
-      title: title,
-      message: message,
-      type: "vacancy_response_update",
-      is_read: false
-    });
+  // Use the database function to bypass RLS
+  const { data, error } = await supabase.rpc('create_vacancy_notification', {
+    officer_id: response.officer_id,
+    notification_title: title,
+    notification_message: message,
+    notification_type: 'vacancy_response_update'
+  });
 
   if (error) {
-    console.error("Error creating notification:", error);
+    console.error("Error creating notification via function:", error);
+  } else {
+    console.log("Notification created successfully with ID:", data);
   }
 };
 
