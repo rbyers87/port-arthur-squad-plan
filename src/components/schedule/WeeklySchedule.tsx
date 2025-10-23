@@ -1143,7 +1143,7 @@ const renderExcelStyleWeeklyView = () => {
   );
 };
 
-  // Fixed Monthly View - SHOWS STAFFING FOR ALL DAYS INCLUDING PADDING
+// Fixed Monthly View - SHOWS STAFFING FOR ALL DAYS INCLUDING PADDING
 const renderMonthlyView = () => {
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -1301,12 +1301,12 @@ const renderMonthlyView = () => {
       </div>
     </div>
   );
-};
+}; // <-- ADDED THIS CLOSING BRACE AND SEMICOLON
 
   const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const weekEnd = addDays(currentWeekStart, 6);
   const isCurrentWeek = startOfWeek(new Date(), { weekStartsOn: 0 }).getTime() === currentWeekStart.getTime();
-  const isCurrentMonth = isSameMonth(currentMonth, new Date());
+  const isCurrentMonthView = isSameMonth(currentMonth, new Date());
 
   if (isLoading) {
     return (
@@ -1445,10 +1445,10 @@ const renderMonthlyView = () => {
             </div>
             
             <Button
-              variant={(activeView === "weekly" && isCurrentWeek) || (activeView === "monthly" && isCurrentMonth) ? "outline" : "default"}
+              variant={(activeView === "weekly" && isCurrentWeek) || (activeView === "monthly" && isCurrentMonthView) ? "outline" : "default"}
               size="sm"
               onClick={activeView === "weekly" ? goToCurrentWeek : goToCurrentMonth}
-              disabled={(activeView === "weekly" && isCurrentWeek) || (activeView === "monthly" && isCurrentMonth)}
+              disabled={(activeView === "weekly" && isCurrentWeek) || (activeView === "monthly" && isCurrentMonthView)}
             >
               Today
             </Button>
@@ -1538,4 +1538,3 @@ const renderMonthlyView = () => {
       )}
     </>
   );
-};
