@@ -189,14 +189,14 @@ const { data: userResponses } = useQuery({
 
                 return (
                   <div
-                    key={alert.id}
-                    className={cn(
-                      "p-4 border rounded-lg space-y-3",
-                      isStaffed 
-                        ? "bg-green-50 border-green-200" 
-                        : "bg-red-50 border-red-200"
-                    )}
-                  >
+  key={alert.id}
+  className={cn(
+    "p-4 border rounded-lg space-y-3",
+    isStaffed 
+      ? "bg-green-50 border-green-200" 
+      : "bg-red-50 border-red-200"
+  )}
+>
                     <div className="flex items-start justify-between">
                       <div className="space-y-1">
                         <p className="font-medium">{alert.shift_types?.name}</p>
