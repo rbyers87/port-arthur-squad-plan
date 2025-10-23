@@ -17,6 +17,7 @@ import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { PositionEditor } from "./PositionEditor";
 import { usePositionMutation } from "@/hooks/usePositionMutation";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 interface WeeklyScheduleProps {
   userId: string;
@@ -24,6 +25,7 @@ interface WeeklyScheduleProps {
 }
 
 export const WeeklySchedule = ({ userId, isAdminOrSupervisor }: WeeklyScheduleProps) => {
+  const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
