@@ -236,7 +236,7 @@ const updateResponseMutation = useMutation({
   },
 });
 
-// Function to add officer to shift as an extra assignment
+// Function to add officer to shift as an extra assignment - MATCHES SCHEDULER EXACTLY
 const addOfficerToShift = async (responseId: string) => {
   try {
     // Get the response details with alert information
@@ -274,23 +274,29 @@ const addOfficerToShift = async (responseId: string) => {
     const alert = response.vacancy_alerts;
     const officer = response.profiles;
 
-    console.log("Adding officer to shift:", {
+    console.log("Adding officer to shift as extra assignment:", {
       officer: officer?.full_name,
+      officerId: response.officer_id,
       shift: alert.shift_types?.name,
+      shiftTypeId: alert.shift_type_id,
       date: alert.date
     });
 
-    // Create a schedule exception for this officer
+    // EXACTLY match your scheduler's "Add Officer" function
     const { error: exceptionError } = await supabase
       .from("schedule_exceptions")
       .insert({
         officer_id: response.officer_id,
         shift_type_id: alert.shift_type_id,
         date: alert.date,
-        is_off: false, // This is a working shift
-        position_name: "Extra Coverage", // or use officer's regular position
-        notes: `Added via vacancy alert response - Approved by supervisor`,
-        created_by: userId
+        is_off: false, // Working shift (not PTO)
+        position_name: "Extra Shift", // Same as your scheduler
+        unit_number: null, // Can be set later by supervisor if needed
+        notes: `Approved vacancy request - ID: ${responseId}`,
+        created_by: userId,
+        custom_start_time: null,
+        custom_end_time: null
+        // Note: No is_extra_shift field since your scheduler doesn't use it
       });
 
     if (exceptionError) {
@@ -298,14 +304,35 @@ const addOfficerToShift = async (responseId: string) => {
       throw exceptionError;
     }
 
-    console.log("Successfully added officer to shift via schedule exception");
+    console.log("Successfully added officer to shift as extra assignment");
 
-    // Optional: Update the vacancy alert staffing count
-    await updateVacancyAlertStaffing(alert.id, response.officer_id);
+    // Optional: Send a confirmation notification
+    await sendShiftAssignmentNotification(response.officer_id, alert);
 
   } catch (error) {
     console.error("Error in addOfficerToShift:", error);
     throw error;
+  }
+};
+
+// Optional: Send notification about the shift assignment
+const sendShiftAssignmentNotification = async (officerId: string, alert: any) => {
+  try {
+    const shiftName = alert.shift_types?.name || "Unknown Shift";
+    const date = alert.date ? format(new Date(alert.date), "EEEE, MMM d, yyyy") : "Unknown Date";
+    
+    const { error } = await supabase.rpc('create_vacancy_notification', {
+      officer_id: officerId,
+      notification_title: "Extra Shift Assignment Confirmed",
+      notification_message: `You have been assigned to ${shiftName} on ${date} as an extra shift. This assignment was approved from your vacancy alert response.`,
+      notification_type: 'shift_assignment'
+    });
+
+    if (error) {
+      console.error("Error sending assignment notification:", error);
+    }
+  } catch (err) {
+    console.error("Error in sendShiftAssignmentNotification:", err);
   }
 };
 
