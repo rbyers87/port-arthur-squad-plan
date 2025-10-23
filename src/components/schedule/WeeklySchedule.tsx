@@ -227,12 +227,6 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
     },
   });
 
-  // Enhanced query to fetch schedule data for ALL officers in selected shift
-  const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
-    queryKey: ["schedule", currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId],
-    queryFn: async () => {
-      if (!selectedShiftId) return { dailySchedules: [], dates: [], allOfficers: [] };
-
       // Enhanced query to fetch schedule data for ALL officers in selected shift
 const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
   queryKey: ["schedule", currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId],
