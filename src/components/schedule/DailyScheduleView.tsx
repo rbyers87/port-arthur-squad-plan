@@ -143,33 +143,61 @@ export const DailyScheduleView = ({
     }
 
     // Get schedule exceptions for this specific date - UPDATED QUERY TO INCLUDE UNIT_NUMBER AND POSITION_NAME
-    const { data: exceptionsData, error: exceptionsError } = await supabase
-      .from("schedule_exceptions")
-      .select(`
-        *,
-        profiles!inner (
-          id, 
-          full_name, 
-          badge_number, 
-          rank
-        ),
-        shift_types (
-          id, 
-          name, 
-          start_time, 
-          end_time
-        )
-      `)
-      .eq("date", dateStr);
+    // Get schedule exceptions for this specific date - SEPARATE QUERIES TO AVOID RELATIONSHIP CONFLICTS
+const { data: exceptionsData, error: exceptionsError } = await supabase
+  .from("schedule_exceptions")
+  .select("*")
+  .eq("date", dateStr);
 
-    if (exceptionsError) {
-      console.error("Schedule exceptions error:", exceptionsError);
-      throw exceptionsError;
-    }
+if (exceptionsError) {
+  console.error("Schedule exceptions error:", exceptionsError);
+  throw exceptionsError;
+}
 
-    // Separate PTO exceptions from regular exceptions
-    const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
-    const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
+// Get officer profiles separately to avoid relationship conflicts
+const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
+let officerProfiles = [];
+
+if (officerIds.length > 0) {
+  const { data: profilesData, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id, full_name, badge_number, rank")
+    .in("id", officerIds);
+  
+  if (profilesError) {
+    console.error("❌ Profiles error:", profilesError);
+  } else {
+    officerProfiles = profilesData || [];
+  }
+}
+
+// Get shift types for exceptions separately
+const shiftTypeIds = [...new Set(exceptionsData?.map(e => e.shift_type_id).filter(Boolean))];
+let exceptionShiftTypes = [];
+
+if (shiftTypeIds.length > 0) {
+  const { data: shiftTypesData, error: shiftTypesError } = await supabase
+    .from("shift_types")
+    .select("id, name, start_time, end_time")
+    .in("id", shiftTypeIds);
+  
+  if (shiftTypesError) {
+    console.error("❌ Shift types error:", shiftTypesError);
+  } else {
+    exceptionShiftTypes = shiftTypesData || [];
+  }
+}
+
+// Combine the data manually
+const combinedExceptions = exceptionsData?.map(exception => ({
+  ...exception,
+  profiles: officerProfiles.find(p => p.id === exception.officer_id),
+  shift_types: exceptionShiftTypes.find(s => s.id === exception.shift_type_id)
+})) || [];
+
+// Separate PTO exceptions from regular exceptions
+const ptoExceptions = combinedExceptions?.filter(e => e.is_off) || [];
+const workingExceptions = combinedExceptions?.filter(e => !e.is_off) || [];
 
     // Build schedule by shift
     const scheduleByShift = shiftTypes?.map((shift) => {
