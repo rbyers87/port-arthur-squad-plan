@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, Plus, Users, RefreshCw, AlertTriangle, Mail } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Users, RefreshCw, AlertTriangle, Mail, Check, X, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -175,6 +175,116 @@ const { data: responses, refetch: refetchResponses } = useQuery({
     console.log("📋 Final officer responses:", combinedData);
     return combinedData;
   },
+  // Mutation for approving/denying responses
+const updateResponseMutation = useMutation({
+  mutationFn: async ({ 
+    responseId, 
+    status, 
+    rejectionReason 
+  }: { 
+    responseId: string; 
+    status: string; 
+    rejectionReason?: string;
+  }) => {
+    const updateData: any = {
+      status: status,
+      approved_by: userId,
+      approved_at: new Date().toISOString()
+    };
+
+    if (rejectionReason) {
+      updateData.rejection_reason = rejectionReason;
+    }
+
+    const { error } = await supabase
+      .from("vacancy_responses")
+      .update(updateData)
+      .eq("id", responseId);
+
+    if (error) throw error;
+
+    // Send notification to officer
+    const response = responses?.find(r => r.id === responseId);
+    if (response) {
+      await sendResponseNotification(response, status, rejectionReason);
+    }
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] });
+    toast.success("Response updated successfully");
+  },
+  onError: (error) => {
+    toast.error("Failed to update response: " + error.message);
+  },
+});
+
+// Function to send notification to officer
+const sendResponseNotification = async (
+  response: any, 
+  status: string, 
+  rejectionReason?: string
+) => {
+  const alert = response.vacancy_alerts;
+  const shiftName = alert?.shift_types?.name || "Unknown Shift";
+  const date = alert?.date ? format(new Date(alert.date), "MMM d, yyyy") : "Unknown Date";
+
+  let title = "";
+  let message = "";
+
+  if (status === "approved") {
+    title = "Vacancy Response Approved";
+    message = `Your request for ${shiftName} on ${date} has been approved. Please report for duty as scheduled.`;
+  } else if (status === "denied") {
+    title = "Vacancy Response Not Approved";
+    message = `Your request for ${shiftName} on ${date} was not approved.`;
+    if (rejectionReason) {
+      message += ` Reason: ${rejectionReason}`;
+    }
+  }
+
+  // Create notification for the officer
+  const { error } = await supabase
+    .from("notifications")
+    .insert({
+      officer_id: response.officer_id,
+      title: title,
+      message: message,
+      type: "vacancy_response_update",
+      is_read: false
+    });
+
+  if (error) {
+    console.error("Error creating notification:", error);
+  }
+};
+
+// Get status badge variant
+const getStatusVariant = (status: string) => {
+  switch (status) {
+    case "interested":
+      return "outline";
+    case "approved":
+      return "default";
+    case "denied":
+      return "destructive";
+    default:
+      return "outline";
+  }
+};
+
+// Get status icon
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case "interested":
+      return <Clock className="h-3 w-3" />;
+    case "approved":
+      return <Check className="h-3 w-3" />;
+    case "denied":
+      return <X className="h-3 w-3" />;
+    default:
+      return <Clock className="h-3 w-3" />;
+  }
+};
 });
 
   // Understaffed Detection Query - FIXED to handle null positions properly
@@ -1207,43 +1317,129 @@ const { data: responses, refetch: refetchResponses } = useQuery({
         </DialogContent>
       </Dialog>
 
-      {/* Officer Responses */}
+                  {/* Officer Responses with Approval Workflow */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
             Officer Responses
           </CardTitle>
-          <CardDescription>View who has responded to vacancy alerts</CardDescription>
+          <CardDescription>Review and manage officer responses to vacancy alerts</CardDescription>
         </CardHeader>
         <CardContent>
           {!responses || responses.length === 0 ? (
             <p className="text-sm text-muted-foreground">No responses yet.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {responses.map((response) => {
-                console.log("Response data:", response);
+                const alert = response.vacancy_alerts;
+                const shiftName = alert?.shift_types?.name || "Unknown Shift";
+                const date = alert?.date ? format(new Date(alert.date), "MMM d, yyyy") : "Unknown Date";
+
                 return (
-                  <div key={response.id} className="p-3 border rounded-lg flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">
-                        {response.profiles?.full_name} (#{response.profiles?.badge_number})
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {response.vacancy_alerts?.shift_types?.name} -{" "}
-                        {response.vacancy_alerts?.date && format(new Date(response.vacancy_alerts.date), "MMM d, yyyy")}
-                      </p>
-                    </div>
-                    <span
-                      className={cn(
-                        "text-xs px-2 py-1 rounded capitalize",
-                        response.status === "interested"
-                          ? "bg-green-500/10 text-green-700"
-                          : "bg-red-500/10 text-red-700"
+                  <div key={response.id} className="p-4 border rounded-lg space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="font-medium">
+                            {response.profiles?.full_name} (#{response.profiles?.badge_number})
+                          </p>
+                          <Badge 
+                            variant={getStatusVariant(response.status)}
+                            className="flex items-center gap-1 capitalize"
+                          >
+                            {getStatusIcon(response.status)}
+                            {response.status}
+                          </Badge>
+                        </div>
+                        
+                        <p className="text-sm text-muted-foreground">
+                          {shiftName} - {date}
+                        </p>
+                        
+                        {response.approved_by && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {response.status === "approved" ? "Approved" : "Denied"} on{" "}
+                            {format(new Date(response.approved_at), "MMM d, yyyy 'at' h:mm a")}
+                          </p>
+                        )}
+
+                        {response.rejection_reason && (
+                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                            <p className="text-sm text-red-800">
+                              <strong>Reason:</strong> {response.rejection_reason}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons for Supervisors */}
+                      {response.status === "interested" && (
+                        <div className="flex flex-col gap-2 ml-4">
+                          <Button
+                            size="sm"
+                            onClick={() => updateResponseMutation.mutate({ 
+                              responseId: response.id, 
+                              status: "approved" 
+                            })}
+                            disabled={updateResponseMutation.isPending}
+                            className="flex items-center gap-1"
+                          >
+                            <Check className="h-3 w-3" />
+                            Approve
+                          </Button>
+                          
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={updateResponseMutation.isPending}
+                                className="flex items-center gap-1"
+                              >
+                                <X className="h-3 w-3" />
+                                Deny
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Deny Response</DialogTitle>
+                                <DialogDescription>
+                                  Provide a reason for denying this shift request from {response.profiles?.full_name}.
+                                </DialogDescription>
+                              </DialogHeader>
+                              
+                              <div className="space-y-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="rejection-reason">Reason for Denial</Label>
+                                  <textarea
+                                    id="rejection-reason"
+                                    placeholder="Enter reason for denial (optional but recommended)"
+                                    className="w-full min-h-[80px] p-2 border rounded-md text-sm resize-y"
+                                    maxLength={500}
+                                  />
+                                </div>
+                                
+                                <Button
+                                  onClick={() => {
+                                    const textarea = document.getElementById('rejection-reason') as HTMLTextAreaElement;
+                                    updateResponseMutation.mutate({ 
+                                      responseId: response.id, 
+                                      status: "denied",
+                                      rejectionReason: textarea.value
+                                    });
+                                  }}
+                                  disabled={updateResponseMutation.isPending}
+                                  variant="destructive"
+                                >
+                                  {updateResponseMutation.isPending ? "Denying..." : "Confirm Denial"}
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
                       )}
-                    >
-                      {response.status.replace("_", " ")}
-                    </span>
+                    </div>
                   </div>
                 );
               })}
