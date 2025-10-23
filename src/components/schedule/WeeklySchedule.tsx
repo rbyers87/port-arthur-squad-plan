@@ -233,37 +233,53 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
     queryFn: async () => {
       if (!selectedShiftId) return { dailySchedules: [], dates: [], allOfficers: [] };
 
-      // Determine date range based on active view
-      let startDate: Date;
-      let endDate: Date;
-      let dates: string[];
+      // Enhanced query to fetch schedule data for ALL officers in selected shift
+const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuery({
+  queryKey: ["schedule", currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId],
+  queryFn: async () => {
+    if (!selectedShiftId) return { dailySchedules: [], dates: [], allOfficers: [] };
 
-      if (activeView === "weekly") {
-        const weekStart = startOfWeek(currentWeekStart, { weekStartsOn: 0 });
-        startDate = weekStart;
-        endDate = addDays(weekStart, 6);
-        dates = Array.from({ length: 7 }, (_, i) => 
-          format(addDays(weekStart, i), "yyyy-MM-dd")
-        );
-      } else {
-        // Monthly view
-        startDate = startOfMonth(currentMonth);
-        endDate = endOfMonth(currentMonth);
-        const monthDays = eachDayOfInterval({ start: startDate, end: endDate });
-        dates = monthDays.map(day => format(day, "yyyy-MM-dd"));
-      }
+    // Determine date range based on active view - UPDATED FOR MONTHLY VIEW
+    let startDate: Date;
+    let endDate: Date;
+    let dates: string[];
 
-      // Base queries for recurring schedules and exceptions
-      const recurringQuery = supabase
-        .from("recurring_schedules")
-        .select(`
-          *,
-          shift_types(name, start_time, end_time),
-          profiles!inner(id, full_name, badge_number, rank)
-        `)
-        .eq("shift_type_id", selectedShiftId)
-        .lte("start_date", format(endDate, "yyyy-MM-dd"))
-        .or(`end_date.is.null,end_date.gte.${format(startDate, "yyyy-MM-dd")}`);
+    if (activeView === "weekly") {
+      const weekStart = startOfWeek(currentWeekStart, { weekStartsOn: 0 });
+      startDate = weekStart;
+      endDate = addDays(weekStart, 6);
+      dates = Array.from({ length: 7 }, (_, i) => 
+        format(addDays(weekStart, i), "yyyy-MM-dd")
+      );
+    } else {
+      // Monthly view - INCLUDE PADDING DAYS for complete calendar grid
+      const monthStart = startOfMonth(currentMonth);
+      const monthEnd = endOfMonth(currentMonth);
+      
+      // Calculate padding for previous/next months to complete the calendar grid
+      const startDay = monthStart.getDay(); // 0 = Sunday
+      const endDay = monthEnd.getDay(); // 0 = Sunday
+      
+      // Include days from previous month to start on Sunday
+      startDate = addDays(monthStart, -startDay);
+      // Include days from next month to end on Saturday  
+      endDate = addDays(monthEnd, 6 - endDay);
+      
+      const allDays = eachDayOfInterval({ start: startDate, end: endDate });
+      dates = allDays.map(day => format(day, "yyyy-MM-dd"));
+    }
+
+    // Rest of your query remains the same...
+    const recurringQuery = supabase
+      .from("recurring_schedules")
+      .select(`
+        *,
+        shift_types(name, start_time, end_time),
+        profiles!inner(id, full_name, badge_number, rank)
+      `)
+      .eq("shift_type_id", selectedShiftId)
+      .lte("start_date", format(endDate, "yyyy-MM-dd"))
+      .or(`end_date.is.null,end_date.gte.${format(startDate, "yyyy-MM-dd")}`);
 
       const { data: recurringData, error: recurringError } = await recurringQuery;
 
