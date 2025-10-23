@@ -817,12 +817,12 @@ const handleCreateManualAlert = () => {
                   </div>
 
                   <Button
-                    className="w-full"
-                    onClick={() => createAlertMutation.mutate()}
-                    disabled={createAlertMutation.isPending}
-                  >
-                    {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
-                  </Button>
+  className="w-full"
+  onClick={handleCreateManualAlert}
+  disabled={createAlertMutation.isPending}
+>
+  {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
+</Button>
                 </div>
               </DialogContent>
             </Dialog>
