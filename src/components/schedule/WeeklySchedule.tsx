@@ -985,50 +985,58 @@ const renderExcelStyleWeeklyView = () => {
           <div className="p-2 font-semibold border-r">Empl#</div>
           <div className="p-2 font-semibold border-r">SUPERVISORS</div>
           {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => {
-            const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-            
-            // Calculate staffing for this day (same logic as Daily Schedule)
-            const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
-              !officer.shiftInfo?.hasPTO
-            ).length || 0;
-            
-            const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
-              const isSpecialAssignment = officer.shiftInfo?.position && (
-                officer.shiftInfo.position.toLowerCase().includes('other') ||
-                (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
-              );
-              return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-            }).length || 0;
-            
-            const minimumOfficers = minimumStaffing[dayName as keyof typeof minimumStaffing];
-            const minimumSupervisors = 1; // Assuming minimum 1 supervisor like Daily Schedule
-            
-            const isOfficersUnderstaffed = officerCount < minimumOfficers;
-            const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
+  const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+  
+  // Calculate staffing for this day
+  const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
+    !officer.shiftInfo?.hasPTO
+  ).length || 0;
+  
+  const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
+    const isSpecialAssignment = officer.shiftInfo?.position && (
+      officer.shiftInfo.position.toLowerCase().includes('other') ||
+      (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
+    );
+    return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+  }).length || 0;
+  
+  const minimumOfficers = minimumStaffing[dayName as keyof typeof minimumStaffing];
+  const minimumSupervisors = 1;
+  
+  const isOfficersUnderstaffed = officerCount < minimumOfficers;
+  const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
 
-            return (
-              <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
-                <div>{dayName}</div>
-                <div className="text-xs text-muted-foreground mb-1">{formattedDate}</div>
-                
-                {/* Supervisor Badge - ON TOP */}
-                <Badge 
-                  variant={isSupervisorsUnderstaffed ? "destructive" : "outline"} 
-                  className="text-xs mb-1"
-                >
-                  {supervisorCount} / {minimumSupervisors} Sup
-                </Badge>
-                
-                {/* Officer Badge - BELOW */}
-                <Badge 
-                  variant={isOfficersUnderstaffed ? "destructive" : "outline"} 
-                  className="text-xs"
-                >
-                  {officerCount} / {minimumOfficers} Ofc
-                </Badge>
-              </div>
-            );
-          })}
+  return (
+    <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
+      {/* Clickable date button */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-auto p-0 font-semibold hover:bg-transparent hover:underline"
+        onClick={() => navigateToDailySchedule(dateStr)}
+      >
+        <div>{dayName}</div>
+        <div className="text-xs text-muted-foreground mb-1">{formattedDate}</div>
+      </Button>
+      
+      {/* Supervisor Badge - ON TOP */}
+      <Badge 
+        variant={isSupervisorsUnderstaffed ? "destructive" : "outline"} 
+        className="text-xs mb-1"
+      >
+        {supervisorCount} / {minimumSupervisors} Sup
+      </Badge>
+      
+      {/* Officer Badge - BELOW */}
+      <Badge 
+        variant={isOfficersUnderstaffed ? "destructive" : "outline"} 
+        className="text-xs"
+      >
+        {officerCount} / {minimumOfficers} Ofc
+      </Badge>
+    </div>
+  );
+})}
         </div>
 
         {/* Supervisors section */}
