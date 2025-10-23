@@ -25,6 +25,7 @@ export const VacancyManagement = () => {
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
   const queryClient = useQueryClient();
+  const [customMessage, setCustomMessage] = useState("");
 
   // Add real-time subscription for vacancy alerts
   useEffect(() => {
