@@ -293,195 +293,239 @@ const { data: schedules, isLoading: schedulesLoading, error, refetch } = useQuer
         .eq("shift_type_id", selectedShiftId)
         .in("date", dates);
 
-      const { data: exceptionsData, error: exceptionsError } = await exceptionsQuery;
+      // Get schedule exceptions for the week - SEPARATE QUERIES TO AVOID RELATIONSHIP CONFLICTS
+const { data: exceptionsData, error: exceptionsError } = await supabase
+  .from("schedule_exceptions")
+  .select("*")
+  .gte("date", startDate.toISOString().split('T')[0])
+  .lte("date", endDate.toISOString().split('T')[0]);
 
-      if (exceptionsError) {
-        console.error("Exceptions error:", exceptionsError);
-        throw exceptionsError;
-      }
+if (exceptionsError) {
+  console.error("Exceptions error:", exceptionsError);
+  throw exceptionsError;
+}
 
-      // Build schedule structure by date and officer
-      const scheduleByDateAndOfficer: Record<string, Record<string, any>> = {};
+// Get officer profiles separately to avoid relationship conflicts
+const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
+let officerProfiles = [];
 
-      // Initialize structure for all dates
-      dates.forEach(date => {
-        scheduleByDateAndOfficer[date] = {};
-      });
+if (officerIds.length > 0) {
+  const { data: profilesData, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id, full_name, badge_number, rank")
+    .in("id", officerIds);
+  
+  if (profilesError) {
+    console.error("❌ Profiles error:", profilesError);
+  } else {
+    officerProfiles = profilesData || [];
+  }
+}
 
-      // Process recurring schedules
-      recurringData?.forEach(recurring => {
-        dates.forEach(date => {
-          const currentDate = parseISO(date);
-          const dayOfWeek = currentDate.getDay();
-          
-          if (recurring.day_of_week === dayOfWeek) {
-            const scheduleStartDate = parseISO(recurring.start_date);
-            const scheduleEndDate = recurring.end_date ? parseISO(recurring.end_date) : null;
-            
-            const isAfterStart = currentDate >= scheduleStartDate;
-            const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
-            
-            if (isAfterStart && isBeforeEnd) {
-              // Check if there's an exception for this officer/date
-              const exception = exceptionsData?.find(e => 
-                e.officer_id === recurring.officer_id && 
-                e.date === date && 
-                !e.is_off
-              );
+// Get shift types for exceptions separately
+const shiftTypeIds = [...new Set(exceptionsData?.map(e => e.shift_type_id).filter(Boolean))];
+let exceptionShiftTypes = [];
 
-              const ptoException = exceptionsData?.find(e => 
-                e.officer_id === recurring.officer_id && 
-                e.date === date && 
-                e.is_off
-              );
+if (shiftTypeIds.length > 0) {
+  const { data: shiftTypesData, error: shiftTypesError } = await supabase
+    .from("shift_types")
+    .select("id, name, start_time, end_time")
+    .in("id", shiftTypeIds);
+  
+  if (shiftTypesError) {
+    console.error("❌ Shift types error:", shiftTypesError);
+  } else {
+    exceptionShiftTypes = shiftTypesData || [];
+  }
+}
 
-              if (!scheduleByDateAndOfficer[date][recurring.officer_id]) {
-                scheduleByDateAndOfficer[date][recurring.officer_id] = {
-                  officerId: recurring.officer_id,
-                  officerName: recurring.profiles?.full_name || "Unknown",
-                  badgeNumber: recurring.profiles?.badge_number,
-                  rank: recurring.profiles?.rank,
-                  date: date,
-                  dayOfWeek: dayOfWeek,
-                  shiftInfo: {
-                    type: recurring.shift_types?.name,
-                    time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
-                    position: recurring.position_name,
-                    scheduleId: recurring.id,
-                    scheduleType: "recurring" as const,
-                    shift: recurring.shift_types,
-                    isOff: false,
-                    hasPTO: !!ptoException,
-                    ptoData: ptoException ? {
-                      id: ptoException.id,
-                      ptoType: ptoException.reason,
-                      startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
-                      endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
-                      isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
-                      shiftTypeId: ptoException.shift_type_id
-                    } : undefined
-                  }
-                };
-              }
-            }
-          }
-        });
-      });
+// Combine the data manually
+const combinedExceptions = exceptionsData?.map(exception => ({
+  ...exception,
+  profiles: officerProfiles.find(p => p.id === exception.officer_id),
+  shift_types: exceptionShiftTypes.find(s => s.id === exception.shift_type_id)
+})) || [];
 
-      // Process working exceptions (manually added shifts)
-      exceptionsData?.filter(e => !e.is_off).forEach(exception => {
-        if (!scheduleByDateAndOfficer[exception.date]) {
-          scheduleByDateAndOfficer[exception.date] = {};
-        }
+// Build schedule structure by date and officer
+const scheduleByDateAndOfficer: Record<string, Record<string, any>> = {};
 
-        const ptoException = exceptionsData?.find(e => 
-          e.officer_id === exception.officer_id && 
-          e.date === exception.date && 
+// Initialize structure for all dates
+dates.forEach(date => {
+  scheduleByDateAndOfficer[date] = {};
+});
+
+// Process recurring schedules
+recurringData?.forEach(recurring => {
+  dates.forEach(date => {
+    const currentDate = parseISO(date);
+    const dayOfWeek = currentDate.getDay();
+    
+    if (recurring.day_of_week === dayOfWeek) {
+      const scheduleStartDate = parseISO(recurring.start_date);
+      const scheduleEndDate = recurring.end_date ? parseISO(recurring.end_date) : null;
+      
+      const isAfterStart = currentDate >= scheduleStartDate;
+      const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
+      
+      if (isAfterStart && isBeforeEnd) {
+        // Check if there's an exception for this officer/date
+        const exception = combinedExceptions?.find(e => 
+          e.officer_id === recurring.officer_id && 
+          e.date === date && 
+          !e.is_off
+        );
+
+        const ptoException = combinedExceptions?.find(e => 
+          e.officer_id === recurring.officer_id && 
+          e.date === date && 
           e.is_off
         );
 
-        scheduleByDateAndOfficer[exception.date][exception.officer_id] = {
-          officerId: exception.officer_id,
-          officerName: exception.profiles?.full_name || "Unknown",
-          badgeNumber: exception.profiles?.badge_number,
-          rank: exception.profiles?.rank,
-          date: exception.date,
-          dayOfWeek: parseISO(exception.date).getDay(),
-          shiftInfo: {
-            type: exception.shift_types?.name || "Custom",
-            time: exception.custom_start_time && exception.custom_end_time
-              ? `${exception.custom_start_time} - ${exception.custom_end_time}`
-              : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`,
-            position: exception.position_name,
-            scheduleId: exception.id,
-            scheduleType: "exception" as const,
-            shift: exception.shift_types,
-            isOff: false,
-            hasPTO: !!ptoException,
-            ptoData: ptoException ? {
-              id: ptoException.id,
-              ptoType: ptoException.reason,
-              startTime: ptoException.custom_start_time || exception.shift_types?.start_time,
-              endTime: ptoException.custom_end_time || exception.shift_types?.end_time,
-              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
-              shiftTypeId: ptoException.shift_type_id
-            } : undefined
-          }
-        };
-      });
-
-      // Process PTO-only exceptions (officers with PTO but no working schedule)
-      exceptionsData?.filter(e => e.is_off).forEach(ptoException => {
-        if (!scheduleByDateAndOfficer[ptoException.date]) {
-          scheduleByDateAndOfficer[ptoException.date] = {};
-        }
-
-        // Only add if officer doesn't already have a schedule entry
-        if (!scheduleByDateAndOfficer[ptoException.date][ptoException.officer_id]) {
-          scheduleByDateAndOfficer[ptoException.date][ptoException.officer_id] = {
-            officerId: ptoException.officer_id,
-            officerName: ptoException.profiles?.full_name || "Unknown",
-            badgeNumber: ptoException.profiles?.badge_number,
-            rank: ptoException.profiles?.rank,
-            date: ptoException.date,
-            dayOfWeek: parseISO(ptoException.date).getDay(),
+        if (!scheduleByDateAndOfficer[date][recurring.officer_id]) {
+          scheduleByDateAndOfficer[date][recurring.officer_id] = {
+            officerId: recurring.officer_id,
+            officerName: recurring.profiles?.full_name || "Unknown",
+            badgeNumber: recurring.profiles?.badge_number,
+            rank: recurring.profiles?.rank,
+            date: date,
+            dayOfWeek: dayOfWeek,
             shiftInfo: {
-              type: "Off",
-              time: "",
-              position: "",
-              scheduleId: ptoException.id,
-              scheduleType: "exception" as const,
-              shift: ptoException.shift_types,
-              isOff: true,
-              reason: ptoException.reason,
-              hasPTO: true,
-              ptoData: {
+              type: recurring.shift_types?.name,
+              time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
+              position: recurring.position_name,
+              scheduleId: recurring.id,
+              scheduleType: "recurring" as const,
+              shift: recurring.shift_types,
+              isOff: false,
+              hasPTO: !!ptoException,
+              ptoData: ptoException ? {
                 id: ptoException.id,
                 ptoType: ptoException.reason,
-                startTime: ptoException.custom_start_time || ptoException.shift_types?.start_time || '00:00',
-                endTime: ptoException.custom_end_time || ptoException.shift_types?.end_time || '23:59',
+                startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
+                endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
                 isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
                 shiftTypeId: ptoException.shift_type_id
-              }
+              } : undefined
             }
           };
         }
-      });
-
-      // Convert to array format for rendering with categorized officers
-      const dailySchedules = dates.map(date => {
-        const officers = Object.values(scheduleByDateAndOfficer[date] || {});
-        const categorized = categorizeAndSortOfficers(officers);
-        
-        // Calculate staffing counts
-        const supervisorCount = categorized.supervisors.length;
-        const officerCount = categorized.regularOfficers.length;
-        const totalWorking = supervisorCount + officerCount;
-
-        return {
-          date,
-          dayOfWeek: parseISO(date).getDay(),
-          officers: officers,
-          categorizedOfficers: categorized,
-          staffing: {
-            supervisors: supervisorCount,
-            officers: officerCount,
-            total: totalWorking
-          },
-          isCurrentMonth: activeView === "monthly" ? isSameMonth(parseISO(date), currentMonth) : true
-        };
-      });
-
-      return { 
-        dailySchedules, 
-        dates,
-        recurring: recurringData,
-        exceptions: exceptionsData,
-        startDate: format(startDate, "yyyy-MM-dd"),
-        endDate: format(endDate, "yyyy-MM-dd")
-      };
-    },
+      }
+    }
   });
+});
+
+// Process working exceptions (manually added shifts)
+combinedExceptions?.filter(e => !e.is_off).forEach(exception => {
+  if (!scheduleByDateAndOfficer[exception.date]) {
+    scheduleByDateAndOfficer[exception.date] = {};
+  }
+
+  const ptoException = combinedExceptions?.find(e => 
+    e.officer_id === exception.officer_id && 
+    e.date === exception.date && 
+    e.is_off
+  );
+
+  scheduleByDateAndOfficer[exception.date][exception.officer_id] = {
+    officerId: exception.officer_id,
+    officerName: exception.profiles?.full_name || "Unknown",
+    badgeNumber: exception.profiles?.badge_number,
+    rank: exception.profiles?.rank,
+    date: exception.date,
+    dayOfWeek: parseISO(exception.date).getDay(),
+    shiftInfo: {
+      type: exception.shift_types?.name || "Custom",
+      time: exception.custom_start_time && exception.custom_end_time
+        ? `${exception.custom_start_time} - ${exception.custom_end_time}`
+        : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`,
+      position: exception.position_name,
+      scheduleId: exception.id,
+      scheduleType: "exception" as const,
+      shift: exception.shift_types,
+      isOff: false,
+      hasPTO: !!ptoException,
+      ptoData: ptoException ? {
+        id: ptoException.id,
+        ptoType: ptoException.reason,
+        startTime: ptoException.custom_start_time || exception.shift_types?.start_time,
+        endTime: ptoException.custom_end_time || exception.shift_types?.end_time,
+        isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+        shiftTypeId: ptoException.shift_type_id
+      } : undefined
+    }
+  };
+});
+
+// Process PTO-only exceptions (officers with PTO but no working schedule)
+combinedExceptions?.filter(e => e.is_off).forEach(ptoException => {
+  if (!scheduleByDateAndOfficer[ptoException.date]) {
+    scheduleByDateAndOfficer[ptoException.date] = {};
+  }
+
+  // Only add if officer doesn't already have a schedule entry
+  if (!scheduleByDateAndOfficer[ptoException.date][ptoException.officer_id]) {
+    scheduleByDateAndOfficer[ptoException.date][ptoException.officer_id] = {
+      officerId: ptoException.officer_id,
+      officerName: ptoException.profiles?.full_name || "Unknown",
+      badgeNumber: ptoException.profiles?.badge_number,
+      rank: ptoException.profiles?.rank,
+      date: ptoException.date,
+      dayOfWeek: parseISO(ptoException.date).getDay(),
+      shiftInfo: {
+        type: "Off",
+        time: "",
+        position: "",
+        scheduleId: ptoException.id,
+        scheduleType: "exception" as const,
+        shift: ptoException.shift_types,
+        isOff: true,
+        reason: ptoException.reason,
+        hasPTO: true,
+        ptoData: {
+          id: ptoException.id,
+          ptoType: ptoException.reason,
+          startTime: ptoException.custom_start_time || ptoException.shift_types?.start_time || '00:00',
+          endTime: ptoException.custom_end_time || ptoException.shift_types?.end_time || '23:59',
+          isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+          shiftTypeId: ptoException.shift_type_id
+        }
+      }
+    };
+  }
+});
+
+// Convert to array format for rendering with categorized officers
+const dailySchedules = dates.map(date => {
+  const officers = Object.values(scheduleByDateAndOfficer[date] || {});
+  const categorized = categorizeAndSortOfficers(officers);
+  
+  // Calculate staffing counts
+  const supervisorCount = categorized.supervisors.length;
+  const officerCount = categorized.regularOfficers.length;
+  const totalWorking = supervisorCount + officerCount;
+
+  return {
+    date,
+    dayOfWeek: parseISO(date).getDay(),
+    officers: officers,
+    categorizedOfficers: categorized,
+    staffing: {
+      supervisors: supervisorCount,
+      officers: officerCount,
+      total: totalWorking
+    },
+    isCurrentMonth: activeView === "monthly" ? isSameMonth(parseISO(date), currentMonth) : true
+  };
+});
+
+return { 
+  dailySchedules, 
+  dates,
+  recurring: recurringData,
+  exceptions: combinedExceptions,
+  startDate: format(startDate, "yyyy-MM-dd"),
+  endDate: format(endDate, "yyyy-MM-dd")
+};
 
   const updatePositionMutation = usePositionMutation();
 
