@@ -957,6 +957,137 @@ const getStatusIcon = (status: string) => {
         </Button>
       </div>
 
+       {/* Officer Responses with Approval Workflow */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Officer Responses
+          </CardTitle>
+          <CardDescription>Review and manage officer responses to vacancy alerts</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!responses || responses.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No responses yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {responses.map((response) => {
+                const alert = response.vacancy_alerts;
+                const shiftName = alert?.shift_types?.name || "Unknown Shift";
+                const date = alert?.date ? format(new Date(alert.date), "MMM d, yyyy") : "Unknown Date";
+
+                return (
+                  <div key={response.id} className="p-4 border rounded-lg space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="font-medium">
+                            {response.profiles?.full_name} (#{response.profiles?.badge_number})
+                          </p>
+                          <Badge 
+                            variant={getStatusVariant(response.status)}
+                            className="flex items-center gap-1 capitalize"
+                          >
+                            {getStatusIcon(response.status)}
+                            {response.status}
+                          </Badge>
+                        </div>
+                        
+                        <p className="text-sm text-muted-foreground">
+                          {shiftName} - {date}
+                        </p>
+                        
+                        {response.approved_by && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {response.status === "approved" ? "Approved" : "Denied"} on{" "}
+                            {format(new Date(response.approved_at), "MMM d, yyyy 'at' h:mm a")}
+                          </p>
+                        )}
+
+                        {response.rejection_reason && (
+                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                            <p className="text-sm text-red-800">
+                              <strong>Reason:</strong> {response.rejection_reason}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons for Supervisors */}
+                      {response.status === "interested" && (
+                        <div className="flex flex-col gap-2 ml-4">
+                          <Button
+                            size="sm"
+                            onClick={() => updateResponseMutation.mutate({ 
+                              responseId: response.id, 
+                              status: "approved" 
+                            })}
+                            disabled={updateResponseMutation.isPending}
+                            className="flex items-center gap-1"
+                          >
+                            <Check className="h-3 w-3" />
+                            Approve
+                          </Button>
+                          
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={updateResponseMutation.isPending}
+                                className="flex items-center gap-1"
+                              >
+                                <X className="h-3 w-3" />
+                                Deny
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Deny Response</DialogTitle>
+                                <DialogDescription>
+                                  Provide a reason for denying this shift request from {response.profiles?.full_name}.
+                                </DialogDescription>
+                              </DialogHeader>
+                              
+                              <div className="space-y-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="rejection-reason">Reason for Denial</Label>
+                                  <textarea
+                                    id="rejection-reason"
+                                    placeholder="Enter reason for denial (optional but recommended)"
+                                    className="w-full min-h-[80px] p-2 border rounded-md text-sm resize-y"
+                                    maxLength={500}
+                                  />
+                                </div>
+                                
+                                <Button
+                                  onClick={() => {
+                                    const textarea = document.getElementById('rejection-reason') as HTMLTextAreaElement;
+                                    updateResponseMutation.mutate({ 
+                                      responseId: response.id, 
+                                      status: "denied",
+                                      rejectionReason: textarea.value
+                                    });
+                                  }}
+                                  disabled={updateResponseMutation.isPending}
+                                  variant="destructive"
+                                >
+                                  {updateResponseMutation.isPending ? "Denying..." : "Confirm Denial"}
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Automatic Understaffed Detection */}
       <Card>
         <CardHeader>
@@ -1358,136 +1489,7 @@ const getStatusIcon = (status: string) => {
         </DialogContent>
       </Dialog>
 
-                  {/* Officer Responses with Approval Workflow */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Officer Responses
-          </CardTitle>
-          <CardDescription>Review and manage officer responses to vacancy alerts</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!responses || responses.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No responses yet.</p>
-          ) : (
-            <div className="space-y-4">
-              {responses.map((response) => {
-                const alert = response.vacancy_alerts;
-                const shiftName = alert?.shift_types?.name || "Unknown Shift";
-                const date = alert?.date ? format(new Date(alert.date), "MMM d, yyyy") : "Unknown Date";
-
-                return (
-                  <div key={response.id} className="p-4 border rounded-lg space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <p className="font-medium">
-                            {response.profiles?.full_name} (#{response.profiles?.badge_number})
-                          </p>
-                          <Badge 
-                            variant={getStatusVariant(response.status)}
-                            className="flex items-center gap-1 capitalize"
-                          >
-                            {getStatusIcon(response.status)}
-                            {response.status}
-                          </Badge>
-                        </div>
-                        
-                        <p className="text-sm text-muted-foreground">
-                          {shiftName} - {date}
-                        </p>
-                        
-                        {response.approved_by && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {response.status === "approved" ? "Approved" : "Denied"} on{" "}
-                            {format(new Date(response.approved_at), "MMM d, yyyy 'at' h:mm a")}
-                          </p>
-                        )}
-
-                        {response.rejection_reason && (
-                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
-                            <p className="text-sm text-red-800">
-                              <strong>Reason:</strong> {response.rejection_reason}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Action Buttons for Supervisors */}
-                      {response.status === "interested" && (
-                        <div className="flex flex-col gap-2 ml-4">
-                          <Button
-                            size="sm"
-                            onClick={() => updateResponseMutation.mutate({ 
-                              responseId: response.id, 
-                              status: "approved" 
-                            })}
-                            disabled={updateResponseMutation.isPending}
-                            className="flex items-center gap-1"
-                          >
-                            <Check className="h-3 w-3" />
-                            Approve
-                          </Button>
-                          
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                disabled={updateResponseMutation.isPending}
-                                className="flex items-center gap-1"
-                              >
-                                <X className="h-3 w-3" />
-                                Deny
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Deny Response</DialogTitle>
-                                <DialogDescription>
-                                  Provide a reason for denying this shift request from {response.profiles?.full_name}.
-                                </DialogDescription>
-                              </DialogHeader>
-                              
-                              <div className="space-y-4">
-                                <div className="space-y-2">
-                                  <Label htmlFor="rejection-reason">Reason for Denial</Label>
-                                  <textarea
-                                    id="rejection-reason"
-                                    placeholder="Enter reason for denial (optional but recommended)"
-                                    className="w-full min-h-[80px] p-2 border rounded-md text-sm resize-y"
-                                    maxLength={500}
-                                  />
-                                </div>
-                                
-                                <Button
-                                  onClick={() => {
-                                    const textarea = document.getElementById('rejection-reason') as HTMLTextAreaElement;
-                                    updateResponseMutation.mutate({ 
-                                      responseId: response.id, 
-                                      status: "denied",
-                                      rejectionReason: textarea.value
-                                    });
-                                  }}
-                                  disabled={updateResponseMutation.isPending}
-                                  variant="destructive"
-                                >
-                                  {updateResponseMutation.isPending ? "Denying..." : "Confirm Denial"}
-                                </Button>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                 
     </div>
   );
 };
