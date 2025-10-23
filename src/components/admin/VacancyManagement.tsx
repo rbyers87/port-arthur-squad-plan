@@ -188,8 +188,11 @@ const updateResponseMutation = useMutation({
     status: string; 
     rejectionReason?: string;
   }) => {
+    // Map UI status to database values
+    const dbStatus = status === "approved" ? "accepted" : "rejected";
+
     const updateData: any = {
-      status: status,
+      status: dbStatus,
       approved_by: userId,
       approved_at: new Date().toISOString()
     };
@@ -198,14 +201,19 @@ const updateResponseMutation = useMutation({
       updateData.rejection_reason = rejectionReason;
     }
 
+    console.log("Updating response with data:", updateData);
+
     const { error } = await supabase
       .from("vacancy_responses")
       .update(updateData)
       .eq("id", responseId);
 
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase update error:", error);
+      throw error;
+    }
 
-    // Send notification to officer
+    // Send notification to officer (use our original status for user-friendly messaging)
     const response = responses?.find(r => r.id === responseId);
     if (response) {
       await sendResponseNotification(response, status, rejectionReason);
@@ -216,6 +224,7 @@ const updateResponseMutation = useMutation({
     toast.success("Response updated successfully");
   },
   onError: (error) => {
+    console.error("Update response error:", error);
     toast.error("Failed to update response: " + error.message);
   },
 });
@@ -265,12 +274,26 @@ const getStatusVariant = (status: string) => {
   switch (status) {
     case "interested":
       return "outline";
-    case "approved":
+    case "accepted":
       return "default";
-    case "denied":
+    case "rejected":
       return "destructive";
     default:
       return "outline";
+  }
+};
+
+// Get status display text
+const getStatusDisplay = (status: string) => {
+  switch (status) {
+    case "interested":
+      return "Pending";
+    case "accepted":
+      return "Approved";
+    case "rejected":
+      return "Denied";
+    default:
+      return status;
   }
 };
 
@@ -279,9 +302,9 @@ const getStatusIcon = (status: string) => {
   switch (status) {
     case "interested":
       return <Clock className="h-3 w-3" />;
-    case "approved":
+    case "accepted":
       return <Check className="h-3 w-3" />;
-    case "denied":
+    case "rejected":
       return <X className="h-3 w-3" />;
     default:
       return <Clock className="h-3 w-3" />;
