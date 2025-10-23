@@ -419,56 +419,30 @@ export const VacancyManagement = () => {
     toast.success("Data refreshed");
   };
 
-  const createAlertMutation = useMutation({
-  mutationFn: async (shiftData?: any) => {
-    if (shiftData) {
-      // Creating alert from understaffed detection
-      const { data, error } = await supabase
-        .from("vacancy_alerts")
-        .insert({
-          date: shiftData.date,
-          shift_type_id: shiftData.shift_type_id,
-          current_staffing: shiftData.current_staffing,
-          minimum_required: shiftData.minimum_required,
-          status: "open",
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+  // Use the new hook for creating vacancy alerts
+const createAlertMutation = useCreateVacancyAlert();
 
-      if (error) throw error;
-      return data;
-    } else {
-      // Manual alert creation
-      if (!selectedDate || !selectedShift) {
-        throw new Error("Please select date and shift");
-      }
+// Add this function to handle manual alert creation
+const handleCreateManualAlert = () => {
+  if (!selectedDate || !selectedShift) {
+    toast.error("Please select date and shift");
+    return;
+  }
 
-      const { error } = await supabase.from("vacancy_alerts").insert({
-        date: format(selectedDate, "yyyy-MM-dd"),
-        shift_type_id: selectedShift,
-        minimum_required: parseInt(minimumRequired),
-        current_staffing: 0,
-        status: "open",
-      });
-
-      if (error) throw error;
+  createAlertMutation.mutate({
+    shift_type_id: selectedShift,
+    date: format(selectedDate, "yyyy-MM-dd"),
+    current_staffing: 0,
+    minimum_required: parseInt(minimumRequired)
+  }, {
+    onSuccess: () => {
+      setDialogOpen(false);
+      setSelectedDate(undefined);
+      setSelectedShift(undefined);
+      setMinimumRequired("2");
     }
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
-    queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-    toast.success("Vacancy alert created");
-    setDialogOpen(false);
-    setSelectedDate(undefined);
-    setSelectedShift(undefined);
-    setMinimumRequired("2");
-  },
-  onError: (error: Error) => {
-    toast.error("Failed to create alert: " + error.message);
-  },
-});
+  });
+};
 
   const closeAlertMutation = useMutation({
     mutationFn: async (alertId: string) => {
