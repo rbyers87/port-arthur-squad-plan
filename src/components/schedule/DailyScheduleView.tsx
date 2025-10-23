@@ -243,71 +243,89 @@ export const DailyScheduleView = ({
         })
         .filter(officer => officer !== null) || [];
 
-      // Get additional officers from working exceptions - THESE are the manually added ones
-      const additionalOfficers = workingExceptions
-        ?.filter(e => 
-          e.shift_types?.id === shift.id &&
-          !recurringData?.some(r => r.officer_id === e.officer_id)
-        )
-        .map(e => {
-          const ptoException = ptoExceptions?.find(p => 
-            p.officer_id === e.officer_id && p.shift_types?.id === shift.id
-          );
+      // FIXED: Get additional officers from working exceptions - Properly identify extra shifts
+const additionalOfficers = workingExceptions
+  ?.filter(e => 
+    e.shift_types?.id === shift.id
+  )
+  .map(e => {
+    // Check if this is actually their regular recurring shift for this specific shift/day
+    const isRegularRecurring = recurringData?.some(r => 
+      r.officer_id === e.officer_id && 
+      r.shift_types?.id === shift.id &&
+      r.day_of_week === dayOfWeek
+    );
 
-          // FIXED: Calculate custom time for partial PTO - Show WORKING hours, not PTO hours
-          let customTime = undefined;
-          if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
-            // For partial PTO, show the actual working hours (opposite of PTO time)
-            const shiftStart = shift.start_time;
-            const shiftEnd = shift.end_time;
-            const ptoStart = ptoException.custom_start_time;
-            const ptoEnd = ptoException.custom_end_time;
-            
-            // Calculate working hours by excluding PTO time from shift time
-            if (ptoStart === shiftStart && ptoEnd !== shiftEnd) {
-              // PTO at start of shift
-              customTime = `Working: ${ptoEnd} - ${shiftEnd}`;
-            } else if (ptoStart !== shiftStart && ptoEnd === shiftEnd) {
-              // PTO at end of shift  
-              customTime = `Working: ${shiftStart} - ${ptoStart}`;
-            } else if (ptoStart !== shiftStart && ptoEnd !== shiftEnd) {
-              // PTO in middle of shift - show both working periods
-              customTime = `Working: ${shiftStart}-${ptoStart} & ${ptoEnd}-${shiftEnd}`;
-            } else {
-              // Fallback
-              customTime = `Working: Check PTO`;
-            }
-          } else if (e.custom_start_time && e.custom_end_time) {
-            customTime = `${e.custom_start_time} - ${e.custom_end_time}`;
-          }
+    const ptoException = ptoExceptions?.find(p => 
+      p.officer_id === e.officer_id && p.shift_types?.id === shift.id
+    );
 
-          // These are manually added officers (no recurring schedule)
-          return {
-            scheduleId: e.id,
-            officerId: e.officer_id,
-            name: e.profiles?.full_name || "Unknown",
-            badge: e.profiles?.badge_number,
-            rank: e.profiles?.rank,
-            position: e.position_name,
-            unitNumber: e.unit_number,
-            notes: e.notes,
-            type: "exception" as const,
-            originalScheduleId: null,
-            customTime: customTime,
-            hasPTO: !!ptoException,
-            ptoData: ptoException ? {
-              id: ptoException.id,
-              ptoType: ptoException.reason,
-              startTime: ptoException.custom_start_time || shift.start_time,
-              endTime: ptoException.custom_end_time || shift.end_time,
-              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
-            } : undefined,
-            shift: shift
-          };
-        })
-        .filter(officer => officer !== null) || [];
+    // FIXED: Calculate custom time for partial PTO - Show WORKING hours, not PTO hours
+    let customTime = undefined;
+    if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
+      // For partial PTO, show the actual working hours (opposite of PTO time)
+      const shiftStart = shift.start_time;
+      const shiftEnd = shift.end_time;
+      const ptoStart = ptoException.custom_start_time;
+      const ptoEnd = ptoException.custom_end_time;
+      
+      // Calculate working hours by excluding PTO time from shift time
+      if (ptoStart === shiftStart && ptoEnd !== shiftEnd) {
+        // PTO at start of shift
+        customTime = `Working: ${ptoEnd} - ${shiftEnd}`;
+      } else if (ptoStart !== shiftStart && ptoEnd === shiftEnd) {
+        // PTO at end of shift  
+        customTime = `Working: ${shiftStart} - ${ptoStart}`;
+      } else if (ptoStart !== shiftStart && ptoEnd !== shiftEnd) {
+        // PTO in middle of shift - show both working periods
+        customTime = `Working: ${shiftStart}-${ptoStart} & ${ptoEnd}-${shiftEnd}`;
+      } else {
+        // Fallback
+        customTime = `Working: Check PTO`;
+      }
+    } else if (e.custom_start_time && e.custom_end_time) {
+      customTime = `${e.custom_start_time} - ${e.custom_end_time}`;
+    }
 
-      const allOfficers = [...recurringOfficers, ...additionalOfficers];
+    // These are extra shifts if they're not regularly scheduled for this specific shift
+    return {
+      scheduleId: e.id,
+      officerId: e.officer_id,
+      name: e.profiles?.full_name || "Unknown",
+      badge: e.profiles?.badge_number,
+      rank: e.profiles?.rank,
+      position: e.position_name,
+      unitNumber: e.unit_number,
+      notes: e.notes,
+      type: isRegularRecurring ? "recurring" : "exception" as const, // More accurate typing
+      originalScheduleId: null,
+      customTime: customTime,
+      hasPTO: !!ptoException,
+      ptoData: ptoException ? {
+        id: ptoException.id,
+        ptoType: ptoException.reason,
+        startTime: ptoException.custom_start_time || shift.start_time,
+        endTime: ptoException.custom_end_time || shift.end_time,
+        isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+      } : undefined,
+      shift: shift,
+      isExtraShift: !isRegularRecurring // Explicit flag for display
+    };
+  })
+  .filter(officer => officer !== null) || [];
+
+      // Combine officers and ensure proper type assignment
+const allOfficers = [...recurringOfficers, ...additionalOfficers].map(officer => {
+  // For additional officers that were marked as recurring but should be exceptions,
+  // ensure they display as extra shifts when appropriate
+  if (officer.type === "recurring" && officer.isExtraShift) {
+    return {
+      ...officer,
+      type: "exception" as const // Force to exception for display
+    };
+  }
+  return officer;
+});
 
       // Get PTO records for this shift - UPDATED TO INCLUDE unitNumber and notes
       const shiftPTORecords = ptoExceptions?.filter(e => 
@@ -847,35 +865,35 @@ export const DailyScheduleView = ({
               key={`${officer.scheduleId}-${officer.type}`}
               className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
             >
-              {/* Officer Info - Left Side */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
-                  <div>
-                    <p className="font-medium truncate">{officer.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {officer.rank || 'Officer'} • Badge #{officer.badge}
-                      {officer.type === "exception" && (
-                        <span className="ml-2 text-orange-600 font-medium">(Added Shift)</span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  {officer.customTime && (
-                    <Badge variant="secondary" className="text-xs">
-                      {officer.customTime}
-                    </Badge>
-                  )}
-                  {officer.type === "recurring" && (
-                    <Badge variant="secondary" className="text-xs">
-                      Regular
-                    </Badge>
-                  )}
-                  {officer.type === "exception" && (
-                    <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-                      Extra Shift
-                    </Badge>
-                  )}
+             {/* Officer Info - Left Side */}
+<div className="flex-1 min-w-0">
+  <div className="flex items-center gap-3 mb-1">
+    <div>
+      <p className="font-medium truncate">{officer.name}</p>
+      <p className="text-xs text-muted-foreground">
+        {officer.rank || 'Officer'} • Badge #{officer.badge}
+        {(officer.type === "exception" || officer.isExtraShift) && (
+          <span className="ml-2 text-orange-600 font-medium">(Extra Shift)</span> {/* Changed from "Added Shift" to "Extra Shift" */}
+        )}
+      </p>
+    </div>
+  </div>
+  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+    {officer.customTime && (
+      <Badge variant="secondary" className="text-xs">
+        {officer.customTime}
+      </Badge>
+    )}
+    {officer.type === "recurring" && (
+      <Badge variant="secondary" className="text-xs">
+        Regular
+      </Badge>
+    )}
+    {officer.type === "exception" && (
+      <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+        Extra Shift
+      </Badge>
+    )}
                   {/* Show partial PTO indicator */}
                   {officer.hasPTO && !officer.ptoData?.isFullShift && (
                     <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
