@@ -854,7 +854,7 @@ const allOfficers = [...recurringOfficers, ...additionalOfficers].map(officer =>
       <p className="text-sm text-muted-foreground italic">No {title.toLowerCase()} scheduled</p>
     ) : (
       officers
-        .map((officer) => {
+        .map((officer, index) => {
           // Skip officers with full-day PTO - they should only appear in PTO section
           if (officer.hasPTO && officer.ptoData?.isFullShift) {
             return null;
@@ -862,7 +862,7 @@ const allOfficers = [...recurringOfficers, ...additionalOfficers].map(officer =>
           
           return (
             <div
-              key={`${officer.scheduleId}-${officer.type}`}
+              key={`${title}-${officer.scheduleId}-${officer.type}-${index}`} 
               className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
             >
              {/* Officer Info - Left Side */}
