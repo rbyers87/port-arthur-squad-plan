@@ -192,7 +192,11 @@ const { data: userResponses } = useQuery({
   key={alert.id}
   className={cn(
     "p-4 border rounded-lg space-y-3",
-    isStaffed 
+    userResponse?.status === "accepted" 
+      ? "bg-green-50 border-green-200" 
+      : userResponse?.status === "rejected"
+      ? "bg-gray-50 border-gray-200"
+      : isStaffed 
       ? "bg-green-50 border-green-200" 
       : "bg-red-50 border-red-200"
   )}
