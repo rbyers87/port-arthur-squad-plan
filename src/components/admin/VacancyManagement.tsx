@@ -25,7 +25,7 @@ export const VacancyManagement = () => {
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
   const queryClient = useQueryClient();
-  //const [customMessage, setCustomMessage] = useState("");
+  const [customMessage, setCustomMessage] = useState("");
   const [showCustomMessageDialog, setShowCustomMessageDialog] = useState(false);
   const [selectedShiftForCustomMessage, setSelectedShiftForCustomMessage] = useState<any>(null);
   const [detectionCustomMessage, setDetectionCustomMessage] = useState("");
@@ -425,31 +425,31 @@ export const VacancyManagement = () => {
   };
 
   // Use the new hook for creating vacancy alerts
-const createAlertMutation = useCreateVacancyAlert();
+  const createAlertMutation = useCreateVacancyAlert();
 
-// Add this function to handle manual alert creation
-const handleCreateManualAlert = () => {
-  if (!selectedDate || !selectedShift) {
-    toast.error("Please select date and shift");
-    return;
-  }
-
-  createAlertMutation.mutate({
-    shift_type_id: selectedShift,
-    date: format(selectedDate, "yyyy-MM-dd"),
-    current_staffing: 0,
-    minimum_required: parseInt(minimumRequired),
-    custom_message: customMessage // Add custom message
-  }, {
-    onSuccess: () => {
-      setDialogOpen(false);
-      setSelectedDate(undefined);
-      setSelectedShift(undefined);
-      setMinimumRequired("2");
-      setCustomMessage(""); // Reset custom message
+  // Add this function to handle manual alert creation
+  const handleCreateManualAlert = () => {
+    if (!selectedDate || !selectedShift) {
+      toast.error("Please select date and shift");
+      return;
     }
-  });
-};
+
+    createAlertMutation.mutate({
+      shift_type_id: selectedShift,
+      date: format(selectedDate, "yyyy-MM-dd"),
+      current_staffing: 0,
+      minimum_required: parseInt(minimumRequired),
+      custom_message: customMessage // Add custom message
+    }, {
+      onSuccess: () => {
+        setDialogOpen(false);
+        setSelectedDate(undefined);
+        setSelectedShift(undefined);
+        setMinimumRequired("2");
+        setCustomMessage(""); // Reset custom message
+      }
+    });
+  };
 
   const closeAlertMutation = useMutation({
     mutationFn: async (alertId: string) => {
@@ -536,55 +536,64 @@ const handleCreateManualAlert = () => {
   };
 
   const handleCreateAlertFromDetection = (shift: any) => {
-  console.log("Opening custom message dialog for shift:", shift);
-  
-  // Store the shift and show custom message dialog
-  setSelectedShiftForCustomMessage(shift);
-  setDetectionCustomMessage(""); // Reset any previous message
-  setShowCustomMessageDialog(true);
-};
+    console.log("Opening custom message dialog for shift:", shift);
+    
+    // Store the shift and show custom message dialog
+    setSelectedShiftForCustomMessage(shift);
+    setDetectionCustomMessage(""); // Reset any previous message
+    setShowCustomMessageDialog(true);
+  };
   
   const handleConfirmDetectionAlert = () => {
-  if (!selectedShiftForCustomMessage) {
-    toast.error("No shift selected");
-    return;
-  }
-
-  // Create default message if custom message is empty
-  const finalMessage = detectionCustomMessage.trim() || 
-    `Urgent: ${selectedShiftForCustomMessage.minimum_required - selectedShiftForCustomMessage.current_staffing} more officers needed for ${selectedShiftForCustomMessage.shift_types?.name} shift on ${format(new Date(selectedShiftForCustomMessage.date), "MMM d")}`;
-
-  createAlertMutation.mutate({
-    shift_type_id: selectedShiftForCustomMessage.shift_type_id,
-    date: selectedShiftForCustomMessage.date,
-    current_staffing: selectedShiftForCustomMessage.current_staffing,
-    minimum_required: selectedShiftForCustomMessage.minimum_required,
-    custom_message: finalMessage
-  }, {
-    onSuccess: () => {
-      setShowCustomMessageDialog(false);
-      setSelectedShiftForCustomMessage(null);
-      setDetectionCustomMessage("");
-      toast.success("Vacancy alert created with custom message");
+    if (!selectedShiftForCustomMessage) {
+      toast.error("No shift selected");
+      return;
     }
-  });
-};
-};
+
+    // Create default message if custom message is empty
+    const finalMessage = detectionCustomMessage.trim() || 
+      `Urgent: ${selectedShiftForCustomMessage.minimum_required - selectedShiftForCustomMessage.current_staffing} more officers needed for ${selectedShiftForCustomMessage.shift_types?.name} shift on ${format(new Date(selectedShiftForCustomMessage.date), "MMM d")}`;
+
+    createAlertMutation.mutate({
+      shift_type_id: selectedShiftForCustomMessage.shift_type_id,
+      date: selectedShiftForCustomMessage.date,
+      current_staffing: selectedShiftForCustomMessage.current_staffing,
+      minimum_required: selectedShiftForCustomMessage.minimum_required,
+      custom_message: finalMessage
+    }, {
+      onSuccess: () => {
+        setShowCustomMessageDialog(false);
+        setSelectedShiftForCustomMessage(null);
+        setDetectionCustomMessage("");
+        toast.success("Vacancy alert created with custom message");
+      }
+    });
+  };
 
   const handleCreateAllAlerts = () => {
     if (!understaffedShifts) return;
 
     const shiftsWithoutAlerts = understaffedShifts.filter(shift => !isAlertCreated(shift));
     
-    shiftsWithoutAlerts.forEach(shift => {
-      createAlertMutation.mutate(shift);
-    });
-
     if (shiftsWithoutAlerts.length === 0) {
       toast.info("All understaffed shifts already have alerts");
-    } else {
-      toast.success(`Created ${shiftsWithoutAlerts.length} alerts`);
+      return;
     }
+
+    // Create alerts with default messages
+    shiftsWithoutAlerts.forEach(shift => {
+      const defaultMessage = `Urgent: ${shift.minimum_required - shift.current_staffing} more officers needed for ${shift.shift_types?.name} shift on ${format(new Date(shift.date), "MMM d")}`;
+      
+      createAlertMutation.mutate({
+        shift_type_id: shift.shift_type_id,
+        date: shift.date,
+        current_staffing: shift.current_staffing,
+        minimum_required: shift.minimum_required,
+        custom_message: defaultMessage
+      });
+    });
+
+    toast.success(`Creating ${shiftsWithoutAlerts.length} alerts with default messages`);
   };
 
   const handleSendAlert = (shift: any) => {
@@ -688,85 +697,85 @@ const handleCreateManualAlert = () => {
           ) : (
             <div className="space-y-4">
               {understaffedShifts.map((shift, index) => {
-  console.log("🔄 RENDERING SHIFT - ACTUAL DATA:", {
-    rawDate: shift.date,
-    formattedDate: format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy"),
-    shiftName: shift.shift_types?.name,
-    supervisors: shift.current_supervisors,
-    officers: shift.current_officers
-  });
-  
-  const alertExists = isAlertCreated(shift);
-  
-  const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
-  const shiftTime = shift.shift_types 
-    ? `${shift.shift_types.start_time} - ${shift.shift_types.end_time}`
-    : "Time not available";
+                console.log("🔄 RENDERING SHIFT - ACTUAL DATA:", {
+                  rawDate: shift.date,
+                  formattedDate: format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy"),
+                  shiftName: shift.shift_types?.name,
+                  supervisors: shift.current_supervisors,
+                  officers: shift.current_officers
+                });
+                
+                const alertExists = isAlertCreated(shift);
+                
+                const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
+                const shiftTime = shift.shift_types 
+                  ? `${shift.shift_types.start_time} - ${shift.shift_types.end_time}`
+                  : "Time not available";
 
-  return (
-    <div
-      key={`${shift.date}-${shift.shift_type_id}-${index}`}
-      className="p-4 border rounded-lg space-y-3"
-    >
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
-          <p className="font-medium">{shiftName}</p>
-          <p className="text-sm text-muted-foreground">
-            {format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy")} • {shiftTime}
-          </p>
-          
-          <div className="bg-gray-100 p-2 rounded text-xs mt-2">
-            <p className="text-gray-600">
-              <strong>Staffing:</strong> {shift.current_staffing}/{shift.minimum_required} |
-              <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
-              <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
-            </p>
-            <p className="text-gray-500 mt-1">
-              <strong>Assigned:</strong> {shift.assigned_officers?.map(o => 
-                `${o.name} (${o.position || 'No position'} - ${o.isSupervisor ? 'Supervisor' : 'Officer'})`
-              ).join(', ') || 'None'}
-            </p>
-          </div>
+                return (
+                  <div
+                    key={`${shift.date}-${shift.shift_type_id}-${index}`}
+                    className="p-4 border rounded-lg space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <p className="font-medium">{shiftName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy")} • {shiftTime}
+                        </p>
+                        
+                        <div className="bg-gray-100 p-2 rounded text-xs mt-2">
+                          <p className="text-gray-600">
+                            <strong>Staffing:</strong> {shift.current_staffing}/{shift.minimum_required} |
+                            <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
+                            <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
+                          </p>
+                          <p className="text-gray-500 mt-1">
+                            <strong>Assigned:</strong> {shift.assigned_officers?.map(o => 
+                              `${o.name} (${o.position || 'No position'} - ${o.isSupervisor ? 'Supervisor' : 'Officer'})`
+                            ).join(', ') || 'None'}
+                          </p>
+                        </div>
 
-          <div className="flex items-center gap-2 mt-2">
-            <Badge variant="destructive">
-              Total: {shift.current_staffing}/{shift.minimum_required}
-            </Badge>
-            {shift.isSupervisorsUnderstaffed && (
-              <Badge variant="destructive">
-                Needs {shift.min_supervisors - shift.current_supervisors} supervisor(s)
-              </Badge>
-            )}
-            {shift.isOfficersUnderstaffed && (
-              <Badge variant="destructive">
-                Needs {shift.min_officers - shift.current_officers} officer(s)
-              </Badge>
-            )}
-            {alertExists && (
-              <Badge variant="outline" className="bg-green-500/10 text-green-700">
-                Alert Created
-              </Badge>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-col gap-2">
-          {!alertExists ? (
-            <Button
-              size="sm"
-              onClick={() => handleCreateAlertFromDetection(shift)}
-              disabled={createAlertMutation.isPending}
-            >
-              Create Alert
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => handleSendAlert(shift)}
-              disabled={sendAlertMutation.isPending}
-            >
-              <Mail className="h-3 w-3 mr-1" />
-              Send Alert
-            </Button>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="destructive">
+                            Total: {shift.current_staffing}/{shift.minimum_required}
+                          </Badge>
+                          {shift.isSupervisorsUnderstaffed && (
+                            <Badge variant="destructive">
+                              Needs {shift.min_supervisors - shift.current_supervisors} supervisor(s)
+                            </Badge>
+                          )}
+                          {shift.isOfficersUnderstaffed && (
+                            <Badge variant="destructive">
+                              Needs {shift.min_officers - shift.current_officers} officer(s)
+                            </Badge>
+                          )}
+                          {alertExists && (
+                            <Badge variant="outline" className="bg-green-500/10 text-green-700">
+                              Alert Created
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {!alertExists ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleCreateAlertFromDetection(shift)}
+                            disabled={createAlertMutation.isPending}
+                          >
+                            Create Alert
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => handleSendAlert(shift)}
+                            disabled={sendAlertMutation.isPending}
+                          >
+                            <Mail className="h-3 w-3 mr-1" />
+                            Send Alert
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -855,27 +864,27 @@ const handleCreateManualAlert = () => {
                     />
                   </div>
                   <div className="space-y-2">
-  <Label htmlFor="custom-message">Custom Message (Optional)</Label>
-  <textarea
-    id="custom-message"
-    placeholder="Add a custom message for this vacancy alert (e.g., 'Urgent coverage needed for special event')"
-    value={customMessage}
-    onChange={(e) => setCustomMessage(e.target.value)}
-    className="w-full min-h-[80px] p-2 border rounded-md text-sm resize-y"
-    maxLength={500}
-  />
-  <p className="text-xs text-muted-foreground">
-    {customMessage.length}/500 characters
-  </p>
-</div>
+                    <Label htmlFor="custom-message">Custom Message (Optional)</Label>
+                    <textarea
+                      id="custom-message"
+                      placeholder="Add a custom message for this vacancy alert (e.g., 'Urgent coverage needed for special event')"
+                      value={customMessage}
+                      onChange={(e) => setCustomMessage(e.target.value)}
+                      className="w-full min-h-[80px] p-2 border rounded-md text-sm resize-y"
+                      maxLength={500}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {customMessage.length}/500 characters
+                    </p>
+                  </div>
 
                   <Button
-  className="w-full"
-  onClick={handleCreateManualAlert}
-  disabled={createAlertMutation.isPending}
->
-  {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
-</Button>
+                    className="w-full"
+                    onClick={handleCreateManualAlert}
+                    disabled={createAlertMutation.isPending}
+                  >
+                    {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
+                  </Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -891,60 +900,134 @@ const handleCreateManualAlert = () => {
           ) : (
             <div className="space-y-4">
               {alerts.map((alert) => {
-  const shiftName = alert.shift_types?.name || `Shift ID: ${alert.shift_type_id}`;
-  const shiftTime = alert.shift_types 
-    ? `${alert.shift_types.start_time} - ${alert.shift_types.end_time}`
-    : "Time not available";
+                const shiftName = alert.shift_types?.name || `Shift ID: ${alert.shift_type_id}`;
+                const shiftTime = alert.shift_types 
+                  ? `${alert.shift_types.start_time} - ${alert.shift_types.end_time}`
+                  : "Time not available";
 
-  return (
-  <div key={alert.id} className="p-4 border rounded-lg space-y-2">
-    <div className="flex items-start justify-between">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-2">
-          <p className="font-medium">{shiftName}</p>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
-        </p>
-        <p className="text-sm text-muted-foreground mt-1">
-          Staffing: {alert.current_staffing} / {alert.minimum_required}
-        </p>
-        {/* Add custom message display */}
-        {alert.custom_message && (
-          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
-            <p className="text-sm text-blue-800">{alert.custom_message}</p>
-          </div>
-        )}
-      </div> {/* This closes the flex-1 div */}
-      <div className="flex flex-col items-end gap-2 ml-4">
-        <span
-          className={cn(
-            "text-xs px-2 py-1 rounded",
-            alert.status === "open"
-              ? "bg-green-500/10 text-green-700"
-              : "bg-gray-500/10 text-gray-700"
-          )}
-        >
-          {alert.status}
-        </span>
-        {alert.status === "open" && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => closeAlertMutation.mutate(alert.id)}
-          >
-            Close Alert
-          </Button>
-        )}
-      </div>
-    </div>
-  </div>
-);
+                return (
+                  <div key={alert.id} className="p-4 border rounded-lg space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="font-medium">{shiftName}</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Staffing: {alert.current_staffing} / {alert.minimum_required}
+                        </p>
+                        {/* Add custom message display */}
+                        {alert.custom_message && (
+                          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                            <p className="text-sm text-blue-800">{alert.custom_message}</p>
+                          </div>
+                        )}
+                      </div> {/* This closes the flex-1 div */}
+                      <div className="flex flex-col items-end gap-2 ml-4">
+                        <span
+                          className={cn(
+                            "text-xs px-2 py-1 rounded",
+                            alert.status === "open"
+                              ? "bg-green-500/10 text-green-700"
+                              : "bg-gray-500/10 text-gray-700"
+                          )}
+                        >
+                          {alert.status}
+                        </span>
+                        {alert.status === "open" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => closeAlertMutation.mutate(alert.id)}
+                          >
+                            Close Alert
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
               })}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Custom Message Dialog for Understaffed Detection */}
+      <Dialog open={showCustomMessageDialog} onOpenChange={setShowCustomMessageDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Custom Message</DialogTitle>
+            <DialogDescription>
+              Add a custom message for the vacancy alert for{" "}
+              {selectedShiftForCustomMessage?.shift_types?.name} on{" "}
+              {selectedShiftForCustomMessage && format(new Date(selectedShiftForCustomMessage.date), "EEEE, MMM d, yyyy")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Shift Info Summary */}
+            {selectedShiftForCustomMessage && (
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm font-medium">
+                  {selectedShiftForCustomMessage.shift_types?.name} • {format(new Date(selectedShiftForCustomMessage.date), "MMM d, yyyy")}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Staffing: {selectedShiftForCustomMessage.current_staffing} / {selectedShiftForCustomMessage.minimum_required} • 
+                  Needs {selectedShiftForCustomMessage.minimum_required - selectedShiftForCustomMessage.current_staffing} more officers
+                </p>
+              </div>
+            )}
+
+            {/* Custom Message Textarea */}
+            <div className="space-y-2">
+              <Label htmlFor="detection-custom-message">Custom Message (Optional)</Label>
+              <textarea
+                id="detection-custom-message"
+                placeholder="Add a custom message for this vacancy alert (e.g., 'Urgent coverage needed for special event', 'Mandatory overtime available', etc.)"
+                value={detectionCustomMessage}
+                onChange={(e) => setDetectionCustomMessage(e.target.value)}
+                className="w-full min-h-[100px] p-3 border rounded-md text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                maxLength={500}
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Leave blank to use default message</span>
+                <span>{detectionCustomMessage.length}/500 characters</span>
+              </div>
+            </div>
+
+            {/* Preview of Default Message */}
+            {!detectionCustomMessage.trim() && (
+              <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+                <p className="text-xs text-blue-700 font-medium">Default message that will be used:</p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Urgent: {selectedShiftForCustomMessage?.minimum_required - selectedShiftForCustomMessage?.current_staffing} more officers needed for {selectedShiftForCustomMessage?.shift_types?.name} shift on {selectedShiftForCustomMessage && format(new Date(selectedShiftForCustomMessage.date), "MMM d")}
+                </p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowCustomMessageDialog(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmDetectionAlert}
+                disabled={createAlertMutation.isPending}
+                className="flex-1"
+              >
+                {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Officer Responses */}
       <Card>
