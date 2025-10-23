@@ -1538,3 +1538,4 @@ const renderMonthlyView = () => {
       )}
     </>
   );
+}; // <-- REMOVE THIS EXTRA CLOSING BRACE
