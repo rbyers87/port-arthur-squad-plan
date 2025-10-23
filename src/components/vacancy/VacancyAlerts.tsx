@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, CheckCircle, Bell, X } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils"; // Add this import
+import { cn } from "@/lib/utils";
 
 interface VacancyAlertsProps {
   userId: string;
@@ -34,13 +34,13 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     },
   });
 
-  // Fetch user responses - FIXED: use alert_id instead of vacancy_alert_id
+  // Fetch user responses - FIXED: using vacancy_alert_id to match database
   const { data: userResponses } = useQuery({
     queryKey: ["vacancy-responses", userId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vacancy_responses")
-        .select("alert_id, status")
+        .select("vacancy_alert_id, status")
         .eq("officer_id", userId);
 
       if (error) throw error;
@@ -73,23 +73,29 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     enabled: !!userId,
   });
 
-  // Mutation for responding to vacancies - FIXED: use alert_id
+  // Mutation for responding to vacancies - FIXED: using vacancy_alert_id
   const respondMutation = useMutation({
     mutationFn: async ({ alertId, status }: { alertId: string; status: string }) => {
+      console.log("Submitting response for alert:", alertId, "status:", status);
+      
       const { error } = await supabase.from("vacancy_responses").insert({
-        alert_id: alertId, // Changed from vacancy_alert_id to alert_id
+        vacancy_alert_id: alertId, // Changed to match database column name
         officer_id: userId,
         status,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vacancy-responses"] });
-      queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] }); // Also refresh admin view
+      queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] });
       toast.success("Response submitted successfully");
     },
     onError: (error) => {
+      console.error("Response error:", error);
       toast.error("Failed to submit response: " + error.message);
     },
   });
@@ -110,7 +116,7 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
   });
 
   const getUserResponse = (alertId: string) => {
-    return userResponses?.find((r) => r.alert_id === alertId); // Changed from vacancy_alert_id to alert_id
+    return userResponses?.find((r) => r.vacancy_alert_id === alertId);
   };
 
   return (
@@ -238,7 +244,7 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
                               }
                               disabled={respondMutation.isPending || isStaffed}
                             >
-                              I'm Available
+                              {respondMutation.isPending ? "Submitting..." : "I'm Available"}
                             </Button>
                             <Button
                               size="sm"
