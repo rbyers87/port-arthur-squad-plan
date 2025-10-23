@@ -279,17 +279,17 @@ const respondMutation = useMutation({
                           </div>
                         ) : (
                           <Button
-                            size="sm"
-                            onClick={() =>
-                              respondMutation.mutate({
-                                alertId: alert.id,
-                                status: "interested",
-                              })
-                            }
-                            disabled={respondMutation.isPending || isStaffed}
-                          >
-                            {respondMutation.isPending ? "Submitting..." : "I'm Available"}
-                          </Button>
+  size="sm"
+  onClick={() =>
+    respondMutation.mutate({
+      alertId: alert.id,
+      status: "interested",
+    })
+  }
+  disabled={respondMutation.isPending || isStaffed || !!userResponse}
+>
+  {respondMutation.isPending ? "Submitting..." : "I'm Available"}
+</Button>
                         )}
                       </div>
                     )}
