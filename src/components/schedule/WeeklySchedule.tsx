@@ -1112,95 +1112,158 @@ const renderExcelStyleWeeklyView = () => {
   );
 };
 
-  // Fixed Monthly View
-  const renderMonthlyView = () => {
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(currentMonth);
-    const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-    
-    // Get days from previous and next month to fill the calendar grid
-    const startDay = monthStart.getDay();
-    const endDay = monthEnd.getDay();
-    
-    const previousMonthDays = Array.from({ length: startDay }, (_, i) => 
-      addDays(monthStart, -startDay + i)
-    );
-    
-    const nextMonthDays = Array.from({ length: 6 - endDay }, (_, i) => 
-      addDays(monthEnd, i + 1)
-    );
+  // Fixed Monthly View - UPDATED VERSION
+const renderMonthlyView = () => {
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  
+  // Get days from previous and next month to fill the calendar grid
+  const startDay = monthStart.getDay();
+  const endDay = monthEnd.getDay();
+  
+  const previousMonthDays = Array.from({ length: startDay }, (_, i) => 
+    addDays(monthStart, -startDay + i)
+  );
+  
+  const nextMonthDays = Array.from({ length: 6 - endDay }, (_, i) => 
+    addDays(monthEnd, i + 1)
+  );
 
-    const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
+  const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
 
-    return (
-      <div className="space-y-4">
-        {/* Calendar header */}
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-            <div key={day} className="text-center font-medium text-sm py-2 bg-muted/50 rounded">
-              {day}
-            </div>
-          ))}
-        </div>
-        
-        {/* Calendar grid */}
-        <div className="grid grid-cols-7 gap-1">
-          {allCalendarDays.map((day, index) => {
-            const dateStr = format(day, "yyyy-MM-dd");
-            const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-            const isCurrentMonthDay = isSameMonth(day, currentMonth);
-            const isToday = isSameDay(day, new Date());
-            const totalOfficers = daySchedule?.officers.length || 0;
-            
-            return (
-              <div
-                key={day.toISOString()}
-                className={`
-                  min-h-32 p-2 border rounded-lg text-sm
-                  ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/20 text-muted-foreground'}
-                  ${isToday ? 'border-primary ring-2 ring-primary' : 'border-border'}
-                  hover:bg-accent/50 transition-colors
-                `}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <span className={`
-                    text-xs font-medium
-                    ${isToday ? 'bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center' : ''}
-                  `}>
-                    {format(day, "d")}
-                  </span>
-                  {totalOfficers > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {totalOfficers}
+  // Calculate minimum staffing (same as weekly view)
+  const minimumStaffing = {
+    SUN: 8, MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 9, SAT: 9
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Calendar header */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+          <div key={day} className="text-center font-medium text-sm py-2 bg-muted/50 rounded">
+            {day}
+          </div>
+        ))}
+      </div>
+      
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {allCalendarDays.map((day, index) => {
+          const dateStr = format(day, "yyyy-MM-dd");
+          const dayName = format(day, "EEE").toUpperCase() as keyof typeof minimumStaffing;
+          const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+          const isCurrentMonthDay = isSameMonth(day, currentMonth);
+          const isToday = isSameDay(day, new Date());
+          
+          // NEW: Filter officers to only show those with full-day PTO
+          const ptoOfficers = daySchedule?.officers.filter((officer: any) => 
+            officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
+          ) || [];
+          
+          // NEW: Calculate staffing levels for understaffed flags
+          const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter((officer: any) => 
+            !officer.shiftInfo?.hasPTO
+          ).length || 0;
+          
+          const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter((officer: any) => {
+            const isSpecialAssignment = officer.shiftInfo?.position && (
+              officer.shiftInfo.position.toLowerCase().includes('other') ||
+              (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
+            );
+            return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+          }).length || 0;
+          
+          const minimumOfficers = minimumStaffing[dayName];
+          const minimumSupervisors = 1;
+          
+          const isOfficersUnderstaffed = officerCount < minimumOfficers;
+          const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
+          const isUnderstaffed = isOfficersUnderstaffed || isSupervisorsUnderstaffed;
+
+          return (
+            <div
+              key={day.toISOString()}
+              className={`
+                min-h-32 p-2 border rounded-lg text-sm flex flex-col
+                ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/20 text-muted-foreground'}
+                ${isToday ? 'border-primary ring-2 ring-primary' : 'border-border'}
+                hover:bg-accent/50 transition-colors
+                ${isUnderstaffed ? 'bg-red-50 border-red-200' : ''}
+              `}
+            >
+              {/* Date header with clickable button */}
+              <div className="flex justify-between items-start mb-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`
+                    h-6 w-6 p-0 text-xs font-medium hover:bg-primary hover:text-primary-foreground
+                    ${isToday ? 'bg-primary text-primary-foreground' : ''}
+                  `}
+                  onClick={() => navigateToDailySchedule(dateStr)}
+                  title={`View daily schedule for ${format(day, "MMM d, yyyy")}`}
+                >
+                  {format(day, "d")}
+                </Button>
+                
+                {/* Staffing badges */}
+                <div className="flex flex-col gap-1">
+                  {isUnderstaffed && (
+                    <Badge variant="destructive" className="text-xs h-4">
+                      Understaffed
+                    </Badge>
+                  )}
+                  {ptoOfficers.length > 0 && (
+                    <Badge variant="outline" className="text-xs h-4 bg-green-50 text-green-800 border-green-200">
+                      {ptoOfficers.length} PTO
                     </Badge>
                   )}
                 </div>
-                
-                <div className="space-y-1 max-h-20 overflow-y-auto">
-                  {daySchedule?.officers.slice(0, 4).map((officer: any) => (
-                    <div key={officer.officerId} className="text-xs">
-                      <div className="font-medium truncate">
+              </div>
+              
+              {/* PTO Officers List */}
+              <div className="space-y-1 flex-1 overflow-y-auto">
+                {ptoOfficers.length > 0 ? (
+                  ptoOfficers.map((officer: any) => (
+                    <div 
+                      key={officer.officerId} 
+                      className="text-xs p-1 bg-green-50 rounded border border-green-200"
+                    >
+                      <div className="font-medium truncate text-green-800">
                         {getLastName(officer.officerName)}
                       </div>
-                      <div className="text-muted-foreground truncate text-[10px]">
-                        {officer.shiftInfo?.position || officer.shiftInfo?.type}
+                      <div className="text-green-600 truncate text-[10px]">
+                        {officer.shiftInfo?.ptoData?.ptoType || 'PTO'}
                       </div>
                     </div>
-                  ))}
-                  
-                  {totalOfficers > 4 && (
-                    <div className="text-xs text-muted-foreground text-center">
-                      +{totalOfficers - 4} more
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-muted-foreground text-center py-2">
+                    No full-day PTO
+                  </div>
+                )}
+              </div>
+              
+              {/* Understaffing details */}
+              {isUnderstaffed && (
+                <div className="mt-1 text-[10px] text-red-600 space-y-0.5">
+                  {isSupervisorsUnderstaffed && (
+                    <div>Sup: {supervisorCount}/{minimumSupervisors}</div>
+                  )}
+                  {isOfficersUnderstaffed && (
+                    <div>Ofc: {officerCount}/{minimumOfficers}</div>
                   )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const weekEnd = addDays(currentWeekStart, 6);
