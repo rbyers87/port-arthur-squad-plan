@@ -533,8 +533,19 @@ const handleCreateManualAlert = () => {
   };
 
   const handleCreateAlertFromDetection = (shift: any) => {
-    createAlertMutation.mutate(shift);
-  };
+  console.log("Creating alert from detection:", shift);
+  
+  // You could add a prompt for custom message here, or use a default
+  const defaultMessage = `Urgent: ${shift.shift_types?.name} shift needs ${shift.minimum_required - shift.current_staffing} more officers on ${format(new Date(shift.date), "MMM d")}`;
+  
+  createAlertMutation.mutate({
+    shift_type_id: shift.shift_type_id,
+    date: shift.date,
+    current_staffing: shift.current_staffing,
+    minimum_required: shift.minimum_required,
+    custom_message: defaultMessage
+  });
+};
 
   const handleCreateAllAlerts = () => {
     if (!understaffedShifts) return;
