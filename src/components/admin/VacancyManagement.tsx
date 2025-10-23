@@ -15,6 +15,7 @@ import { Calendar as CalendarIcon, Plus, Users, RefreshCw, AlertTriangle, Mail }
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useCreateVacancyAlert } from "@/hooks/useCreateVacancyAlert";
 
 export const VacancyManagement = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
