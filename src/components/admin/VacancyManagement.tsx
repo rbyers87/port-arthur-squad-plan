@@ -471,11 +471,11 @@ export const VacancyManagement = () => {
   mutationFn: async (alertData: any) => {
     console.log("Sending alerts for:", alertData);
 
-    // Get all officers who should receive notifications
+    // Get all active officers with their notification preferences
     const { data: officers, error: officersError } = await supabase
       .from("profiles")
       .select("id, email, phone, notification_preferences")
-      .eq('active', true); // Only active officers
+      .eq('active', true);
 
     if (officersError) {
       console.error("Error fetching officers:", officersError);
@@ -507,6 +507,7 @@ Please respond through the scheduling system if available.
 
     // Send notifications to each officer based on their preferences
     for (const officer of officers || []) {
+      // Use default preferences if none exist
       const preferences = officer.notification_preferences || { receiveEmails: true, receiveTexts: true };
       
       // Send email if enabled and officer has email
