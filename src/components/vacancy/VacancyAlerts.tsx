@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, CheckCircle, Bell, X } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils"; // Add this import
 
 interface VacancyAlertsProps {
   userId: string;
@@ -33,13 +34,13 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     },
   });
 
-  // Fetch user responses
+  // Fetch user responses - FIXED: use alert_id instead of vacancy_alert_id
   const { data: userResponses } = useQuery({
     queryKey: ["vacancy-responses", userId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vacancy_responses")
-        .select("vacancy_alert_id, status")
+        .select("alert_id, status")
         .eq("officer_id", userId);
 
       if (error) throw error;
@@ -72,11 +73,11 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     enabled: !!userId,
   });
 
-  // Mutation for responding to vacancies
+  // Mutation for responding to vacancies - FIXED: use alert_id
   const respondMutation = useMutation({
     mutationFn: async ({ alertId, status }: { alertId: string; status: string }) => {
       const { error } = await supabase.from("vacancy_responses").insert({
-        vacancy_alert_id: alertId,
+        alert_id: alertId, // Changed from vacancy_alert_id to alert_id
         officer_id: userId,
         status,
       });
@@ -85,6 +86,7 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vacancy-responses"] });
+      queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] }); // Also refresh admin view
       toast.success("Response submitted successfully");
     },
     onError: (error) => {
@@ -107,29 +109,8 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     },
   });
 
-  // Mutation for creating new vacancy alerts (for admins/supervisors)
-  const createVacancyMutation = useMutation({
-    mutationFn: async (vacancyData: any) => {
-      const { data, error } = await supabase
-        .from("vacancy_alerts")
-        .insert([vacancyData])
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
-      toast.success("Vacancy alert created and notifications sent to all officers");
-    },
-    onError: (error) => {
-      toast.error("Failed to create vacancy alert: " + error.message);
-    },
-  });
-
   const getUserResponse = (alertId: string) => {
-    return userResponses?.find((r) => r.vacancy_alert_id === alertId);
+    return userResponses?.find((r) => r.alert_id === alertId); // Changed from vacancy_alert_id to alert_id
   };
 
   return (
@@ -230,6 +211,12 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
                             <CheckCircle className="h-4 w-4 text-green-600" />
                           )}
                         </div>
+                        {/* Show custom message if exists */}
+                        {alert.custom_message && (
+                          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                            <p className="text-sm text-blue-800">{alert.custom_message}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -280,7 +267,3 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     </div>
   );
 };
-
-function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(" ");
-}
