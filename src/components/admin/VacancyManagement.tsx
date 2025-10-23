@@ -103,317 +103,316 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     gcTime: 5 * 60 * 1000,
   });
 
- 
-// FIXED: Updated responses query to handle multiple relationships
-const { data: responses, refetch: refetchResponses } = useQuery({
-  queryKey: ["vacancy-responses-admin"],
-  queryFn: async () => {
-    console.log("🔄 Fetching officer responses...");
-    
-    // Specify which relationship to use for profiles (officer_id)
-    const { data: responsesData, error: responsesError } = await supabase
-      .from("vacancy_responses")
-      .select(`
-        id,
-        created_at,
-        status,
-        officer_id,
-        alert_id,
-        vacancy_alert_id,
-        approved_by,
-        approved_at,
-        rejection_reason,
-        profiles!vacancy_responses_officer_id_fkey(
-          full_name,
-          badge_number
-        )
-      `)
-      .order("created_at", { ascending: false });
-
-    if (responsesError) {
-      console.error("Error fetching responses:", responsesError);
-      throw responsesError;
-    }
-
-    if (!responsesData || responsesData.length === 0) {
-      return [];
-    }
-
-    // Get alert IDs (use whichever column has data)
-    const alertIds = responsesData
-      .map(r => r.alert_id || r.vacancy_alert_id)
-      .filter(Boolean);
-
-    // Fetch alert details separately
-    const { data: alertsData, error: alertsError } = await supabase
-      .from("vacancy_alerts")
-      .select(`
-        id,
-        date,
-        shift_type_id,
-        shift_types(
-          name
-        )
-      `)
-      .in("id", alertIds);
-
-    if (alertsError) {
-      console.error("Error fetching alerts:", alertsError);
-    }
-
-    // Combine data
-    const combinedData = responsesData.map(response => {
-      const alertId = response.alert_id || response.vacancy_alert_id;
-      const alert = alertsData?.find(a => a.id === alertId);
+  // FIXED: Updated responses query to handle multiple relationships
+  const { data: responses, refetch: refetchResponses } = useQuery({
+    queryKey: ["vacancy-responses-admin"],
+    queryFn: async () => {
+      console.log("🔄 Fetching officer responses...");
       
-      return {
-        ...response,
-        vacancy_alerts: alert
-      };
-    });
+      // Specify which relationship to use for profiles (officer_id)
+      const { data: responsesData, error: responsesError } = await supabase
+        .from("vacancy_responses")
+        .select(`
+          id,
+          created_at,
+          status,
+          officer_id,
+          alert_id,
+          vacancy_alert_id,
+          approved_by,
+          approved_at,
+          rejection_reason,
+          profiles!vacancy_responses_officer_id_fkey(
+            full_name,
+            badge_number
+          )
+        `)
+        .order("created_at", { ascending: false });
 
-    console.log("📋 Final officer responses:", combinedData);
-    return combinedData;
-  },
-});
+      if (responsesError) {
+        console.error("Error fetching responses:", responsesError);
+        throw responsesError;
+      }
 
-// Mutation for approving/denying responses - with automatic shift assignment
-const updateResponseMutation = useMutation({
-  mutationFn: async ({ 
-    responseId, 
-    status, 
-    rejectionReason 
-  }: { 
-    responseId: string; 
-    status: string; 
-    rejectionReason?: string;
-  }) => {
-    // Map UI status to database values
-    const dbStatus = status === "approved" ? "accepted" : "rejected";
+      if (!responsesData || responsesData.length === 0) {
+        return [];
+      }
 
-    const updateData: any = {
-      status: dbStatus,
-      approved_by: userId,
-      approved_at: new Date().toISOString()
-    };
+      // Get alert IDs (use whichever column has data)
+      const alertIds = responsesData
+        .map(r => r.alert_id || r.vacancy_alert_id)
+        .filter(Boolean);
 
-    if (rejectionReason) {
-      updateData.rejection_reason = rejectionReason;
-    }
-
-    console.log("Updating response with data:", updateData);
-
-    const { error } = await supabase
-      .from("vacancy_responses")
-      .update(updateData)
-      .eq("id", responseId);
-
-    if (error) {
-      console.error("Supabase update error:", error);
-      throw error;
-    }
-
-    // If approved, create a schedule exception to add the officer to the shift
-    if (status === "approved") {
-      await addOfficerToShift(responseId);
-    }
-
-    // Send notification to officer (use our original status for user-friendly messaging)
-    const response = responses?.find(r => r.id === responseId);
-    if (response) {
-      await sendResponseNotification(response, status, rejectionReason);
-    }
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] });
-    queryClient.invalidateQueries({ queryKey: ["understaffed-shifts-detection"] });
-    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-    toast.success("Response updated successfully");
-  },
-  onError: (error) => {
-    console.error("Update response error:", error);
-    toast.error("Failed to update response: " + error.message);
-  },
-});
-
-// Function to add officer to shift as an extra assignment - MATCHES SCHEDULER EXACTLY
-const addOfficerToShift = async (responseId: string) => {
-  try {
-    // Get the response details with alert information
-    const { data: response, error: responseError } = await supabase
-      .from("vacancy_responses")
-      .select(`
-        *,
-        vacancy_alerts(
+      // Fetch alert details separately
+      const { data: alertsData, error: alertsError } = await supabase
+        .from("vacancy_alerts")
+        .select(`
+          id,
           date,
           shift_type_id,
           shift_types(
-            name,
-            start_time,
-            end_time
+            name
           )
-        ),
-        profiles(
-          full_name,
-          badge_number
-        )
-      `)
-      .eq("id", responseId)
-      .single();
+        `)
+        .in("id", alertIds);
 
-    if (responseError) {
-      console.error("Error fetching response details:", responseError);
-      throw responseError;
-    }
+      if (alertsError) {
+        console.error("Error fetching alerts:", alertsError);
+      }
 
-    if (!response || !response.vacancy_alerts) {
-      console.error("No response or alert data found");
-      return;
-    }
-
-    const alert = response.vacancy_alerts;
-    const officer = response.profiles;
-
-    console.log("Adding officer to shift as extra assignment:", {
-      officer: officer?.full_name,
-      officerId: response.officer_id,
-      shift: alert.shift_types?.name,
-      shiftTypeId: alert.shift_type_id,
-      date: alert.date
-    });
-
-    // EXACTLY match your scheduler's "Add Officer" function
-    const { error: exceptionError } = await supabase
-      .from("schedule_exceptions")
-      .insert({
-        officer_id: response.officer_id,
-        shift_type_id: alert.shift_type_id,
-        date: alert.date,
-        is_off: false, // Working shift (not PTO)
-        position_name: "Extra Shift", // Same as your scheduler
-        unit_number: null, // Can be set later by supervisor if needed
-        notes: `Approved vacancy request - ID: ${responseId}`,
-        created_by: userId,
-        custom_start_time: null,
-        custom_end_time: null
-        // Note: No is_extra_shift field since your scheduler doesn't use it
+      // Combine data
+      const combinedData = responsesData.map(response => {
+        const alertId = response.alert_id || response.vacancy_alert_id;
+        const alert = alertsData?.find(a => a.id === alertId);
+        
+        return {
+          ...response,
+          vacancy_alerts: alert
+        };
       });
 
-    if (exceptionError) {
-      console.error("Error creating schedule exception:", exceptionError);
-      throw exceptionError;
+      console.log("📋 Final officer responses:", combinedData);
+      return combinedData;
+    },
+  });
+
+  // Function to add officer to shift as an extra assignment - MATCHES SCHEDULER EXACTLY
+  const addOfficerToShift = async (responseId: string) => {
+    try {
+      // Get the response details with alert information
+      const { data: response, error: responseError } = await supabase
+        .from("vacancy_responses")
+        .select(`
+          *,
+          vacancy_alerts(
+            date,
+            shift_type_id,
+            shift_types(
+              name,
+              start_time,
+              end_time
+            )
+          ),
+          profiles!vacancy_responses_officer_id_fkey(
+            full_name,
+            badge_number
+          )
+        `)
+        .eq("id", responseId)
+        .single();
+
+      if (responseError) {
+        console.error("Error fetching response details:", responseError);
+        throw responseError;
+      }
+
+      if (!response || !response.vacancy_alerts) {
+        console.error("No response or alert data found");
+        return;
+      }
+
+      const alert = response.vacancy_alerts;
+      const officer = response.profiles;
+
+      console.log("Adding officer to shift as extra assignment:", {
+        officer: officer?.full_name,
+        officerId: response.officer_id,
+        shift: alert.shift_types?.name,
+        shiftTypeId: alert.shift_type_id,
+        date: alert.date
+      });
+
+      // EXACTLY match your scheduler's "Add Officer" function
+      const { error: exceptionError } = await supabase
+        .from("schedule_exceptions")
+        .insert({
+          officer_id: response.officer_id,
+          shift_type_id: alert.shift_type_id,
+          date: alert.date,
+          is_off: false, // Working shift (not PTO)
+          position_name: "Extra Shift", // Same as your scheduler
+          unit_number: null, // Can be set later by supervisor if needed
+          notes: `Approved vacancy request - ID: ${responseId}`,
+          created_by: userId,
+          custom_start_time: null,
+          custom_end_time: null
+          // Note: No is_extra_shift field since your scheduler doesn't use it
+        });
+
+      if (exceptionError) {
+        console.error("Error creating schedule exception:", exceptionError);
+        throw exceptionError;
+      }
+
+      console.log("Successfully added officer to shift as extra assignment");
+
+      // Optional: Send a confirmation notification
+      await sendShiftAssignmentNotification(response.officer_id, alert);
+
+    } catch (error) {
+      console.error("Error in addOfficerToShift:", error);
+      throw error;
     }
+  };
 
-    console.log("Successfully added officer to shift as extra assignment");
+  // Optional: Send notification about the shift assignment
+  const sendShiftAssignmentNotification = async (officerId: string, alert: any) => {
+    try {
+      const shiftName = alert.shift_types?.name || "Unknown Shift";
+      const date = alert.date ? format(new Date(alert.date), "EEEE, MMM d, yyyy") : "Unknown Date";
+      
+      const { error } = await supabase.rpc('create_vacancy_notification', {
+        officer_id: officerId,
+        notification_title: "Extra Shift Assignment Confirmed",
+        notification_message: `You have been assigned to ${shiftName} on ${date} as an extra shift. This assignment was approved from your vacancy alert response.`,
+        notification_type: 'shift_assignment'
+      });
 
-    // Optional: Send a confirmation notification
-    await sendShiftAssignmentNotification(response.officer_id, alert);
-
-  } catch (error) {
-    console.error("Error in addOfficerToShift:", error);
-    throw error;
-  }
-};
-
-// Optional: Send notification about the shift assignment
-const sendShiftAssignmentNotification = async (officerId: string, alert: any) => {
-  try {
-    const shiftName = alert.shift_types?.name || "Unknown Shift";
-    const date = alert.date ? format(new Date(alert.date), "EEEE, MMM d, yyyy") : "Unknown Date";
-    
-    const { error } = await supabase.rpc('create_vacancy_notification', {
-      officer_id: officerId,
-      notification_title: "Extra Shift Assignment Confirmed",
-      notification_message: `You have been assigned to ${shiftName} on ${date} as an extra shift. This assignment was approved from your vacancy alert response.`,
-      notification_type: 'shift_assignment'
-    });
-
-    if (error) {
-      console.error("Error sending assignment notification:", error);
+      if (error) {
+        console.error("Error sending assignment notification:", error);
+      }
+    } catch (err) {
+      console.error("Error in sendShiftAssignmentNotification:", err);
     }
-  } catch (err) {
-    console.error("Error in sendShiftAssignmentNotification:", err);
-  }
-};
+  };
 
-// Optional: Update vacancy alert staffing count
-const updateVacancyAlertStaffing = async (alertId: string, officerId: string) => {
-  try {
-    // Get current alert data
-    const { data: alert, error: alertError } = await supabase
-      .from("vacancy_alerts")
-      .select("current_staffing, minimum_required")
-      .eq("id", alertId)
-      .single();
+  // Send response notification to officer
+  const sendResponseNotification = async (response: any, status: string, rejectionReason?: string) => {
+    try {
+      const officerId = response.officer_id;
+      const alert = response.vacancy_alerts;
+      const shiftName = alert?.shift_types?.name || "Unknown Shift";
+      const date = alert?.date ? format(new Date(alert.date), "EEEE, MMM d, yyyy") : "Unknown Date";
 
-    if (alertError) {
-      console.error("Error fetching alert data:", alertError);
-      return;
+      let title = "";
+      let message = "";
+
+      if (status === "approved") {
+        title = "Vacancy Request Approved";
+        message = `Your request for ${shiftName} on ${date} has been approved. You have been assigned to this shift.`;
+      } else {
+        title = "Vacancy Request Denied";
+        message = `Your request for ${shiftName} on ${date} has been denied.`;
+        if (rejectionReason) {
+          message += ` Reason: ${rejectionReason}`;
+        }
+      }
+
+      const { error } = await supabase.rpc('create_vacancy_notification', {
+        officer_id: officerId,
+        notification_title: title,
+        notification_message: message,
+        notification_type: 'vacancy_response'
+      });
+
+      if (error) {
+        console.error("Error sending response notification:", error);
+      }
+    } catch (err) {
+      console.error("Error in sendResponseNotification:", err);
     }
+  };
 
-    // Increment current staffing by 1
-    const newStaffing = (alert.current_staffing || 0) + 1;
-    
-    const { error: updateError } = await supabase
-      .from("vacancy_alerts")
-      .update({
-        current_staffing: newStaffing,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", alertId);
+  // Mutation for approving/denying responses - with automatic shift assignment
+  const updateResponseMutation = useMutation({
+    mutationFn: async ({ 
+      responseId, 
+      status, 
+      rejectionReason 
+    }: { 
+      responseId: string; 
+      status: string; 
+      rejectionReason?: string;
+    }) => {
+      // Map UI status to database values
+      const dbStatus = status === "approved" ? "accepted" : "rejected";
 
-    if (updateError) {
-      console.error("Error updating alert staffing:", updateError);
-    } else {
-      console.log(`Updated alert staffing to ${newStaffing}`);
+      const updateData: any = {
+        status: dbStatus,
+        approved_by: userId,
+        approved_at: new Date().toISOString()
+      };
+
+      if (rejectionReason) {
+        updateData.rejection_reason = rejectionReason;
+      }
+
+      console.log("Updating response with data:", updateData);
+
+      const { error } = await supabase
+        .from("vacancy_responses")
+        .update(updateData)
+        .eq("id", responseId);
+
+      if (error) {
+        console.error("Supabase update error:", error);
+        throw error;
+      }
+
+      // If approved, create a schedule exception to add the officer to the shift
+      if (status === "approved") {
+        await addOfficerToShift(responseId);
+      }
+
+      // Send notification to officer (use our original status for user-friendly messaging)
+      const response = responses?.find(r => r.id === responseId);
+      if (response) {
+        await sendResponseNotification(response, status, rejectionReason);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["understaffed-shifts-detection"] });
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      toast.success("Response updated successfully");
+    },
+    onError: (error) => {
+      console.error("Update response error:", error);
+      toast.error("Failed to update response: " + error.message);
+    },
+  });
+
+  // Get status badge variant
+  const getStatusVariant = (status: string) => {
+    switch (status) {
+      case "interested":
+        return "outline";
+      case "accepted":
+        return "default";
+      case "rejected":
+        return "destructive";
+      default:
+        return "outline";
     }
+  };
 
-  } catch (error) {
-    console.error("Error in updateVacancyAlertStaffing:", error);
-  }
-};
+  // Get status display text
+  const getStatusDisplay = (status: string) => {
+    switch (status) {
+      case "interested":
+        return "Pending";
+      case "accepted":
+        return "Approved";
+      case "rejected":
+        return "Denied";
+      default:
+        return status;
+    }
+  };
 
-// Get status badge variant
-const getStatusVariant = (status: string) => {
-  switch (status) {
-    case "interested":
-      return "outline";
-    case "accepted":
-      return "default";
-    case "rejected":
-      return "destructive";
-    default:
-      return "outline";
-  }
-};
-
-// Get status display text
-const getStatusDisplay = (status: string) => {
-  switch (status) {
-    case "interested":
-      return "Pending";
-    case "accepted":
-      return "Approved";
-    case "rejected":
-      return "Denied";
-    default:
-      return status;
-  }
-};
-
-// Get status icon
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case "interested":
-      return <Clock className="h-3 w-3" />;
-    case "accepted":
-      return <Check className="h-3 w-3" />;
-    case "rejected":
-      return <X className="h-3 w-3" />;
-    default:
-      return <Clock className="h-3 w-3" />;
-  }
-};
+  // Get status icon
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "interested":
+        return <Clock className="h-3 w-3" />;
+      case "accepted":
+        return <Check className="h-3 w-3" />;
+      case "rejected":
+        return <X className="h-3 w-3" />;
+      default:
+        return <Clock className="h-3 w-3" />;
+    }
+  };
 
   // Understaffed Detection Query - FIXED to handle null positions properly
   const { 
@@ -506,7 +505,7 @@ const getStatusIcon = (status: string) => {
             .from("schedule_exceptions")
             .select(`
               *,
-              profiles!inner (
+              profiles!schedule_exceptions_officer_id_fkey (
                 id, 
                 full_name, 
                 badge_number, 
@@ -769,14 +768,98 @@ const getStatusIcon = (status: string) => {
   });
 
   const sendAlertMutation = useMutation({
-  mutationFn: async (alertData: any) => {
-    console.log("Sending alerts for:", alertData);
+    mutationFn: async (alertData: any) => {
+      console.log("Sending alerts for:", alertData);
 
-    // Only send notifications if there's a custom message
-    if (!alertData.custom_message) {
-      console.log("No custom message - skipping notifications");
+      // Only send notifications if there's a custom message
+      if (!alertData.custom_message) {
+        console.log("No custom message - skipping notifications");
+        
+        // Still mark as sent but don't actually send notifications
+        const { error } = await supabase
+          .from("vacancy_alerts")
+          .update({ 
+            notification_sent: true,
+            notified_at: new Date().toISOString()
+          })
+          .eq("id", alertData.alertId);
+
+        if (error) throw error;
+        return;
+      }
+
+      // Get all active officers with their notification preferences
+      const { data: officers, error: officersError } = await supabase
+        .from("profiles")
+        .select("id, email, phone, notification_preferences")
+        .eq('active', true);
+
+      if (officersError) {
+        console.error("Error fetching officers:", officersError);
+        throw officersError;
+      }
+
+      console.log(`Found ${officers?.length || 0} active officers, sending custom message`);
+
+      const emailPromises = [];
+      const textPromises = [];
+
+      // Use only the custom message
+      const alertMessage = alertData.custom_message;
+      const emailSubject = `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types?.name}`;
       
-      // Still mark as sent but don't actually send notifications
+      const emailBody = alertData.custom_message;
+
+      const textMessage = alertData.custom_message;
+
+      // Send notifications to each officer based on their preferences
+      for (const officer of officers || []) {
+        // Use default preferences if none exist
+        const preferences = officer.notification_preferences || { receiveEmails: true, receiveTexts: true };
+        
+        // Send email if enabled and officer has email
+        if (preferences.receiveEmails !== false && officer.email) {
+          emailPromises.push(
+            fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                to: officer.email,
+                subject: emailSubject,
+                message: emailBody,
+                alertId: alertData.alertId
+              }),
+            }).catch(err => {
+              console.error(`Failed to send email to ${officer.email}:`, err);
+            })
+          );
+        }
+
+        // Send text if enabled and officer has phone
+        if (preferences.receiveTexts !== false && officer.phone) {
+          textPromises.push(
+            fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                to: officer.phone,
+                message: textMessage
+              }),
+            }).catch(err => {
+              console.error(`Failed to send text to ${officer.phone}:`, err);
+            })
+          );
+        }
+      }
+
+      // Wait for all notifications to be sent
+      await Promise.all([...emailPromises, ...textPromises]);
+      
+      // Update alert status to indicate notification was sent
       const { error } = await supabase
         .from("vacancy_alerts")
         .update({ 
@@ -786,101 +869,17 @@ const getStatusIcon = (status: string) => {
         .eq("id", alertData.alertId);
 
       if (error) throw error;
-      return;
-    }
-
-    // Get all active officers with their notification preferences
-    const { data: officers, error: officersError } = await supabase
-      .from("profiles")
-      .select("id, email, phone, notification_preferences")
-      .eq('active', true);
-
-    if (officersError) {
-      console.error("Error fetching officers:", officersError);
-      throw officersError;
-    }
-
-    console.log(`Found ${officers?.length || 0} active officers, sending custom message`);
-
-    const emailPromises = [];
-    const textPromises = [];
-
-    // Use only the custom message
-    const alertMessage = alertData.custom_message;
-    const emailSubject = `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types?.name}`;
-    
-    const emailBody = alertData.custom_message;
-
-    const textMessage = alertData.custom_message;
-
-    // Send notifications to each officer based on their preferences
-    for (const officer of officers || []) {
-      // Use default preferences if none exist
-      const preferences = officer.notification_preferences || { receiveEmails: true, receiveTexts: true };
-      
-      // Send email if enabled and officer has email
-      if (preferences.receiveEmails !== false && officer.email) {
-        emailPromises.push(
-          fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: officer.email,
-              subject: emailSubject,
-              message: emailBody,
-              alertId: alertData.alertId
-            }),
-          }).catch(err => {
-            console.error(`Failed to send email to ${officer.email}:`, err);
-          })
-        );
-      }
-
-      // Send text if enabled and officer has phone
-      if (preferences.receiveTexts !== false && officer.phone) {
-        textPromises.push(
-          fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: officer.phone,
-              message: textMessage
-            }),
-          }).catch(err => {
-            console.error(`Failed to send text to ${officer.phone}:`, err);
-          })
-        );
-      }
-    }
-
-    // Wait for all notifications to be sent
-    await Promise.all([...emailPromises, ...textPromises]);
-    
-    // Update alert status to indicate notification was sent
-    const { error } = await supabase
-      .from("vacancy_alerts")
-      .update({ 
-        notification_sent: true,
-        notified_at: new Date().toISOString()
-      })
-      .eq("id", alertData.alertId);
-
-    if (error) throw error;
-  },
-  onSuccess: () => {
-    toast.success("Alerts sent successfully to all officers");
-    queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
-    queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
-  },
-  onError: (error) => {
-    console.error("Send alert error:", error);
-    toast.error("Failed to send alerts: " + error.message);
-  },
-});
+    },
+    onSuccess: () => {
+      toast.success("Alerts sent successfully to all officers");
+      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+    },
+    onError: (error) => {
+      console.error("Send alert error:", error);
+      toast.error("Failed to send alerts: " + error.message);
+    },
+  });
 
   const isAlertCreated = (shift: any) => {
     return existingAlerts?.some(alert => 
@@ -1051,7 +1050,7 @@ const getStatusIcon = (status: string) => {
         </Button>
       </div>
 
-       {/* Officer Responses with Approval Workflow */}
+      {/* Officer Responses with Approval Workflow */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1083,7 +1082,7 @@ const getStatusIcon = (status: string) => {
                             className="flex items-center gap-1 capitalize"
                           >
                             {getStatusIcon(response.status)}
-                            {response.status}
+                            {getStatusDisplay(response.status)}
                           </Badge>
                         </div>
                         
@@ -1093,7 +1092,7 @@ const getStatusIcon = (status: string) => {
                         
                         {response.approved_by && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            {response.status === "approved" ? "Approved" : "Denied"} on{" "}
+                            {response.status === "accepted" ? "Approved" : "Denied"} on{" "}
                             {format(new Date(response.approved_at), "MMM d, yyyy 'at' h:mm a")}
                           </p>
                         )}
@@ -1582,8 +1581,6 @@ const getStatusIcon = (status: string) => {
           </div>
         </DialogContent>
       </Dialog>
-
-                 
     </div>
   );
 };
