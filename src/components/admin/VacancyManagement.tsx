@@ -25,7 +25,10 @@ export const VacancyManagement = () => {
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
   const queryClient = useQueryClient();
-  const [customMessage, setCustomMessage] = useState("");
+  //const [customMessage, setCustomMessage] = useState("");
+  const [showCustomMessageDialog, setShowCustomMessageDialog] = useState(false);
+  const [selectedShiftForCustomMessage, setSelectedShiftForCustomMessage] = useState<any>(null);
+  const [detectionCustomMessage, setDetectionCustomMessage] = useState("");
 
   // Add real-time subscription for vacancy alerts
   useEffect(() => {
@@ -533,18 +536,39 @@ const handleCreateManualAlert = () => {
   };
 
   const handleCreateAlertFromDetection = (shift: any) => {
-  console.log("Creating alert from detection:", shift);
+  console.log("Opening custom message dialog for shift:", shift);
   
-  // You could add a prompt for custom message here, or use a default
-  const defaultMessage = `Urgent: ${shift.shift_types?.name} shift needs ${shift.minimum_required - shift.current_staffing} more officers on ${format(new Date(shift.date), "MMM d")}`;
+  // Store the shift and show custom message dialog
+  setSelectedShiftForCustomMessage(shift);
+  setDetectionCustomMessage(""); // Reset any previous message
+  setShowCustomMessageDialog(true);
+};
   
+  const handleConfirmDetectionAlert = () => {
+  if (!selectedShiftForCustomMessage) {
+    toast.error("No shift selected");
+    return;
+  }
+
+  // Create default message if custom message is empty
+  const finalMessage = detectionCustomMessage.trim() || 
+    `Urgent: ${selectedShiftForCustomMessage.minimum_required - selectedShiftForCustomMessage.current_staffing} more officers needed for ${selectedShiftForCustomMessage.shift_types?.name} shift on ${format(new Date(selectedShiftForCustomMessage.date), "MMM d")}`;
+
   createAlertMutation.mutate({
-    shift_type_id: shift.shift_type_id,
-    date: shift.date,
-    current_staffing: shift.current_staffing,
-    minimum_required: shift.minimum_required,
-    custom_message: defaultMessage
+    shift_type_id: selectedShiftForCustomMessage.shift_type_id,
+    date: selectedShiftForCustomMessage.date,
+    current_staffing: selectedShiftForCustomMessage.current_staffing,
+    minimum_required: selectedShiftForCustomMessage.minimum_required,
+    custom_message: finalMessage
+  }, {
+    onSuccess: () => {
+      setShowCustomMessageDialog(false);
+      setSelectedShiftForCustomMessage(null);
+      setDetectionCustomMessage("");
+      toast.success("Vacancy alert created with custom message");
+    }
   });
+};
 };
 
   const handleCreateAllAlerts = () => {
