@@ -229,36 +229,56 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
                     {!isAdminOrSupervisor && (
                       <div className="flex gap-2">
                         {userResponse ? (
-                          <Badge variant="outline" className="capitalize">
-                            You responded: {userResponse.status}
-                          </Badge>
-                        ) : (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                respondMutation.mutate({
-                                  alertId: alert.id,
-                                  status: "interested",
-                                })
-                              }
-                              disabled={respondMutation.isPending || isStaffed}
-                            >
-                              {respondMutation.isPending ? "Submitting..." : "I'm Available"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                respondMutation.mutate({
-                                  alertId: alert.id,
-                                  status: "not_available",
-                                })
-                              }
-                              disabled={respondMutation.isPending}
-                            >
-                              Not Available
-                            </Button>
+  <div className="space-y-2">
+    <Badge 
+      variant={
+        userResponse.status === "accepted" ? "default" :
+        userResponse.status === "rejected" ? "destructive" : "outline"
+      }
+      className="capitalize"
+    >
+      {userResponse.status === "accepted" ? "Approved" :
+       userResponse.status === "rejected" ? "Not Approved" :
+       "Pending Review"}
+    </Badge>
+    
+    {/* Show approval message when approved */}
+    {userResponse.status === "accepted" && (
+      <div className="p-2 bg-green-50 border border-green-200 rounded text-sm">
+        <p className="text-green-800 font-medium">✓ Your request has been approved</p>
+        <p className="text-green-700 mt-1">
+          Your request for {alert.shift_types?.name} on {format(new Date(alert.date), "MMM d, yyyy")} has been approved. 
+          Please report for duty as scheduled.
+        </p>
+      </div>
+    )}
+    
+    {/* Show rejection message when denied */}
+    {userResponse.status === "rejected" && userResponse.rejection_reason && (
+      <div className="p-2 bg-red-50 border border-red-200 rounded text-sm">
+        <p className="text-red-800 font-medium">✗ Your request was not approved</p>
+        <p className="text-red-700 mt-1">
+          {userResponse.rejection_reason}
+        </p>
+      </div>
+    )}
+  </div>
+) : (
+  <>
+    <Button
+      size="sm"
+      onClick={() =>
+        respondMutation.mutate({
+          alertId: alert.id,
+          status: "interested",
+        })
+      }
+      disabled={respondMutation.isPending || isStaffed}
+    >
+      {respondMutation.isPending ? "Submitting..." : "I'm Available"}
+    </Button>
+  </>
+)}
                           </>
                         )}
                       </div>
