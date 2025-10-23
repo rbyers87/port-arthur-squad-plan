@@ -287,7 +287,6 @@ const getStatusIcon = (status: string) => {
       return <Clock className="h-3 w-3" />;
   }
 };
-});
 
   // Understaffed Detection Query - FIXED to handle null positions properly
   const { 
