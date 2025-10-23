@@ -235,36 +235,54 @@ const sendResponseNotification = async (
   status: string,
   rejectionReason?: string
 ) => {
-  const alert = response.vacancy_alerts;
-  const shiftName = alert?.shift_types?.name || "Unknown Shift";
-  const date = alert?.date ? format(new Date(alert.date), "MMM d, yyyy") : "Unknown Date";
+  try {
+    const alert = response.vacancy_alerts;
+    const shiftName = alert?.shift_types?.name || "Unknown Shift";
+    const date = alert?.date ? format(new Date(alert.date), "MMM d, yyyy") : "Unknown Date";
 
-  let title = "";
-  let message = "";
+    let title = "";
+    let message = "";
 
-  if (status === "approved") {
-    title = "Vacancy Response Approved";
-    message = `Your request for ${shiftName} on ${date} has been approved. Please report for duty as scheduled.`;
-  } else if (status === "denied") {
-    title = "Vacancy Response Not Approved";
-    message = `Your request for ${shiftName} on ${date} was not approved.`;
-    if (rejectionReason) {
-      message += ` Reason: ${rejectionReason}`;
+    if (status === "approved") {
+      title = "Vacancy Response Approved";
+      message = `Your request for ${shiftName} on ${date} has been approved. Please report for duty as scheduled.`;
+    } else if (status === "denied") {
+      title = "Vacancy Response Not Approved";
+      message = `Your request for ${shiftName} on ${date} was not approved.`;
+      if (rejectionReason) {
+        message += ` Reason: ${rejectionReason}`;
+      }
     }
-  }
 
-  // Use the database function to bypass RLS
-  const { data, error } = await supabase.rpc('create_vacancy_notification', {
-    officer_id: response.officer_id,
-    notification_title: title,
-    notification_message: message,
-    notification_type: 'vacancy_response_update'
-  });
+    // Use the database function to bypass RLS
+    const { data, error } = await supabase.rpc('create_vacancy_notification', {
+      officer_id: response.officer_id,
+      notification_title: title,
+      notification_message: message,
+      notification_type: 'vacancy_response_update'
+    });
 
-  if (error) {
-    console.error("Error creating notification via function:", error);
-  } else {
-    console.log("Notification created successfully with ID:", data);
+    if (error) {
+      console.error("Error creating notification via function:", error);
+      // Fallback: Try direct insert (might still fail due to RLS)
+      const { error: directError } = await supabase
+        .from("notifications")
+        .insert({
+          officer_id: response.officer_id,
+          title: title,
+          message: message,
+          type: "vacancy_response_update",
+          is_read: false
+        });
+      
+      if (directError) {
+        console.error("Fallback notification also failed:", directError);
+      }
+    } else {
+      console.log("Notification created successfully with ID:", data);
+    }
+  } catch (err) {
+    console.error("Unexpected error in sendResponseNotification:", err);
   }
 };
 
