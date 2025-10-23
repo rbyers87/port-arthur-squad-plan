@@ -104,70 +104,76 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
   });
 
   // FIXED: Updated responses query to properly join with shift_types
+// FIXED: Updated responses query to handle approval workflow
 const { data: responses, refetch: refetchResponses } = useQuery({
   queryKey: ["vacancy-responses-admin"],
   queryFn: async () => {
     console.log("🔄 Fetching officer responses...");
     
-    // First, let's check which column is actually being used in the database
-    const { data: sampleResponse, error: sampleError } = await supabase
-      .from("vacancy_responses")
-      .select("*")
-      .limit(1)
-      .single();
-
-    if (sampleError) {
-      console.error("Error checking response structure:", sampleError);
-    } else {
-      console.log("Sample response structure:", sampleResponse);
-    }
-
-    // Try the first relationship (using alert_id)
-    let query = supabase
+    // Simple query without complex joins
+    const { data: responsesData, error: responsesError } = await supabase
       .from("vacancy_responses")
       .select(`
-        *,
-        profiles(full_name, badge_number),
-        vacancy_alerts!vacancy_responses_alert_id_fkey(
-          date,
-          shift_types(
-            name
-          )
+        id,
+        created_at,
+        status,
+        officer_id,
+        alert_id,
+        vacancy_alert_id,
+        approved_by,
+        approved_at,
+        rejection_reason,
+        profiles!inner(
+          full_name,
+          badge_number
         )
       `)
       .order("created_at", { ascending: false });
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("Error with first relationship, trying second:", error);
-      
-      // Try the second relationship (using vacancy_alert_id)
-      const { data: data2, error: error2 } = await supabase
-        .from("vacancy_responses")
-        .select(`
-          *,
-          profiles(full_name, badge_number),
-          vacancy_alerts!vacancy_responses_vacancy_alert_id_fkey(
-            date,
-            shift_types(
-              name
-            )
-          )
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error2) {
-        console.error("Error with second relationship:", error2);
-        throw error2;
-      }
-
-      console.log("📋 Officer responses (using vacancy_alert_id):", data2);
-      return data2;
+    if (responsesError) {
+      console.error("Error fetching responses:", responsesError);
+      throw responsesError;
     }
 
-    console.log("📋 Officer responses (using alert_id):", data);
-    return data;
+    if (!responsesData || responsesData.length === 0) {
+      return [];
+    }
+
+    // Get alert IDs (use whichever column has data)
+    const alertIds = responsesData
+      .map(r => r.alert_id || r.vacancy_alert_id)
+      .filter(Boolean);
+
+    // Fetch alert details separately
+    const { data: alertsData, error: alertsError } = await supabase
+      .from("vacancy_alerts")
+      .select(`
+        id,
+        date,
+        shift_type_id,
+        shift_types(
+          name
+        )
+      `)
+      .in("id", alertIds);
+
+    if (alertsError) {
+      console.error("Error fetching alerts:", alertsError);
+    }
+
+    // Combine data
+    const combinedData = responsesData.map(response => {
+      const alertId = response.alert_id || response.vacancy_alert_id;
+      const alert = alertsData?.find(a => a.id === alertId);
+      
+      return {
+        ...response,
+        vacancy_alerts: alert
+      };
+    });
+
+    console.log("📋 Final officer responses:", combinedData);
+    return combinedData;
   },
 });
 
