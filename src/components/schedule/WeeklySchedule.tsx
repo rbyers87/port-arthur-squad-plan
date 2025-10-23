@@ -1143,7 +1143,7 @@ const renderExcelStyleWeeklyView = () => {
   );
 };
 
-  // Fixed Monthly View - PROPERLY HANDLES PADDING DAYS
+  // Fixed Monthly View - SHOWS STAFFING FOR ALL DAYS INCLUDING PADDING
 const renderMonthlyView = () => {
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -1188,126 +1188,111 @@ const renderMonthlyView = () => {
           const isCurrentMonthDay = isSameMonth(day, currentMonth);
           const isToday = isSameDay(day, new Date());
           
-          // NEW: Only calculate staffing for current month days
-          // For padding days (previous/next month), don't show staffing status
-          let ptoOfficers = [];
-          let isUnderstaffed = false;
-          let supervisorCount = 0;
-          let officerCount = 0;
-
-          if (isCurrentMonthDay) {
-            // Only calculate for current month days
-            ptoOfficers = daySchedule?.officers.filter((officer: any) => 
-              officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
-            ) || [];
-            
-            supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter((officer: any) => 
-              !officer.shiftInfo?.hasPTO
-            ).length || 0;
-            
-            officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter((officer: any) => {
-              const isSpecialAssignment = officer.shiftInfo?.position && (
-                officer.shiftInfo.position.toLowerCase().includes('other') ||
-                (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
-              );
-              return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-            }).length || 0;
-            
-            const minimumOfficers = minimumStaffing[dayName];
-            const minimumSupervisors = 1;
-            
-            const isOfficersUnderstaffed = officerCount < minimumOfficers;
-            const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
-            isUnderstaffed = isOfficersUnderstaffed || isSupervisorsUnderstaffed;
-          }
+          // Calculate staffing for ALL days (current month AND padding days)
+          const ptoOfficers = daySchedule?.officers.filter((officer: any) => 
+            officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
+          ) || [];
+          
+          const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter((officer: any) => 
+            !officer.shiftInfo?.hasPTO
+          ).length || 0;
+          
+          const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter((officer: any) => {
+            const isSpecialAssignment = officer.shiftInfo?.position && (
+              officer.shiftInfo.position.toLowerCase().includes('other') ||
+              (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
+            );
+            return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+          }).length || 0;
+          
+          const minimumOfficers = minimumStaffing[dayName];
+          const minimumSupervisors = 1;
+          
+          const isOfficersUnderstaffed = officerCount < minimumOfficers;
+          const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
+          const isUnderstaffed = isOfficersUnderstaffed || isSupervisorsUnderstaffed;
 
           return (
             <div
               key={day.toISOString()}
               className={`
                 min-h-32 p-2 border rounded-lg text-sm flex flex-col
-                ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/10 text-muted-foreground'}
+                ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/20 text-muted-foreground'}
                 ${isToday ? 'border-primary ring-2 ring-primary' : 'border-border'}
                 hover:bg-accent/50 transition-colors
-                ${isCurrentMonthDay && isUnderstaffed ? 'bg-red-50 border-red-200' : ''}
+                ${isUnderstaffed ? 'bg-red-50 border-red-200' : ''}
               `}
             >
-              {/* Date header with clickable button - ONLY FOR CURRENT MONTH */}
+              {/* Date header with clickable button - ALL DAYS ARE CLICKABLE */}
               <div className="flex justify-between items-start mb-1">
-                {isCurrentMonthDay ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`
-                      h-6 w-6 p-0 text-xs font-medium hover:bg-primary hover:text-primary-foreground
-                      ${isToday ? 'bg-primary text-primary-foreground' : ''}
-                    `}
-                    onClick={() => navigateToDailySchedule(dateStr)}
-                    title={`View daily schedule for ${format(day, "MMM d, yyyy")}`}
-                  >
-                    {format(day, "d")}
-                  </Button>
-                ) : (
-                  <span className="h-6 w-6 flex items-center justify-center text-xs font-medium text-muted-foreground">
-                    {format(day, "d")}
-                  </span>
-                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`
+                    h-6 w-6 p-0 text-xs font-medium hover:bg-primary hover:text-primary-foreground
+                    ${isToday ? 'bg-primary text-primary-foreground' : ''}
+                    ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}
+                  `}
+                  onClick={() => navigateToDailySchedule(dateStr)}
+                  title={`View daily schedule for ${format(day, "MMM d, yyyy")}`}
+                >
+                  {format(day, "d")}
+                </Button>
                 
-                {/* Staffing badges - ONLY FOR CURRENT MONTH */}
-                {isCurrentMonthDay && (
-                  <div className="flex flex-col gap-1">
-                    {isUnderstaffed && (
-                      <Badge variant="destructive" className="text-xs h-4">
-                        Understaffed
-                      </Badge>
-                    )}
-                    {ptoOfficers.length > 0 && (
-                      <Badge variant="outline" className="text-xs h-4 bg-green-50 text-green-800 border-green-200">
-                        {ptoOfficers.length} PTO
-                      </Badge>
-                    )}
+                {/* Staffing badges - SHOW FOR ALL DAYS */}
+                <div className="flex flex-col gap-1">
+                  {isUnderstaffed && (
+                    <Badge variant="destructive" className="text-xs h-4">
+                      Understaffed
+                    </Badge>
+                  )}
+                  {ptoOfficers.length > 0 && (
+                    <Badge variant="outline" className="text-xs h-4 bg-green-50 text-green-800 border-green-200">
+                      {ptoOfficers.length} PTO
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              {/* PTO Officers List - SHOW FOR ALL DAYS */}
+              <div className="space-y-1 flex-1 overflow-y-auto">
+                {ptoOfficers.length > 0 ? (
+                  ptoOfficers.map((officer: any) => (
+                    <div 
+                      key={officer.officerId} 
+                      className="text-xs p-1 bg-green-50 rounded border border-green-200"
+                    >
+                      <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-green-700' : 'text-green-800'}`}>
+                        {getLastName(officer.officerName)}
+                      </div>
+                      <div className={`truncate text-[10px] ${!isCurrentMonthDay ? 'text-green-500' : 'text-green-600'}`}>
+                        {officer.shiftInfo?.ptoData?.ptoType || 'PTO'}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className={`text-xs text-center py-2 ${!isCurrentMonthDay ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>
+                    No full-day PTO
                   </div>
                 )}
               </div>
               
-              {/* PTO Officers List - ONLY FOR CURRENT MONTH */}
-              {isCurrentMonthDay ? (
-                <div className="space-y-1 flex-1 overflow-y-auto">
-                  {ptoOfficers.length > 0 ? (
-                    ptoOfficers.map((officer: any) => (
-                      <div 
-                        key={officer.officerId} 
-                        className="text-xs p-1 bg-green-50 rounded border border-green-200"
-                      >
-                        <div className="font-medium truncate text-green-800">
-                          {getLastName(officer.officerName)}
-                        </div>
-                        <div className="text-green-600 truncate text-[10px]">
-                          {officer.shiftInfo?.ptoData?.ptoType || 'PTO'}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-xs text-muted-foreground text-center py-2">
-                      No full-day PTO
-                    </div>
+              {/* Understaffing details - SHOW FOR ALL DAYS */}
+              {isUnderstaffed && (
+                <div className={`mt-1 text-[10px] space-y-0.5 ${!isCurrentMonthDay ? 'text-red-500' : 'text-red-600'}`}>
+                  {isSupervisorsUnderstaffed && (
+                    <div>Sup: {supervisorCount}/{minimumSupervisors}</div>
                   )}
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground text-center py-4">
-                  {format(day, "MMM yyyy")}
+                  {isOfficersUnderstaffed && (
+                    <div>Ofc: {officerCount}/{minimumOfficers}</div>
+                  )}
                 </div>
               )}
               
-              {/* Understaffing details - ONLY FOR CURRENT MONTH */}
-              {isCurrentMonthDay && isUnderstaffed && (
-                <div className="mt-1 text-[10px] text-red-600 space-y-0.5">
-                  {supervisorCount < 1 && (
-                    <div>Sup: {supervisorCount}/1</div>
-                  )}
-                  {officerCount < minimumStaffing[dayName] && (
-                    <div>Ofc: {officerCount}/{minimumStaffing[dayName]}</div>
-                  )}
+              {/* Month indicator for padding days */}
+              {!isCurrentMonthDay && (
+                <div className="text-[8px] text-muted-foreground text-center mt-1">
+                  {format(day, "MMM")}
                 </div>
               )}
             </div>
