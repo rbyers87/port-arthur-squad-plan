@@ -871,11 +871,11 @@ const allOfficers = [...recurringOfficers, ...additionalOfficers].map(officer =>
     <div>
       <p className="font-medium truncate">{officer.name}</p>
       <p className="text-xs text-muted-foreground">
-        {officer.rank || 'Officer'} • Badge #{officer.badge}
-        {(officer.type === "exception" || officer.isExtraShift) && (
-          <span className="ml-2 text-orange-600 font-medium">(Extra Shift)</span> {/* Changed from "Added Shift" to "Extra Shift" */}
-        )}
-      </p>
+  {officer.rank || 'Officer'} • Badge #{officer.badge}
+  {(officer.type === "exception" || officer.isExtraShift) && (
+    <span className="ml-2 text-orange-600 font-medium">(Extra Shift)</span>
+  )}
+</p>
     </div>
   </div>
   <div className="flex items-center gap-2 text-sm text-muted-foreground">
