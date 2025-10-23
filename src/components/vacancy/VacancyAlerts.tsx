@@ -35,19 +35,19 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
   });
 
   // Fetch user responses - include rejection_reason
-  const { data: userResponses } = useQuery({
-    queryKey: ["vacancy-responses", userId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vacancy_responses")
-        .select("alert_id, status, rejection_reason")
-        .eq("officer_id", userId);
+const { data: userResponses, refetch: refetchResponses } = useQuery({
+  queryKey: ["vacancy-responses", userId],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("vacancy_responses")
+      .select("alert_id, status, rejection_reason")
+      .eq("officer_id", userId);
 
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!userId && !isAdminOrSupervisor,
-  });
+    if (error) throw error;
+    return data;
+  },
+  enabled: !!userId && !isAdminOrSupervisor,
+});
 
   // Fetch notifications for the current user
   const { data: notifications } = useQuery({
