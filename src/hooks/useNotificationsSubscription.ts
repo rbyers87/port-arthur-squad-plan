@@ -24,7 +24,7 @@ export const useNotificationsSubscription = (userId: string) => {
           // Invalidate notifications query to refresh the list
           queryClient.invalidateQueries({ queryKey: ['notifications'] });
           
-          // Also show a toast notification
+          // Show a toast notification for new alerts
           import('sonner').then(({ toast }) => {
             toast.info(`New alert: ${payload.new.title}`, {
               description: payload.new.message,
