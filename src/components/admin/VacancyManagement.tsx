@@ -435,13 +435,15 @@ const handleCreateManualAlert = () => {
     shift_type_id: selectedShift,
     date: format(selectedDate, "yyyy-MM-dd"),
     current_staffing: 0,
-    minimum_required: parseInt(minimumRequired)
+    minimum_required: parseInt(minimumRequired),
+    custom_message: customMessage // Add custom message
   }, {
     onSuccess: () => {
       setDialogOpen(false);
       setSelectedDate(undefined);
       setSelectedShift(undefined);
       setMinimumRequired("2");
+      setCustomMessage(""); // Reset custom message
     }
   });
 };
