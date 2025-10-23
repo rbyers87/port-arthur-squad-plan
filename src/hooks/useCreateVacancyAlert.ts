@@ -12,74 +12,41 @@ export const useCreateVacancyAlert = () => {
       current_staffing: number;
       minimum_required: number;
     }) => {
-      // First create the vacancy alert
-      const { data: vacancy, error: vacancyError } = await supabase
+      console.log("Creating vacancy alert via function:", vacancyData);
+
+      // Use the database function that bypasses RLS
+      const { data: vacancyId, error } = await supabase.rpc('create_vacancy_alert_with_notifications', {
+        p_shift_type_id: vacancyData.shift_type_id,
+        p_date: vacancyData.date,
+        p_current_staffing: vacancyData.current_staffing,
+        p_minimum_required: vacancyData.minimum_required
+      });
+
+      if (error) {
+        console.error("Database function error:", error);
+        throw error;
+      }
+
+      console.log("Vacancy created successfully with ID:", vacancyId);
+
+      // Fetch the complete vacancy data to return
+      const { data: vacancy, error: fetchError } = await supabase
         .from("vacancy_alerts")
-        .insert([{
-          ...vacancyData,
-          status: "open"
-        }])
-        .select()
+        .select("*, shift_types(name, start_time, end_time)")
+        .eq("id", vacancyId)
         .single();
 
-      if (vacancyError) {
-        console.error("Vacancy creation error:", vacancyError);
-        throw vacancyError;
-      }
-
-      // Get shift type info for the notification
-      const { data: shiftType, error: shiftError } = await supabase
-        .from("shift_types")
-        .select("name")
-        .eq("id", vacancyData.shift_type_id)
-        .single();
-
-      if (shiftError) {
-        console.error("Shift type fetch error:", shiftError);
-        // Continue even if shift type fetch fails
-      }
-
-      // Get all officers to notify
-      const { data: officers, error: officersError } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("role", "officer");
-
-      if (officersError) {
-        console.error("Officers fetch error:", officersError);
-        throw officersError;
-      }
-
-      // Create notifications for each officer individually
-      if (officers && officers.length > 0) {
-        const notifications = officers.map(officer => ({
-          officer_id: officer.id,
-          title: "New Vacancy Alert",
-          message: `New shift vacancy for ${shiftType?.name || 'Unknown Shift'} on ${new Date(vacancyData.date).toLocaleDateString()}`,
-          type: "vacancy",
-          related_vacancy_id: vacancy.id,
-        }));
-
-        // Insert notifications in batches to avoid overwhelming the database
-        const batchSize = 10;
-        for (let i = 0; i < notifications.length; i += batchSize) {
-          const batch = notifications.slice(i, i + batchSize);
-          const { error: notifyError } = await supabase
-            .from("notifications")
-            .insert(batch);
-
-          if (notifyError) {
-            console.error(`Notification batch ${i/batchSize + 1} error:`, notifyError);
-            // Continue with other batches even if one fails
-          }
-        }
+      if (fetchError) {
+        console.error("Error fetching created vacancy:", fetchError);
+        throw fetchError;
       }
 
       return vacancy;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
-      toast.success("Vacancy alert created and notifications sent");
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      toast.success("Vacancy alert created and notifications sent to all officers");
     },
     onError: (error: any) => {
       console.error("Create vacancy error:", error);
