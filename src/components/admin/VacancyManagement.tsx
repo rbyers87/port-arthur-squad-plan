@@ -873,47 +873,49 @@ const handleCreateManualAlert = () => {
     : "Time not available";
 
   return (
-    <div key={alert.id} className="p-4 border rounded-lg space-y-2">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <p className="font-medium">{shiftName}</p>
+  <div key={alert.id} className="p-4 border rounded-lg space-y-2">
+    <div className="flex items-start justify-between">
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-2">
+          <p className="font-medium">{shiftName}</p>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
+        </p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Staffing: {alert.current_staffing} / {alert.minimum_required}
+        </p>
+        {/* Add custom message display */}
+        {alert.custom_message && (
+          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+            <p className="text-sm text-blue-800">{alert.custom_message}</p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Staffing: {alert.current_staffing} / {alert.minimum_required}
-          </p>
-          {/* Add custom message display */}
-          {alert.custom_message && (
-            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
-              <p className="text-sm text-blue-800">{alert.custom_message}</p>
-            </div>
-                      <div className="flex flex-col items-end gap-2 ml-4">
-                        <span
-                          className={cn(
-                            "text-xs px-2 py-1 rounded",
-                            alert.status === "open"
-                              ? "bg-green-500/10 text-green-700"
-                              : "bg-gray-500/10 text-gray-700"
-                          )}
-                        >
-                          {alert.status}
-                        </span>
-                        {alert.status === "open" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => closeAlertMutation.mutate(alert.id)}
-                          >
-                            Close Alert
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
+        )}
+      </div> {/* This closes the flex-1 div */}
+      <div className="flex flex-col items-end gap-2 ml-4">
+        <span
+          className={cn(
+            "text-xs px-2 py-1 rounded",
+            alert.status === "open"
+              ? "bg-green-500/10 text-green-700"
+              : "bg-gray-500/10 text-gray-700"
+          )}
+        >
+          {alert.status}
+        </span>
+        {alert.status === "open" && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => closeAlertMutation.mutate(alert.id)}
+          >
+            Close Alert
+          </Button>
+        )}
+      </div>
+    </div>
+  </div>
+);
               })}
             </div>
           )}
