@@ -175,7 +175,9 @@ const { data: responses, refetch: refetchResponses } = useQuery({
     console.log("📋 Final officer responses:", combinedData);
     return combinedData;
   },
-  // Mutation for approving/denying responses
+}); // <-- CLOSING BRACE AND PAREN FOR THE RESPONSES QUERY
+
+// Mutation for approving/denying responses
 const updateResponseMutation = useMutation({
   mutationFn: async ({ 
     responseId, 
