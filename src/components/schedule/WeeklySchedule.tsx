@@ -80,29 +80,7 @@ const rankOrder = {
   'Officer': 5
 };
 
-// ADD THE NAVIGATION FUNCTION RIGHT HERE - after rankOrder but before sortSupervisorsByRank
-const navigateToDailySchedule = (dateStr: string) => {
-  // You'll need to implement this based on your navigation setup
-  // For now, we'll show a toast and log to console
-  console.log("Navigate to daily schedule for:", dateStr);
-  toast.info(`Navigating to daily schedule for ${format(parseISO(dateStr), "MMM d, yyyy")}`);
-  
-  // If using React Router, you would do:
-  // navigate(`/daily-schedule?date=${dateStr}`);
-  
-  // If using state to switch views, you would do:
-  // setSelectedDate(dateStr);
-  // setActiveTab('daily'); // assuming you have a daily schedule tab
-};
 
-// Function to sort supervisors by rank ONLY (same as daily schedule)
-const sortSupervisorsByRank = (supervisors: any[]) => {
-  return supervisors.sort((a, b) => {
-    const rankA = a.rank || 'Officer';
-    const rankB = b.rank || 'Officer';
-    return (rankOrder[rankA as keyof typeof rankOrder] || 99) - (rankOrder[rankB as keyof typeof rankOrder] || 99);
-  });
-};
   
 
   // Add mutation for removing extra shifts (same as DailyScheduleView)
@@ -159,14 +137,29 @@ const sortSupervisorsByRank = (supervisors: any[]) => {
     return fullName.split(' ').pop() || fullName;
   };
 
-  // Function to sort supervisors by rank ONLY (same as daily schedule)
-  const sortSupervisorsByRank = (supervisors: any[]) => {
-    return supervisors.sort((a, b) => {
-      const rankA = a.rank || 'Officer';
-      const rankB = b.rank || 'Officer';
-      return (rankOrder[rankA as keyof typeof rankOrder] || 99) - (rankOrder[rankB as keyof typeof rankOrder] || 99);
-    });
-  };
+// ADD THE NAVIGATION FUNCTION RIGHT HERE - after rankOrder but before sortSupervisorsByRank
+const navigateToDailySchedule = (dateStr: string) => {
+  // You'll need to implement this based on your navigation setup
+  // For now, we'll show a toast and log to console
+  console.log("Navigate to daily schedule for:", dateStr);
+  toast.info(`Navigating to daily schedule for ${format(parseISO(dateStr), "MMM d, yyyy")}`);
+  
+  // If using React Router, you would do:
+  // navigate(`/daily-schedule?date=${dateStr}`);
+  
+  // If using state to switch views, you would do:
+  // setSelectedDate(dateStr);
+  // setActiveTab('daily'); // assuming you have a daily schedule tab
+};
+
+// Function to sort supervisors by rank ONLY (same as daily schedule)
+const sortSupervisorsByRank = (supervisors: any[]) => {
+  return supervisors.sort((a, b) => {
+    const rankA = a.rank || 'Officer';
+    const rankB = b.rank || 'Officer';
+    return (rankOrder[rankA as keyof typeof rankOrder] || 99) - (rankOrder[rankB as keyof typeof rankOrder] || 99);
+  });
+};
 
   // Function to categorize and sort officers (same as daily schedule)
   const categorizeAndSortOfficers = (officers: any[]) => {
