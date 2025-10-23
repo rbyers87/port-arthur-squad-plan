@@ -104,17 +104,51 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
   });
 
   // FIXED: Updated responses query to properly join with shift_types
-  const { data: responses, refetch: refetchResponses } = useQuery({
-    queryKey: ["vacancy-responses-admin"],
-    queryFn: async () => {
-      console.log("🔄 Fetching officer responses...");
+const { data: responses, refetch: refetchResponses } = useQuery({
+  queryKey: ["vacancy-responses-admin"],
+  queryFn: async () => {
+    console.log("🔄 Fetching officer responses...");
+    
+    // First, let's check which column is actually being used in the database
+    const { data: sampleResponse, error: sampleError } = await supabase
+      .from("vacancy_responses")
+      .select("*")
+      .limit(1)
+      .single();
+
+    if (sampleError) {
+      console.error("Error checking response structure:", sampleError);
+    } else {
+      console.log("Sample response structure:", sampleResponse);
+    }
+
+    // Try the first relationship (using alert_id)
+    let query = supabase
+      .from("vacancy_responses")
+      .select(`
+        *,
+        profiles(full_name, badge_number),
+        vacancy_alerts!vacancy_responses_alert_id_fkey(
+          date,
+          shift_types(
+            name
+          )
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error with first relationship, trying second:", error);
       
-      const { data, error } = await supabase
+      // Try the second relationship (using vacancy_alert_id)
+      const { data: data2, error: error2 } = await supabase
         .from("vacancy_responses")
         .select(`
           *,
           profiles(full_name, badge_number),
-          vacancy_alerts(
+          vacancy_alerts!vacancy_responses_vacancy_alert_id_fkey(
             date,
             shift_types(
               name
@@ -123,15 +157,19 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         `)
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Error fetching responses:", error);
-        throw error;
+      if (error2) {
+        console.error("Error with second relationship:", error2);
+        throw error2;
       }
 
-      console.log("📋 Officer responses:", data);
-      return data;
-    },
-  });
+      console.log("📋 Officer responses (using vacancy_alert_id):", data2);
+      return data2;
+    }
+
+    console.log("📋 Officer responses (using alert_id):", data);
+    return data;
+  },
+});
 
   // Understaffed Detection Query - FIXED to handle null positions properly
   const { 
