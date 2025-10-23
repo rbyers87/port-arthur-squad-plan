@@ -17,7 +17,12 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCreateVacancyAlert } from "@/hooks/useCreateVacancyAlert";
 
-export const VacancyManagement = () => {
+interface VacancyManagementProps {
+  isOfficerView?: boolean;
+  userId?: string;
+}
+
+export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyManagementProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedShift, setSelectedShift] = useState<string>();
@@ -98,18 +103,32 @@ export const VacancyManagement = () => {
     gcTime: 5 * 60 * 1000,
   });
 
+  // FIXED: Updated responses query to properly join with shift_types
   const { data: responses, refetch: refetchResponses } = useQuery({
     queryKey: ["vacancy-responses-admin"],
     queryFn: async () => {
+      console.log("🔄 Fetching officer responses...");
+      
       const { data, error } = await supabase
         .from("vacancy_responses")
         .select(`
           *,
           profiles(full_name, badge_number),
-          vacancy_alerts(date, shift_types(name))
+          vacancy_alerts(
+            date,
+            shift_types(
+              name
+            )
+          )
         `)
         .order("created_at", { ascending: false });
-      if (error) throw error;
+
+      if (error) {
+        console.error("Error fetching responses:", error);
+        throw error;
+      }
+
+      console.log("📋 Officer responses:", data);
       return data;
     },
   });
@@ -468,111 +487,111 @@ export const VacancyManagement = () => {
   });
 
   const sendAlertMutation = useMutation({
-  mutationFn: async (alertData: any) => {
-    console.log("Sending alerts for:", alertData);
+    mutationFn: async (alertData: any) => {
+      console.log("Sending alerts for:", alertData);
 
-    // Get all active officers with their notification preferences
-    const { data: officers, error: officersError } = await supabase
-      .from("profiles")
-      .select("id, email, phone, notification_preferences")
-      .eq('active', true);
+      // Get all active officers with their notification preferences
+      const { data: officers, error: officersError } = await supabase
+        .from("profiles")
+        .select("id, email, phone, notification_preferences")
+        .eq('active', true);
 
-    if (officersError) {
-      console.error("Error fetching officers:", officersError);
-      throw officersError;
-    }
+      if (officersError) {
+        console.error("Error fetching officers:", officersError);
+        throw officersError;
+      }
 
-    console.log(`Found ${officers?.length || 0} active officers`);
+      console.log(`Found ${officers?.length || 0} active officers`);
 
-    const emailPromises = [];
-    const textPromises = [];
+      const emailPromises = [];
+      const textPromises = [];
 
-    // Prepare the alert message
-    const alertMessage = alertData.custom_message || 
-      `Urgent: ${alertData.minimum_required - alertData.current_staffing} more officers needed for ${alertData.shift_types?.name} shift on ${format(new Date(alertData.date), "MMM d")}`;
+      // Prepare the alert message
+      const alertMessage = alertData.custom_message || 
+        `Urgent: ${alertData.minimum_required - alertData.current_staffing} more officers needed for ${alertData.shift_types?.name} shift on ${format(new Date(alertData.date), "MMM d")}`;
 
-    const emailSubject = `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types?.name}`;
-    const emailBody = `
-A shift vacancy has been identified:
+      const emailSubject = `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types?.name}`;
+      const emailBody = `
+  A shift vacancy has been identified:
 
-Date: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}
-Shift: ${alertData.shift_types?.name} (${alertData.shift_types?.start_time} - ${alertData.shift_types?.end_time})
-Current Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}
-Message: ${alertMessage}
+  Date: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}
+  Shift: ${alertData.shift_types?.name} (${alertData.shift_types?.start_time} - ${alertData.shift_types?.end_time})
+  Current Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}
+  Message: ${alertMessage}
 
-Please respond through the scheduling system if available.
-`;
+  Please respond through the scheduling system if available.
+  `;
 
-    const textMessage = `Vacancy Alert: ${format(new Date(alertData.date), "MMM d")} - ${alertData.shift_types?.name}. ${alertMessage}. Respond in app.`;
+      const textMessage = `Vacancy Alert: ${format(new Date(alertData.date), "MMM d")} - ${alertData.shift_types?.name}. ${alertMessage}. Respond in app.`;
 
-    // Send notifications to each officer based on their preferences
-    for (const officer of officers || []) {
-      // Use default preferences if none exist
-      const preferences = officer.notification_preferences || { receiveEmails: true, receiveTexts: true };
+      // Send notifications to each officer based on their preferences
+      for (const officer of officers || []) {
+        // Use default preferences if none exist
+        const preferences = officer.notification_preferences || { receiveEmails: true, receiveTexts: true };
+        
+        // Send email if enabled and officer has email
+        if (preferences.receiveEmails !== false && officer.email) {
+          emailPromises.push(
+            fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                to: officer.email,
+                subject: emailSubject,
+                message: emailBody,
+                alertId: alertData.alertId
+              }),
+            }).catch(err => {
+              console.error(`Failed to send email to ${officer.email}:`, err);
+            })
+          );
+        }
+
+        // Send text if enabled and officer has phone
+        if (preferences.receiveTexts !== false && officer.phone) {
+          textPromises.push(
+            fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                to: officer.phone,
+                message: textMessage
+              }),
+            }).catch(err => {
+              console.error(`Failed to send text to ${officer.phone}:`, err);
+            })
+          );
+        }
+      }
+
+      // Wait for all notifications to be sent
+      await Promise.all([...emailPromises, ...textPromises]);
       
-      // Send email if enabled and officer has email
-      if (preferences.receiveEmails !== false && officer.email) {
-        emailPromises.push(
-          fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: officer.email,
-              subject: emailSubject,
-              message: emailBody,
-              alertId: alertData.alertId
-            }),
-          }).catch(err => {
-            console.error(`Failed to send email to ${officer.email}:`, err);
-          })
-        );
-      }
+      // Update alert status to indicate notification was sent
+      const { error } = await supabase
+        .from("vacancy_alerts")
+        .update({ 
+          notification_sent: true,
+          notified_at: new Date().toISOString()
+        })
+        .eq("id", alertData.alertId);
 
-      // Send text if enabled and officer has phone
-      if (preferences.receiveTexts !== false && officer.phone) {
-        textPromises.push(
-          fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: officer.phone,
-              message: textMessage
-            }),
-          }).catch(err => {
-            console.error(`Failed to send text to ${officer.phone}:`, err);
-          })
-        );
-      }
-    }
-
-    // Wait for all notifications to be sent
-    await Promise.all([...emailPromises, ...textPromises]);
-    
-    // Update alert status to indicate notification was sent
-    const { error } = await supabase
-      .from("vacancy_alerts")
-      .update({ 
-        notification_sent: true,
-        notified_at: new Date().toISOString()
-      })
-      .eq("id", alertData.alertId);
-
-    if (error) throw error;
-  },
-  onSuccess: () => {
-    toast.success("Alerts sent successfully to all officers");
-    queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
-    queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
-  },
-  onError: (error) => {
-    console.error("Send alert error:", error);
-    toast.error("Failed to send alerts: " + error.message);
-  },
-});
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Alerts sent successfully to all officers");
+      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+    },
+    onError: (error) => {
+      console.error("Send alert error:", error);
+      toast.error("Failed to send alerts: " + error.message);
+    },
+  });
 
   const isAlertCreated = (shift: any) => {
     return existingAlerts?.some(alert => 
@@ -657,6 +676,75 @@ Please respond through the scheduling system if available.
       alertId: alert.id
     });
   };
+
+  // If this is officer view, hide all create alert functionality
+  if (isOfficerView) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold">Vacancy Alerts</h2>
+            <p className="text-sm text-muted-foreground">
+              Last refreshed: {lastRefreshed.toLocaleTimeString()}
+            </p>
+          </div>
+          <Button variant="outline" onClick={handleRefreshAll}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
+
+        {/* Show only existing alerts for officers - no create functionality */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Current Vacancy Alerts</CardTitle>
+            <CardDescription>Open shifts that need coverage</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {alertsLoading ? (
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground">Loading alerts...</p>
+              </div>
+            ) : !alerts || alerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No vacancy alerts at this time.</p>
+            ) : (
+              <div className="space-y-4">
+                {alerts.map((alert) => {
+                  const shiftName = alert.shift_types?.name || `Shift ID: ${alert.shift_type_id}`;
+                  const shiftTime = alert.shift_types 
+                    ? `${alert.shift_types.start_time} - ${alert.shift_types.end_time}`
+                    : "Time not available";
+
+                  return (
+                    <div key={alert.id} className="p-4 border rounded-lg space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <p className="font-medium">{shiftName}</p>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Staffing: {alert.current_staffing} / {alert.minimum_required}
+                          </p>
+                          {alert.custom_message && (
+                            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                              <p className="text-sm text-blue-800">{alert.custom_message}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1089,29 +1177,32 @@ Please respond through the scheduling system if available.
             <p className="text-sm text-muted-foreground">No responses yet.</p>
           ) : (
             <div className="space-y-3">
-              {responses.map((response) => (
-                <div key={response.id} className="p-3 border rounded-lg flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">
-                      {response.profiles?.full_name} (#{response.profiles?.badge_number})
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {response.vacancy_alerts?.shift_types?.name} -{" "}
-                      {format(new Date(response.vacancy_alerts?.date || ""), "MMM d, yyyy")}
-                    </p>
+              {responses.map((response) => {
+                console.log("Response data:", response);
+                return (
+                  <div key={response.id} className="p-3 border rounded-lg flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">
+                        {response.profiles?.full_name} (#{response.profiles?.badge_number})
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {response.vacancy_alerts?.shift_types?.name} -{" "}
+                        {response.vacancy_alerts?.date && format(new Date(response.vacancy_alerts.date), "MMM d, yyyy")}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "text-xs px-2 py-1 rounded capitalize",
+                        response.status === "interested"
+                          ? "bg-green-500/10 text-green-700"
+                          : "bg-red-500/10 text-red-700"
+                      )}
+                    >
+                      {response.status.replace("_", " ")}
+                    </span>
                   </div>
-                  <span
-                    className={cn(
-                      "text-xs px-2 py-1 rounded capitalize",
-                      response.status === "interested"
-                        ? "bg-green-500/10 text-green-700"
-                        : "bg-red-500/10 text-red-700"
-                    )}
-                  >
-                    {response.status.replace("_", " ")}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
