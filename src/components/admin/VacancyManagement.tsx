@@ -103,14 +103,14 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     gcTime: 5 * 60 * 1000,
   });
 
-  // FIXED: Updated responses query to properly join with shift_types
-// FIXED: Updated responses query to handle approval workflow
+ 
+// FIXED: Updated responses query to handle multiple relationships
 const { data: responses, refetch: refetchResponses } = useQuery({
   queryKey: ["vacancy-responses-admin"],
   queryFn: async () => {
     console.log("🔄 Fetching officer responses...");
     
-    // Simple query without complex joins
+    // Specify which relationship to use for profiles (officer_id)
     const { data: responsesData, error: responsesError } = await supabase
       .from("vacancy_responses")
       .select(`
@@ -123,7 +123,7 @@ const { data: responses, refetch: refetchResponses } = useQuery({
         approved_by,
         approved_at,
         rejection_reason,
-        profiles!inner(
+        profiles!vacancy_responses_officer_id_fkey(
           full_name,
           badge_number
         )
@@ -175,7 +175,7 @@ const { data: responses, refetch: refetchResponses } = useQuery({
     console.log("📋 Final officer responses:", combinedData);
     return combinedData;
   },
-}); // <-- CLOSING BRACE AND PAREN FOR THE RESPONSES QUERY
+});
 
 // Mutation for approving/denying responses
 const updateResponseMutation = useMutation({
