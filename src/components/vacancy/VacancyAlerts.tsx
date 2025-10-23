@@ -73,32 +73,69 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     enabled: !!userId,
   });
 
-  // Mutation for responding to vacancies - FIXED: using vacancy_alert_id
-  const respondMutation = useMutation({
-    mutationFn: async ({ alertId, status }: { alertId: string; status: string }) => {
-      console.log("Submitting response for alert:", alertId, "status:", status);
+// Mutation for responding to vacancies - with duplicate check
+const respondMutation = useMutation({
+  mutationFn: async ({ alertId, status }: { alertId: string; status: string }) => {
+    console.log("Submitting response for alert:", alertId, "status:", status);
+    
+    // First, check if the officer has already responded to this alert
+    const { data: existingResponse, error: checkError } = await supabase
+      .from("vacancy_responses")
+      .select("id")
+      .eq("vacancy_alert_id", alertId)
+      .eq("officer_id", userId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 means no rows found
+      console.error("Error checking existing response:", checkError);
+      throw checkError;
+    }
+
+    // If officer already responded, update the existing response
+    if (existingResponse) {
+      console.log("Officer already responded, updating existing response:", existingResponse.id);
       
-      const { error } = await supabase.from("vacancy_responses").insert({
-        vacancy_alert_id: alertId, // Changed to match database column name
+      const { error: updateError } = await supabase
+        .from("vacancy_responses")
+        .update({
+          status: status,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", existingResponse.id);
+
+      if (updateError) {
+        console.error("Supabase update error:", updateError);
+        throw updateError;
+      }
+    } else {
+      // If no existing response, create a new one
+      const { error: insertError } = await supabase.from("vacancy_responses").insert({
+        vacancy_alert_id: alertId,
         officer_id: userId,
-        status,
+        status: status,
       });
 
-      if (error) {
-        console.error("Supabase error:", error);
-        throw error;
+      if (insertError) {
+        console.error("Supabase insert error:", insertError);
+        throw insertError;
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vacancy-responses"] });
-      queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] });
-      toast.success("Response submitted successfully");
-    },
-    onError: (error) => {
-      console.error("Response error:", error);
+    }
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["vacancy-responses"] });
+    queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] });
+    toast.success("Response submitted successfully");
+  },
+  onError: (error) => {
+    console.error("Response error:", error);
+    
+    if (error.code === '23505') {
+      toast.error("You have already submitted a response for this vacancy alert");
+    } else {
       toast.error("Failed to submit response: " + error.message);
-    },
-  });
+    }
+  },
+});
 
   // Mutation for marking notifications as read
   const markAsReadMutation = useMutation({
