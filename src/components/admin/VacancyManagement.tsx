@@ -830,6 +830,20 @@ const handleCreateManualAlert = () => {
                       onChange={(e) => setMinimumRequired(e.target.value)}
                     />
                   </div>
+                  <div className="space-y-2">
+  <Label htmlFor="custom-message">Custom Message (Optional)</Label>
+  <textarea
+    id="custom-message"
+    placeholder="Add a custom message for this vacancy alert (e.g., 'Urgent coverage needed for special event')"
+    value={customMessage}
+    onChange={(e) => setCustomMessage(e.target.value)}
+    className="w-full min-h-[80px] p-2 border rounded-md text-sm resize-y"
+    maxLength={500}
+  />
+  <p className="text-xs text-muted-foreground">
+    {customMessage.length}/500 characters
+  </p>
+</div>
 
                   <Button
   className="w-full"
