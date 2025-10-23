@@ -109,7 +109,7 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     queryFn: async () => {
       console.log("🔄 Fetching officer responses...");
       
-      // Specify which relationship to use for profiles (officer_id)
+      // Use separate queries to avoid relationship conflicts
       const { data: responsesData, error: responsesError } = await supabase
         .from("vacancy_responses")
         .select(`
@@ -143,7 +143,15 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         .map(r => r.alert_id || r.vacancy_alert_id)
         .filter(Boolean);
 
-      // Fetch alert details separately
+      if (alertIds.length === 0) {
+        console.log("No alert IDs found in responses");
+        return responsesData.map(response => ({
+          ...response,
+          vacancy_alerts: null
+        }));
+      }
+
+      // Fetch alert details separately to avoid relationship conflicts
       const { data: alertsData, error: alertsError } = await supabase
         .from("vacancy_alerts")
         .select(`
@@ -158,6 +166,11 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
 
       if (alertsError) {
         console.error("Error fetching alerts:", alertsError);
+        // Return responses without alert data if there's an error
+        return responsesData.map(response => ({
+          ...response,
+          vacancy_alerts: null
+        }));
       }
 
       // Combine data
@@ -179,20 +192,11 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
   // Function to add officer to shift as an extra assignment - MATCHES SCHEDULER EXACTLY
   const addOfficerToShift = async (responseId: string) => {
     try {
-      // Get the response details with alert information
+      // Get the response details with alert information - use separate queries to avoid relationship conflicts
       const { data: response, error: responseError } = await supabase
         .from("vacancy_responses")
         .select(`
           *,
-          vacancy_alerts(
-            date,
-            shift_type_id,
-            shift_types(
-              name,
-              start_time,
-              end_time
-            )
-          ),
           profiles!vacancy_responses_officer_id_fkey(
             full_name,
             badge_number
@@ -206,20 +210,45 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         throw responseError;
       }
 
-      if (!response || !response.vacancy_alerts) {
-        console.error("No response or alert data found");
+      if (!response) {
+        console.error("No response data found");
         return;
       }
 
-      const alert = response.vacancy_alerts;
+      // Get alert details separately
+      const alertId = response.alert_id || response.vacancy_alert_id;
+      if (!alertId) {
+        console.error("No alert ID found in response");
+        return;
+      }
+
+      const { data: alertData, error: alertError } = await supabase
+        .from("vacancy_alerts")
+        .select(`
+          date,
+          shift_type_id,
+          shift_types(
+            name,
+            start_time,
+            end_time
+          )
+        `)
+        .eq("id", alertId)
+        .single();
+
+      if (alertError) {
+        console.error("Error fetching alert details:", alertError);
+        throw alertError;
+      }
+
       const officer = response.profiles;
 
       console.log("Adding officer to shift as extra assignment:", {
         officer: officer?.full_name,
         officerId: response.officer_id,
-        shift: alert.shift_types?.name,
-        shiftTypeId: alert.shift_type_id,
-        date: alert.date
+        shift: alertData.shift_types?.name,
+        shiftTypeId: alertData.shift_type_id,
+        date: alertData.date
       });
 
       // EXACTLY match your scheduler's "Add Officer" function
@@ -227,8 +256,8 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         .from("schedule_exceptions")
         .insert({
           officer_id: response.officer_id,
-          shift_type_id: alert.shift_type_id,
-          date: alert.date,
+          shift_type_id: alertData.shift_type_id,
+          date: alertData.date,
           is_off: false, // Working shift (not PTO)
           position_name: "Extra Shift", // Same as your scheduler
           unit_number: null, // Can be set later by supervisor if needed
@@ -236,7 +265,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
           created_by: userId,
           custom_start_time: null,
           custom_end_time: null
-          // Note: No is_extra_shift field since your scheduler doesn't use it
         });
 
       if (exceptionError) {
@@ -247,7 +275,7 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
       console.log("Successfully added officer to shift as extra assignment");
 
       // Optional: Send a confirmation notification
-      await sendShiftAssignmentNotification(response.officer_id, alert);
+      await sendShiftAssignmentNotification(response.officer_id, alertData);
 
     } catch (error) {
       console.error("Error in addOfficerToShift:", error);
@@ -414,7 +442,7 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     }
   };
 
-  // Understaffed Detection Query - FIXED to handle null positions properly
+  // Understaffed Detection Query - FIXED to handle relationship conflicts
   const { 
     data: understaffedShifts, 
     isLoading: understaffedLoading, 
@@ -474,7 +502,7 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
 
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-          // Get ALL schedule data for this date - USING THE SAME LOGIC AS DailyScheduleView
+          // Get ALL schedule data for this date - USING SEPARATE QUERIES TO AVOID RELATIONSHIP CONFLICTS
           const { data: recurringData, error: recurringError } = await supabase
             .from("recurring_schedules")
             .select(`
@@ -500,7 +528,7 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
             throw recurringError;
           }
 
-          // Get schedule exceptions for this specific date
+          // Get schedule exceptions for this specific date - FIXED RELATIONSHIP
           const { data: exceptionsData, error: exceptionsError } = await supabase
             .from("schedule_exceptions")
             .select(`
