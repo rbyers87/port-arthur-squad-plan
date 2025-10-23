@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle, Bell, X } from "lucide-react";
+import { AlertTriangle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -15,7 +15,6 @@ interface VacancyAlertsProps {
 export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProps) => {
   const queryClient = useQueryClient();
 
-  // Fetch vacancy alerts with shift type information
   const { data: alerts, isLoading } = useQuery({
     queryKey: ["vacancy-alerts"],
     queryFn: async () => {
@@ -33,7 +32,6 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     },
   });
 
-  // Fetch user responses
   const { data: userResponses } = useQuery({
     queryKey: ["vacancy-responses", userId],
     queryFn: async () => {
@@ -45,34 +43,9 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
       if (error) throw error;
       return data;
     },
-    enabled: !!userId && !isAdminOrSupervisor,
+    enabled: !isAdminOrSupervisor,
   });
 
-  // Fetch notifications for the current user
-  const { data: notifications } = useQuery({
-    queryKey: ["notifications", userId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("notifications")
-        .select(`
-          *,
-          vacancy_alerts(
-            date,
-            shift_types(name)
-          )
-        `)
-        .eq("officer_id", userId)
-        .eq("is_read", false)
-        .order("created_at", { ascending: false })
-        .limit(10);
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!userId,
-  });
-
-  // Mutation for responding to vacancies
   const respondMutation = useMutation({
     mutationFn: async ({ alertId, status }: { alertId: string; status: string }) => {
       const { error } = await supabase.from("vacancy_responses").insert({
@@ -85,46 +58,10 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vacancy-responses"] });
-      toast.success("Response submitted successfully");
+      toast.success("Response submitted");
     },
     onError: (error) => {
       toast.error("Failed to submit response: " + error.message);
-    },
-  });
-
-  // Mutation for marking notifications as read
-  const markAsReadMutation = useMutation({
-    mutationFn: async (notificationId: string) => {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("id", notificationId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
-  });
-
-  // Mutation for creating new vacancy alerts (for admins/supervisors)
-  const createVacancyMutation = useMutation({
-    mutationFn: async (vacancyData: any) => {
-      const { data, error } = await supabase
-        .from("vacancy_alerts")
-        .insert([vacancyData])
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
-      toast.success("Vacancy alert created and notifications sent to all officers");
-    },
-    onError: (error) => {
-      toast.error("Failed to create vacancy alert: " + error.message);
     },
   });
 
@@ -133,151 +70,101 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
   };
 
   return (
-    <div className="space-y-6">
-      {/* Notifications Section */}
-      {notifications && notifications.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5 text-yellow-600" />
-              New Alerts ({notifications.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {notifications.map((notification) => (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5" />
+          Open Vacancy Alerts
+        </CardTitle>
+        <CardDescription>
+          {isAdminOrSupervisor
+            ? "Shifts that need coverage"
+            : "Volunteer for open shifts to earn overtime"}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        ) : !alerts || alerts.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No open vacancies at this time.</p>
+        ) : (
+          <div className="space-y-4">
+            {alerts.map((alert) => {
+              const userResponse = getUserResponse(alert.id);
+              const isStaffed = alert.current_staffing >= alert.minimum_required;
+
+              return (
                 <div
-                  key={notification.id}
-                  className="flex items-center justify-between p-3 border border-yellow-200 rounded-lg bg-yellow-50"
+                  key={alert.id}
+                  className={cn(
+                    "p-4 border rounded-lg space-y-3",
+                    isStaffed && "bg-green-500/5 border-green-500/20"
+                  )}
                 >
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{notification.title}</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {notification.message}
-                    </p>
-                    {notification.vacancy_alerts && (
-                      <Badge variant="outline" className="mt-2">
-                        {format(new Date(notification.vacancy_alerts.date), "MMM d, yyyy")} - {notification.vacancy_alerts.shift_types?.name}
-                      </Badge>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => markAsReadMutation.mutate(notification.id)}
-                    className="ml-2"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Vacancy Alerts Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5" />
-            Open Vacancy Alerts
-          </CardTitle>
-          <CardDescription>
-            {isAdminOrSupervisor
-              ? "Shifts that need coverage - officers will be notified automatically"
-              : "Volunteer for open shifts to earn overtime"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading vacancy alerts...</p>
-          ) : !alerts || alerts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No open vacancies at this time.</p>
-          ) : (
-            <div className="space-y-4">
-              {alerts.map((alert) => {
-                const userResponse = getUserResponse(alert.id);
-                const isStaffed = alert.current_staffing >= alert.minimum_required;
-
-                return (
-                  <div
-                    key={alert.id}
-                    className={cn(
-                      "p-4 border rounded-lg space-y-3",
-                      isStaffed 
-                        ? "bg-green-50 border-green-200" 
-                        : "bg-red-50 border-red-200"
-                    )}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <p className="font-medium">{alert.shift_types?.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(new Date(alert.date), "EEEE, MMM d, yyyy")}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {alert.shift_types?.start_time} - {alert.shift_types?.end_time}
-                        </p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge 
-                            variant={isStaffed ? "outline" : "destructive"}
-                            className={isStaffed ? "bg-green-100" : ""}
-                          >
-                            {alert.current_staffing} / {alert.minimum_required} staffed
-                          </Badge>
-                          {isStaffed && (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {!isAdminOrSupervisor && (
-                      <div className="flex gap-2">
-                        {userResponse ? (
-                          <Badge variant="outline" className="capitalize">
-                            You responded: {userResponse.status}
-                          </Badge>
-                        ) : (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                respondMutation.mutate({
-                                  alertId: alert.id,
-                                  status: "interested",
-                                })
-                              }
-                              disabled={respondMutation.isPending || isStaffed}
-                            >
-                              I'm Available
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                respondMutation.mutate({
-                                  alertId: alert.id,
-                                  status: "not_available",
-                                })
-                              }
-                              disabled={respondMutation.isPending}
-                            >
-                              Not Available
-                            </Button>
-                          </>
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <p className="font-medium">{alert.shift_types?.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(alert.date), "EEEE, MMM d, yyyy")}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {alert.shift_types?.start_time} - {alert.shift_types?.end_time}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant={isStaffed ? "outline" : "destructive"}>
+                          {alert.current_staffing} / {alert.minimum_required} staffed
+                        </Badge>
+                        {isStaffed && (
+                          <CheckCircle className="h-4 w-4 text-green-600" />
                         )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+
+                  {!isAdminOrSupervisor && (
+                    <div className="flex gap-2">
+                      {userResponse ? (
+                        <Badge variant="outline" className="capitalize">
+                          You responded: {userResponse.status}
+                        </Badge>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              respondMutation.mutate({
+                                alertId: alert.id,
+                                status: "interested",
+                              })
+                            }
+                            disabled={respondMutation.isPending}
+                          >
+                            I'm Available
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              respondMutation.mutate({
+                                alertId: alert.id,
+                                status: "not_available",
+                              })
+                            }
+                            disabled={respondMutation.isPending}
+                          >
+                            Not Available
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 

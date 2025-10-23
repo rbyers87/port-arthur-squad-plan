@@ -854,7 +854,7 @@ const allOfficers = [...recurringOfficers, ...additionalOfficers].map(officer =>
       <p className="text-sm text-muted-foreground italic">No {title.toLowerCase()} scheduled</p>
     ) : (
       officers
-        .map((officer, index) => {
+        .map((officer) => {
           // Skip officers with full-day PTO - they should only appear in PTO section
           if (officer.hasPTO && officer.ptoData?.isFullShift) {
             return null;
@@ -862,7 +862,7 @@ const allOfficers = [...recurringOfficers, ...additionalOfficers].map(officer =>
           
           return (
             <div
-              key={`${title}-${officer.scheduleId}-${officer.type}-${index}`} 
+              key={`${officer.scheduleId}-${officer.type}`}
               className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
             >
              {/* Officer Info - Left Side */}
@@ -1189,11 +1189,11 @@ const allOfficers = [...recurringOfficers, ...additionalOfficers].map(officer =>
         {shiftData.specialAssignmentOfficers.length}
       </Badge>
     </div>
-    {shiftData.specialAssignmentOfficers.map((officer, index) => (
-  <div
-    key={`special-${officer.scheduleId}-${officer.type}-${index}`} // ← ADD "special-" PREFIX
-    className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
-  >
+    {shiftData.specialAssignmentOfficers.map((officer) => (
+      <div
+        key={`${officer.scheduleId}-${officer.type}`}
+        className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
+      >
         {/* Officer Info - Left Side */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-1">
@@ -1436,11 +1436,11 @@ const allOfficers = [...recurringOfficers, ...additionalOfficers].map(officer =>
         {shiftData.ptoRecords.length}
       </Badge>
     </div>
-    {shiftData.ptoRecords.map((ptoRecord, index) => (
-  <div
-    key={`pto-${ptoRecord.id}-${index}`} // ← KEEP THIS AS IS
-    className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-md"
-  >
+    {shiftData.ptoRecords.map((ptoRecord) => (
+      <div
+        key={ptoRecord.id}
+        className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-md"
+      >
         {/* Officer Info - Left Side */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-1">
