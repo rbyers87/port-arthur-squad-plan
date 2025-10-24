@@ -822,119 +822,163 @@ const {
     },
   });
 
-  const sendAlertMutation = useMutation({
-    mutationFn: async (alertData: any) => {
-      console.log("Sending alerts for:", alertData);
+const sendAlertMutation = useMutation({
+  mutationFn: async (alertData: any) => {
+    console.log("Sending alerts for:", alertData);
 
-      // Only send notifications if there's a custom message
-      if (!alertData.custom_message) {
-        console.log("No custom message - skipping notifications");
+    // Get all officers
+    const { data: officers, error: officersError } = await supabase
+      .from("profiles")
+      .select("id, email, phone, notification_preferences, full_name");
+
+    if (officersError) {
+      console.error("Error fetching officers:", officersError);
+      throw officersError;
+    }
+
+    console.log(`Found ${officers?.length || 0} officers`);
+
+    const notificationPromises = [];
+
+    // Prepare alert details
+    const shiftName = alertData.shift_types?.name || "Unknown Shift";
+    const date = alertData.date ? format(new Date(alertData.date), "EEEE, MMM d, yyyy") : "Unknown Date";
+    const staffingNeeded = alertData.minimum_required - alertData.current_staffing;
+    
+    // Use custom message if available, otherwise create default
+    const alertMessage = alertData.custom_message || 
+      `URGENT: ${staffingNeeded} more officer(s) needed for ${shiftName} shift on ${date}. Current staffing: ${alertData.current_staffing}/${alertData.minimum_required}. Please log in to the scheduling system to sign up if available.`;
+
+    const emailSubject = `🚨 Vacancy Alert - ${shiftName} - ${format(new Date(alertData.date), "MMM d, yyyy")}`;
+    
+    // Use formatted email body for real emails
+    const emailBody = `
+Shift: ${shiftName}
+Date: ${date}
+Time: ${alertData.shift_types?.start_time} - ${alertData.shift_types?.end_time}
+Staffing Needed: ${staffingNeeded} more officer(s)
+Current Staffing: ${alertData.current_staffing}/${alertData.minimum_required}
+
+${alertData.custom_message ? `Message: ${alertData.custom_message}` : 'Please log in to the scheduling system to volunteer for this shift.'}
+
+This is an automated vacancy alert. Please do not reply to this message.
+    `.trim();
+
+    // Send notifications to each officer
+    for (const officer of officers || []) {
+      // Use default preferences if none exist
+      const preferences = officer.notification_preferences || { 
+        receiveEmails: true, 
+        receiveTexts: true 
+      };
+      
+      // Send email if enabled and officer has email
+      if (preferences.receiveEmails !== false && officer.email) {
+        console.log(`📧 Sending email to ${officer.full_name} (${officer.email})`);
         
-        // Still mark as sent but don't actually send notifications
-        const { error } = await supabase
-          .from("vacancy_alerts")
-          .update({ 
-            notification_sent: true,
-            notified_at: new Date().toISOString()
+        notificationPromises.push(
+          fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: officer.email,
+              subject: emailSubject,
+              message: emailBody,
+              alertId: alertData.alertId
+            }),
           })
-          .eq("id", alertData.alertId);
-
-        if (error) throw error;
-        return;
+          .then(async (response) => {
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`Email failed for ${officer.email}: ${errorText}`);
+            }
+            return response.json();
+          })
+          .catch(err => {
+            console.error(`Failed to send email to ${officer.email}:`, err);
+            return { success: false, error: err.message };
+          })
+        );
       }
 
-      // Get all active officers with their notification preferences
-      const { data: officers, error: officersError } = await supabase
-        .from("profiles")
-        .select("id, email, phone, notification_preferences")
-        .eq('active', true);
-
-      if (officersError) {
-        console.error("Error fetching officers:", officersError);
-        throw officersError;
-      }
-
-      console.log(`Found ${officers?.length || 0} active officers, sending custom message`);
-
-      const emailPromises = [];
-      const textPromises = [];
-
-      // Use only the custom message
-      const alertMessage = alertData.custom_message;
-      const emailSubject = `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types?.name}`;
-      
-      const emailBody = alertData.custom_message;
-
-      const textMessage = alertData.custom_message;
-
-      // Send notifications to each officer based on their preferences
-      for (const officer of officers || []) {
-        // Use default preferences if none exist
-        const preferences = officer.notification_preferences || { receiveEmails: true, receiveTexts: true };
+      // Send text if enabled and officer has phone (still simulated)
+      if (preferences.receiveTexts !== false && officer.phone) {
+        console.log(`📱 Would send text to ${officer.full_name} (${officer.phone})`);
         
-        // Send email if enabled and officer has email
-        if (preferences.receiveEmails !== false && officer.email) {
-          emailPromises.push(
-            fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                to: officer.email,
-                subject: emailSubject,
-                message: emailBody,
-                alertId: alertData.alertId
-              }),
-            }).catch(err => {
-              console.error(`Failed to send email to ${officer.email}:`, err);
-            })
-          );
-        }
+        // Prepare text message (shorter version)
+        const textMessage = alertData.custom_message || 
+          `VACANCY: ${shiftName} on ${format(new Date(alertData.date), "MMM d")}. Need ${staffingNeeded} more. Log in to sign up.`;
 
-        // Send text if enabled and officer has phone
-        if (preferences.receiveTexts !== false && officer.phone) {
-          textPromises.push(
-            fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                to: officer.phone,
-                message: textMessage
-              }),
-            }).catch(err => {
-              console.error(`Failed to send text to ${officer.phone}:`, err);
-            })
-          );
-        }
+        notificationPromises.push(
+          fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: officer.phone,
+              message: textMessage
+            }),
+          })
+          .then(async (response) => {
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`Text failed for ${officer.phone}: ${errorText}`);
+            }
+            return response.json();
+          })
+          .catch(err => {
+            console.error(`Failed to send text to ${officer.phone}:`, err);
+            return { success: false, error: err.message };
+          })
+        );
       }
+    }
 
-      // Wait for all notifications to be sent
-      await Promise.all([...emailPromises, ...textPromises]);
-      
-      // Update alert status to indicate notification was sent
-      const { error } = await supabase
-        .from("vacancy_alerts")
-        .update({ 
-          notification_sent: true,
-          notified_at: new Date().toISOString()
-        })
-        .eq("id", alertData.alertId);
+    console.log(`Sending ${notificationPromises.length} notifications`);
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Alerts sent successfully to all officers");
-      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
-      queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
-    },
-    onError: (error) => {
-      console.error("Send alert error:", error);
-      toast.error("Failed to send alerts: " + error.message);
-    },
-  });
+    // Wait for all notifications to be processed
+    const results = await Promise.allSettled(notificationPromises);
+
+    // Count successful notifications
+    const successfulNotifications = results.filter(result => 
+      result.status === 'fulfilled' && result.value?.success !== false
+    ).length;
+
+    console.log(`Notification results: ${successfulNotifications}/${notificationPromises.length} successful`);
+
+    // 🚨 UPDATED: Only update status to 'sent' instead of using notification_sent column
+    const { error } = await supabase
+      .from("vacancy_alerts")
+      .update({ 
+        status: 'sent', // Use existing status column instead of notification_sent
+        custom_message: alertData.custom_message || null
+      })
+      .eq("id", alertData.alertId);
+
+    if (error) {
+      console.error("Error updating alert status:", error);
+      throw error;
+    }
+
+    return {
+      notificationsSent: successfulNotifications,
+      totalOfficers: officers?.length || 0,
+    };
+  },
+  onSuccess: (data) => {
+    toast.success(`Alerts sent successfully! ${data.notificationsSent} notifications delivered to ${data.totalOfficers} officers.`);
+    queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+    queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+    queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
+  },
+  onError: (error) => {
+    console.error("Send alert error:", error);
+    toast.error("Failed to send alerts: " + error.message);
+  },
+});
 
 const isAlertCreated = (shift: any) => {
   return existingAlerts?.find(alert => 
@@ -1004,21 +1048,25 @@ const isAlertCreated = (shift: any) => {
     toast.success(`Creating ${shiftsWithoutAlerts.length} alerts with default messages`);
   };
 
-  const handleSendAlert = (shift: any) => {
-    const alert = existingAlerts?.find(a => 
-      a.date === shift.date && a.shift_type_id === shift.shift_type_id
-    );
+const handleSendAlert = (shift: any) => {
+  const alert = existingAlerts?.find(a => 
+    a.date === shift.date && a.shift_type_id === shift.shift_type_id
+  );
 
-    if (!alert) {
-      toast.error("Please create an alert first");
-      return;
-    }
+  if (!alert) {
+    toast.error("Please create an alert first");
+    return;
+  }
 
-    sendAlertMutation.mutate({
-      ...shift,
-      alertId: alert.id
-    });
+  // Prepare the data to send
+  const alertData = {
+    ...shift,
+    alertId: alert.id,
+    custom_message: alert.custom_message // Include any custom message
   };
+
+  sendAlertMutation.mutate(alertData);
+};
 
   // If this is officer view, hide all create alert functionality
   if (isOfficerView) {
