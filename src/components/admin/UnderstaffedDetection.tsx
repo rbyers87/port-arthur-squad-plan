@@ -404,7 +404,9 @@ export const UnderstaffedDetection = () => {
       // Update alert status to indicate notification was sent
       const { error } = await supabase
         .from("vacancy_alerts")
-        .update({ notification_sent: true })
+        .update({ 
+          status: 'sent'  // Use existing status column instead of notification_sent
+        })
         .eq("id", alertData.alertId);
 
       if (error) throw error;
@@ -412,6 +414,8 @@ export const UnderstaffedDetection = () => {
     onSuccess: () => {
       toast.success("Alerts sent successfully to all officers");
       queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
     },
     onError: (error) => {
       toast.error("Failed to send alerts: " + error.message);
