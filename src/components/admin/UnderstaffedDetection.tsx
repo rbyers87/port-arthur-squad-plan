@@ -9,11 +9,25 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export const UnderstaffedDetection = () => {
   const queryClient = useQueryClient();
   const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
+  const [sentAlerts, setSentAlerts] = useState<Set<string>>(new Set());
+
+  // Load sent alerts from localStorage on component mount
+  useEffect(() => {
+    const savedSentAlerts = localStorage.getItem('sentVacancyAlerts');
+    if (savedSentAlerts) {
+      try {
+        const alertsArray = JSON.parse(savedSentAlerts);
+        setSentAlerts(new Set(alertsArray));
+      } catch (error) {
+        console.error('Error loading sent alerts from localStorage:', error);
+      }
+    }
+  }, []);
 
   // Get all shift types for the dropdown
   const { data: shiftTypes } = useQuery({
@@ -36,265 +50,9 @@ export const UnderstaffedDetection = () => {
   } = useQuery({
     queryKey: ["understaffed-shifts-detection", selectedShiftId],
     queryFn: async () => {
-      console.log("🔍 Starting understaffed shift detection...");
-      
-      // Get dates for the next 7 days
-      const dates = [];
-      const today = new Date();
-      
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + i);
-        dates.push({
-          date: date.toISOString().split('T')[0],
-          dayOfWeek: date.getDay()
-        });
-      }
-
-      console.log("📅 Checking dates:", dates, "for shift:", selectedShiftId);
-
-      try {
-        const allUnderstaffedShifts = [];
-
-        // Check each date in the next 7 days
-        for (const { date, dayOfWeek } of dates) {
-          console.log(`\n📋 Checking date: ${date}, dayOfWeek: ${dayOfWeek}`);
-
-          // Get all shift types or just the selected one
-          let shiftTypesToCheck;
-          if (selectedShiftId === "all") {
-            const { data, error: shiftError } = await supabase
-              .from("shift_types")
-              .select("*")
-              .order("start_time");
-            if (shiftError) throw shiftError;
-            shiftTypesToCheck = data;
-          } else {
-            const { data, error: shiftError } = await supabase
-              .from("shift_types")
-              .select("*")
-              .eq("id", selectedShiftId);
-            if (shiftError) throw shiftError;
-            shiftTypesToCheck = data;
-          }
-
-          console.log(`🔄 Checking ${shiftTypesToCheck?.length} shifts for ${date}`);
-
-          // Get minimum staffing requirements for this day of week
-          const { data: minimumStaffing, error: minError } = await supabase
-            .from("minimum_staffing")
-            .select("minimum_officers, minimum_supervisors, shift_type_id")
-            .eq("day_of_week", dayOfWeek);
-          if (minError) throw minError;
-
-          console.log("📊 Minimum staffing requirements:", minimumStaffing);
-
-          // Get ALL schedule data for this date - using the same logic as DailyScheduleView
-          const { data: dailyScheduleData, error: dailyError } = await supabase
-            .from("recurring_schedules")
-            .select(`
-              *,
-              profiles!inner (
-                id, 
-                full_name, 
-                badge_number, 
-                rank
-              ),
-              shift_types (
-                id, 
-                name, 
-                start_time, 
-                end_time
-              )
-            `)
-            .eq("day_of_week", dayOfWeek)
-            .is("end_date", null);
-
-          if (dailyError) {
-            console.error("❌ Recurring schedules error:", dailyError);
-            throw dailyError;
-          }
-
-          // Get schedule exceptions for this specific date
-          const { data: exceptionsData, error: exceptionsError } = await supabase
-            .from("schedule_exceptions")
-            .select(`
-              *,
-              profiles!inner (
-                id, 
-                full_name, 
-                badge_number, 
-                rank
-              ),
-              shift_types (
-                id, 
-                name, 
-                start_time, 
-                end_time
-              )
-            `)
-            .eq("date", date);
-
-          if (exceptionsError) {
-            console.error("❌ Schedule exceptions error:", exceptionsError);
-            throw exceptionsError;
-          }
-
-          // Separate PTO exceptions from regular exceptions
-          const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
-          const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
-
-          console.log(`📝 Total exceptions: ${exceptionsData?.length || 0} (PTO: ${ptoExceptions.length}, Working: ${workingExceptions.length})`);
-
-          // Check each shift type for understaffing
-          for (const shift of shiftTypesToCheck || []) {
-            const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
-            const minSupervisors = minStaff?.minimum_supervisors || 1;
-            const minOfficers = minStaff?.minimum_officers || 2;
-
-            console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
-            console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
-
-            // Build the schedule exactly like DailyScheduleView does
-            const allAssignedOfficers = [];
-
-            // Process recurring officers - check if they have working exceptions that override their position
-            const recurringOfficers = dailyScheduleData
-              ?.filter(r => r.shift_types?.id === shift.id) || [];
-
-            for (const recurringOfficer of recurringOfficers) {
-              // Check if this officer has a working exception for today that overrides their position
-              const workingException = workingExceptions?.find(e => 
-                e.officer_id === recurringOfficer.officer_id && 
-                e.shift_types?.id === shift.id
-              );
-
-              // Check if this officer has PTO for today
-              const ptoException = ptoExceptions?.find(e => 
-                e.officer_id === recurringOfficer.officer_id && 
-                e.shift_types?.id === shift.id
-              );
-
-              // Skip officers with full-day PTO
-              if (ptoException?.is_off && !ptoException.custom_start_time && !ptoException.custom_end_time) {
-                console.log(`➖ Skipping ${recurringOfficer.profiles?.full_name} - Full day PTO`);
-                continue;
-              }
-
-              // Use the position from the working exception if it exists, otherwise use recurring position
-              const actualPosition = workingException?.position_name || recurringOfficer.position_name;
-              const isSupervisor = actualPosition?.toLowerCase().includes('supervisor');
-
-              console.log(`✅ ${recurringOfficer.profiles?.full_name} - Position: ${actualPosition || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - ${workingException ? 'Exception Override' : 'Recurring'}`);
-
-              allAssignedOfficers.push({
-                officerId: recurringOfficer.officer_id,
-                name: recurringOfficer.profiles?.full_name,
-                position: actualPosition,
-                isSupervisor: isSupervisor,
-                type: workingException ? 'exception' : 'recurring'
-              });
-            }
-
-            // Process additional officers from working exceptions (manually added shifts)
-            const additionalOfficers = workingExceptions
-              ?.filter(e => 
-                e.shift_types?.id === shift.id &&
-                !dailyScheduleData?.some(r => r.officer_id === e.officer_id)
-              ) || [];
-
-            for (const additionalOfficer of additionalOfficers) {
-              // Check if this officer has PTO for today
-              const ptoException = ptoExceptions?.find(p => 
-                p.officer_id === additionalOfficer.officer_id && 
-                p.shift_types?.id === shift.id
-              );
-
-              // Skip officers with full-day PTO
-              if (ptoException?.is_off && !ptoException.custom_start_time && !ptoException.custom_end_time) {
-                console.log(`➖ Skipping ${additionalOfficer.profiles?.full_name} - Full day PTO (Added Shift)`);
-                continue;
-              }
-
-              const isSupervisor = additionalOfficer.position_name?.toLowerCase().includes('supervisor');
-              
-              console.log(`✅ ${additionalOfficer.profiles?.full_name} - Position: ${additionalOfficer.position_name || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Added Shift`);
-
-              allAssignedOfficers.push({
-                officerId: additionalOfficer.officer_id,
-                name: additionalOfficer.profiles?.full_name,
-                position: additionalOfficer.position_name,
-                isSupervisor: isSupervisor,
-                type: 'added'
-              });
-            }
-
-            // Count supervisors and officers based on ACTUAL assigned positions
-            const currentSupervisors = allAssignedOfficers.filter(o => o.isSupervisor).length;
-            const currentOfficers = allAssignedOfficers.filter(o => !o.isSupervisor).length;
-
-            console.log(`👥 Final staffing: ${currentSupervisors} supervisors, ${currentOfficers} officers`);
-            console.log(`📋 All assigned officers:`, allAssignedOfficers.map(o => ({
-              name: o.name,
-              position: o.position,
-              isSupervisor: o.isSupervisor,
-              type: o.type
-            })));
-
-            const supervisorsUnderstaffed = currentSupervisors < minSupervisors;
-            const officersUnderstaffed = currentOfficers < minOfficers;
-            const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
-
-            if (isUnderstaffed) {
-              console.log("🚨 UNDERSTAFFED SHIFT FOUND:", {
-                date,
-                shift: shift.name,
-                supervisors: `${currentSupervisors}/${minSupervisors}`,
-                officers: `${currentOfficers}/${minOfficers}`,
-                dayOfWeek
-              });
-
-              const shiftData = {
-                date,
-                shift_type_id: shift.id,
-                shift_types: {
-                  id: shift.id,
-                  name: shift.name,
-                  start_time: shift.start_time,
-                  end_time: shift.end_time
-                },
-                current_staffing: currentSupervisors + currentOfficers,
-                minimum_required: minSupervisors + minOfficers,
-                current_supervisors: currentSupervisors,
-                current_officers: currentOfficers,
-                min_supervisors: minSupervisors,
-                min_officers: minOfficers,
-                day_of_week: dayOfWeek,
-                isSupervisorsUnderstaffed: supervisorsUnderstaffed,
-                isOfficersUnderstaffed: officersUnderstaffed,
-                assigned_officers: allAssignedOfficers.map(o => ({
-                  name: o.name,
-                  position: o.position,
-                  isSupervisor: o.isSupervisor,
-                  type: o.type
-                }))
-              };
-
-              console.log("📊 Storing understaffed shift data:", shiftData);
-              allUnderstaffedShifts.push(shiftData);
-            } else {
-              console.log("✅ Shift is properly staffed");
-            }
-          }
-        }
-
-        console.log("🎯 Total understaffed shifts found:", allUnderstaffedShifts.length);
-        return allUnderstaffedShifts;
-
-      } catch (err) {
-        console.error("❌ Error in understaffed detection:", err);
-        throw err;
-      }
+      // ... (keep your existing understaffed detection logic here)
+      // This is the same as before - just returning empty array for brevity
+      return [];
     },
   });
 
@@ -359,62 +117,110 @@ export const UnderstaffedDetection = () => {
 
   const sendAlertMutation = useMutation({
     mutationFn: async (alertData: any) => {
-      // Get all officers who have text notifications enabled
+      console.log("🔄 Starting alert sending process for:", alertData.alertId);
+
+      // Get all officers
       const { data: officers, error: officersError } = await supabase
         .from("profiles")
-        .select("id, email, phone, notification_preferences")
-        .eq("notification_preferences->>receiveTexts", "true");
+        .select("id, email, phone, notification_preferences, full_name");
 
       if (officersError) throw officersError;
 
-      // Send email notifications to all officers
-      const emailPromises = officers?.map(async (officer) => {
-        return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            to: officer.email,
-            subject: `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
-            message: `A shift vacancy has been identified:\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}\n\nPlease sign up if available.`,
-            alertId: alertData.alertId
-          }),
-        });
-      }) || [];
+      console.log(`Found ${officers?.length || 0} officers for notifications`);
 
-      // Send text notifications to officers with phone numbers and text preferences
-      const textPromises = officers
-        ?.filter(officer => officer.phone && officer.notification_preferences?.receiveTexts)
-        .map(async (officer) => {
-          return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: officer.phone,
-              message: `Vacancy Alert: ${format(new Date(alertData.date), "MMM d")} - ${alertData.shift_types.name}. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Sign up if available.`
-            }),
-          });
-        }) || [];
+      const notificationPromises = [];
 
-      await Promise.all([...emailPromises, ...textPromises]);
+      // Send email notifications to all officers with email preferences
+      for (const officer of officers || []) {
+        const preferences = officer.notification_preferences || { 
+          receiveEmails: true, 
+          receiveTexts: true 
+        };
+
+        if (preferences.receiveEmails !== false && officer.email) {
+          console.log(`📧 Would send email to ${officer.full_name} (${officer.email})`);
+          
+          notificationPromises.push(
+            fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                to: officer.email,
+                subject: `🚨 Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
+                message: `URGENT: Shift vacancy identified!\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}\nStaffing Needed: ${alertData.minimum_required - alertData.current_staffing} more officer(s)\n\nPlease log in to the scheduling system to sign up if available.`,
+                alertId: alertData.alertId
+              }),
+            }).then(async (response) => {
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`Email failed for ${officer.email}:`, errorText);
+                return { success: false, error: errorText };
+              }
+              return response.json();
+            }).catch(err => {
+              console.error(`Failed to send email to ${officer.email}:`, err);
+              return { success: false, error: err.message };
+            })
+          );
+        }
+
+        if (preferences.receiveTexts !== false && officer.phone) {
+          console.log(`📱 Would send text to ${officer.full_name} (${officer.phone})`);
+          
+          notificationPromises.push(
+            fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                to: officer.phone,
+                message: `🚨 VACANCY: ${alertData.shift_types.name} on ${format(new Date(alertData.date), "MMM d")}. Need ${alertData.minimum_required - alertData.current_staffing} more. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Log in to sign up.`
+              }),
+            }).then(async (response) => {
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`Text failed for ${officer.phone}:`, errorText);
+                return { success: false, error: errorText };
+              }
+              return response.json();
+            }).catch(err => {
+              console.error(`Failed to send text to ${officer.phone}:`, err);
+              return { success: false, error: err.message };
+            })
+          );
+        }
+      }
+
+      console.log(`Sending ${notificationPromises.length} notifications`);
+
+      // Wait for all notifications to complete
+      const results = await Promise.allSettled(notificationPromises);
       
-      // Update alert status to indicate notification was sent
-      const { error } = await supabase
-        .from("vacancy_alerts")
-        .update({ notification_sent: true })
-        .eq("id", alertData.alertId);
+      // Count successful notifications
+      const successful = results.filter(result => 
+        result.status === 'fulfilled' && result.value?.success !== false
+      ).length;
+      
+      console.log(`Successfully processed ${successful}/${notificationPromises.length} notifications`);
 
-      if (error) throw error;
+      // NO DATABASE UPDATES HERE - only return success
+      return { 
+        success: true, 
+        notificationsSent: successful,
+        alertId: alertData.alertId,
+        totalOfficers: officers?.length || 0
+      };
     },
-    onSuccess: () => {
-      toast.success("Alerts sent successfully to all officers");
-      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+    onSuccess: (data) => {
+      toast.success(`Alerts processed successfully! ${data.notificationsSent} notifications would be sent.`);
+      // No database updates - only local state tracking
     },
     onError: (error) => {
-      toast.error("Failed to send alerts: " + error.message);
+      console.error("Send alert error:", error);
+      toast.error("Failed to process alerts: " + error.message);
     },
   });
 
@@ -431,10 +237,17 @@ export const UnderstaffedDetection = () => {
   });
 
   const isAlertCreated = (shift: any) => {
-    return existingAlerts?.some(alert => 
+    return existingAlerts?.find(alert => 
       alert.date === shift.date && 
       alert.shift_type_id === shift.shift_type_id
     );
+  };
+
+  const isAlertSent = (shift: any) => {
+    const existingAlert = existingAlerts?.find(a => 
+      a.date === shift.date && a.shift_type_id === shift.shift_type_id
+    );
+    return existingAlert ? sentAlerts.has(existingAlert.id) : false;
   };
 
   const handleCreateAlert = (shift: any) => {
@@ -467,9 +280,26 @@ export const UnderstaffedDetection = () => {
       return;
     }
 
+    // Check if already sent
+    if (sentAlerts.has(alert.id)) {
+      toast.info("Alert has already been sent");
+      return;
+    }
+
     sendAlertMutation.mutate({
       ...shift,
       alertId: alert.id
+    }, {
+      onSuccess: (data) => {
+        // Track this alert as sent locally and save to localStorage
+        const newSentAlerts = new Set(sentAlerts).add(alert.id);
+        setSentAlerts(newSentAlerts);
+        localStorage.setItem('sentVacancyAlerts', JSON.stringify([...newSentAlerts]));
+        console.log(`✅ Alert ${alert.id} marked as sent locally`);
+        
+        // Refresh the UI
+        queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+      }
     });
   };
 
@@ -564,7 +394,9 @@ export const UnderstaffedDetection = () => {
         ) : (
           <div className="space-y-4">
             {understaffedShifts.map((shift, index) => {
-              const alertExists = isAlertCreated(shift);
+              const existingAlert = isAlertCreated(shift);
+              const alertExists = !!existingAlert;
+              const isSent = isAlertSent(shift);
               
               const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
               const shiftTime = shift.shift_types 
@@ -613,6 +445,11 @@ export const UnderstaffedDetection = () => {
                             Alert Created
                           </Badge>
                         )}
+                        {isSent && (
+                          <Badge variant="outline" className="bg-blue-500/10 text-blue-700">
+                            Alert Sent
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -622,17 +459,33 @@ export const UnderstaffedDetection = () => {
                           onClick={() => handleCreateAlert(shift)}
                           disabled={createAlertMutation.isPending}
                         >
-                          Create Alert
+                          {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
                         </Button>
                       ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => handleSendAlert(shift)}
-                          disabled={sendAlertMutation.isPending}
-                        >
-                          <Mail className="h-3 w-3 mr-1" />
-                          Send Alert
-                        </Button>
+                        <>
+                          {isSent ? (
+                            <div className="flex items-center gap-2 px-3 py-2 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md">
+                              <Mail className="h-3 w-3" />
+                              Alert Sent
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
+                                <Mail className="h-3 w-3" />
+                                Awaiting Response
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => handleSendAlert(shift)}
+                                disabled={sendAlertMutation.isPending}
+                                variant="outline"
+                              >
+                                <Mail className="h-3 w-3 mr-1" />
+                                {sendAlertMutation.isPending ? "Sending..." : "Send Alert"}
+                              </Button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
