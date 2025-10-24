@@ -390,10 +390,11 @@ export const UnderstaffedDetection = () => {
 
 const sendAlertMutation = useMutation({
   mutationFn: async (alertData: any) => {
+    // 🟡 TEST MODE - Comment out production code below and use this for testing
     console.log("🔄 TEST MODE: Sending to single test email");
 
     // TEST EMAIL - Change this to your test email
-    const TEST_EMAIL = "ryan.byers@portarthurtx.gov";
+    const TEST_EMAIL = "brandon.lavin@portarthurtx.gov"; // Use your actual email
     
     // Prepare alert details
     const shiftName = alertData.shift_types?.name || "Unknown Shift";
@@ -417,43 +418,65 @@ Alert ID: ${alertData.alertId}
     `.trim();
 
     console.log(`📧 Sending TEST email to: ${TEST_EMAIL}`);
+    console.log(`📧 Email subject: ${emailSubject}`);
     
-    // Send only to test email
-    const response = await fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`
-      },
-      body: JSON.stringify({
-        to: TEST_EMAIL,
-        subject: emailSubject,
-        message: emailBody,
-        alertId: alertData.alertId
-      }),
-    });
+    try {
+      // Send only to test email
+      const response = await fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Remove Authorization header for now since the edge function doesn't require it
+        body: JSON.stringify({
+          to: TEST_EMAIL,
+          subject: emailSubject,
+          message: emailBody,
+          alertId: alertData.alertId
+        }),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Test email failed: ${errorText}`);
+      console.log(`📧 Response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`📧 Response error text:`, errorText);
+        throw new Error(`Test email failed with status ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('📧 Test email result:', result);
+
+      return { 
+        success: true, 
+        testEmail: TEST_EMAIL,
+        alertId: alertData.alertId,
+        message: 'Test email sent successfully',
+        result: result
+      };
+    } catch (error) {
+      console.error('📧 Fetch error:', error);
+      throw error;
     }
 
-    const result = await response.json();
-    console.log('Test email result:', result);
-
-    return { 
-      success: true, 
-      testEmail: TEST_EMAIL,
-      alertId: alertData.alertId,
-      message: 'Test email sent successfully'
-    };
+    // 🟢 PRODUCTION CODE - Comment out the above test code and uncomment below for production
+    /*
+    [Your production code here]
+    */
   },
   onSuccess: (data) => {
-    toast.success(`Test alert sent to ${data.testEmail}`);
+    // 🟡 TEST MODE - Use this for testing
+    toast.success(`✅ Test alert sent to ${data.testEmail}`);
+    console.log('✅ Send alert success data:', data);
+    
+    // 🟢 PRODUCTION CODE - Comment out above and uncomment below for production
+    /*
+    toast.success(`Alerts sent successfully! ${data.emailsSent} emails and ${data.textsSent} texts delivered.`);
+    */
   },
   onError: (error) => {
-    console.error("Test alert error:", error);
-    toast.error("Failed to send test alert: " + error.message);
+    console.error("❌ Send alert error:", error);
+    toast.error("Failed to send alerts: " + error.message);
   },
 });
 
