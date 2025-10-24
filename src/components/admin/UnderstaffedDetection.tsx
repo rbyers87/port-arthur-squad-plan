@@ -1,4 +1,4 @@
-// components/admin/UnderstaffedDetection.tsx
+// this is a test email, use production when ready
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -372,79 +372,73 @@ export const UnderstaffedDetection = () => {
   });
 
 const sendAlertMutation = useMutation({
-    mutationFn: async (alertData: any) => {
-      console.log("🔄 Starting REAL alert sending process for:", alertData.alertId);
+  mutationFn: async (alertData: any) => {
+    console.log("🔄 TEST MODE: Sending to single test email");
 
-      // Get all officers
-      const { data: officers, error: officersError } = await supabase
-        .from("profiles")
-        .select("id, email, phone, notification_preferences, full_name");
+    // TEST EMAIL - Change this to your test email
+    const TEST_EMAIL = "ryan.byers@portarthurtx.gov";
+    
+    // Prepare alert details
+    const shiftName = alertData.shift_types?.name || "Unknown Shift";
+    const date = alertData.date ? format(new Date(alertData.date), "EEEE, MMM d, yyyy") : "Unknown Date";
+    const staffingNeeded = alertData.minimum_required - alertData.current_staffing;
+    
+    // Email content
+    const emailSubject = `🚨 TEST - Vacancy Alert - ${shiftName} - ${format(new Date(alertData.date), "MMM d, yyyy")}`;
+    const emailBody = `
+TEST MODE - This is a test vacancy alert:
 
-      if (officersError) throw officersError;
-
-      console.log(`Found ${officers?.length || 0} officers for notifications`);
-
-      const emailPromises = [];
-      const textPromises = [];
-
-      // Prepare alert details for real notifications
-      const shiftName = alertData.shift_types?.name || "Unknown Shift";
-      const date = alertData.date ? format(new Date(alertData.date), "EEEE, MMM d, yyyy") : "Unknown Date";
-      const staffingNeeded = alertData.minimum_required - alertData.current_staffing;
-      
-      // Email content
-      const emailSubject = `🚨 Vacancy Alert - ${shiftName} - ${format(new Date(alertData.date), "MMM d, yyyy")}`;
-      const emailBody = `
 Shift: ${shiftName}
 Date: ${date}
 Time: ${alertData.shift_types?.start_time} - ${alertData.shift_types?.end_time}
 Staffing Needed: ${staffingNeeded} more officer(s)
 Current Staffing: ${alertData.current_staffing}/${alertData.minimum_required}
 
-Please log in to the scheduling system to volunteer for this shift.
+This is a TEST email. Please ignore.
 
-This is an automated vacancy alert. Please do not reply to this message.
-      `.trim();
+Alert ID: ${alertData.alertId}
+    `.trim();
 
-      // Text message content (shorter)
-      const textMessage = `🚨 VACANCY: ${shiftName} on ${format(new Date(alertData.date), "MMM d")}. Need ${staffingNeeded} more. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Log in to sign up.`;
+    console.log(`📧 Sending TEST email to: ${TEST_EMAIL}`);
+    
+    // Send only to test email
+    const response = await fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        to: TEST_EMAIL,
+        subject: emailSubject,
+        message: emailBody,
+        alertId: alertData.alertId
+      }),
+    });
 
-      // Send real notifications to each officer
-      for (const officer of officers || []) {
-        const preferences = officer.notification_preferences || { 
-          receiveEmails: true, 
-          receiveTexts: true 
-        };
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Test email failed: ${errorText}`);
+    }
 
-        // Send real email via Resend
-        if (preferences.receiveEmails !== false && officer.email) {
-          console.log(`📧 Sending REAL email to ${officer.full_name} (${officer.email})`);
-          
-          emailPromises.push(
-            fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}` // Add auth header
-              },
-              body: JSON.stringify({
-                to: officer.email,
-                subject: emailSubject,
-                message: emailBody,
-                alertId: alertData.alertId
-              }),
-            }).then(async (response) => {
-              if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Email failed for ${officer.email}: ${errorText}`);
-              }
-              return response.json();
-            }).catch(err => {
-              console.error(`Failed to send email to ${officer.email}:`, err);
-              throw err; // Re-throw to fail the entire mutation
-            })
-          );
-        }
+    const result = await response.json();
+    console.log('Test email result:', result);
+
+    return { 
+      success: true, 
+      testEmail: TEST_EMAIL,
+      alertId: alertData.alertId,
+      message: 'Test email sent successfully'
+    };
+  },
+  onSuccess: (data) => {
+    toast.success(`Test alert sent to ${data.testEmail}`);
+  },
+  onError: (error) => {
+    console.error("Test alert error:", error);
+    toast.error("Failed to send test alert: " + error.message);
+  },
+});
 
         // Send real text via Twilio
         if (preferences.receiveTexts !== false && officer.phone) {
