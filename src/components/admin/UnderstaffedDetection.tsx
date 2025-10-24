@@ -358,69 +358,82 @@ export const UnderstaffedDetection = () => {
   });
 
   const sendAlertMutation = useMutation({
-    mutationFn: async (alertData: any) => {
-      // Get all officers who have text notifications enabled
-      const { data: officers, error: officersError } = await supabase
-        .from("profiles")
-        .select("id, email, phone, notification_preferences")
-        .eq("notification_preferences->>receiveTexts", "true");
+  mutationFn: async (alertData: any) => {
+    // Get all officers who have text notifications enabled
+    const { data: officers, error: officersError } = await supabase
+      .from("profiles")
+      .select("id, email, phone, notification_preferences")
+      .eq("notification_preferences->>receiveTexts", "true");
 
-      if (officersError) throw officersError;
+    if (officersError) throw officersError;
 
-      // Send email notifications to all officers
-      const emailPromises = officers?.map(async (officer) => {
-        return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+    // Send email notifications to all officers
+    const emailPromises = officers?.map(async (officer) => {
+      return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: officer.email,
+          subject: `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
+          message: `A shift vacancy has been identified:\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}\n\nPlease sign up if available.`,
+          alertId: alertData.alertId
+        }),
+      });
+    }) || [];
+
+    // Send text notifications to officers with phone numbers and text preferences
+    const textPromises = officers
+      ?.filter(officer => officer.phone && officer.notification_preferences?.receiveTexts)
+      .map(async (officer) => {
+        return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            to: officer.email,
-            subject: `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
-            message: `A shift vacancy has been identified:\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}\n\nPlease sign up if available.`,
-            alertId: alertData.alertId
+            to: officer.phone,
+            message: `Vacancy Alert: ${format(new Date(alertData.date), "MMM d")} - ${alertData.shift_types.name}. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Sign up if available.`
           }),
         });
       }) || [];
 
-      // Send text notifications to officers with phone numbers and text preferences
-      const textPromises = officers
-        ?.filter(officer => officer.phone && officer.notification_preferences?.receiveTexts)
-        .map(async (officer) => {
-          return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: officer.phone,
-              message: `Vacancy Alert: ${format(new Date(alertData.date), "MMM d")} - ${alertData.shift_types.name}. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Sign up if available.`
-            }),
-          });
-        }) || [];
+    await Promise.all([...emailPromises, ...textPromises]);
+    
+    // Update alert status to indicate notification was sent
+    // Try different possible status values that might be allowed
+    const { error } = await supabase
+      .from("vacancy_alerts")
+      .update({ 
+        status: 'closed'  // Try 'closed' instead of 'sent'
+      })
+      .eq("id", alertData.alertId);
 
-      await Promise.all([...emailPromises, ...textPromises]);
+    if (error) {
+      console.error("Error updating alert status:", error);
       
-      // Update alert status to indicate notification was sent
-      const { error } = await supabase
+      // If 'closed' doesn't work, try 'completed' or other common values
+      const { error: secondTry } = await supabase
         .from("vacancy_alerts")
         .update({ 
-          status: 'sent'  // Use existing status column instead of notification_sent
+          status: 'completed'  // Try 'completed' as alternative
         })
         .eq("id", alertData.alertId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Alerts sent successfully to all officers");
-      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
-      queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
-      queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
-    },
-    onError: (error) => {
-      toast.error("Failed to send alerts: " + error.message);
-    },
-  });
+        
+      if (secondTry) throw secondTry;
+    }
+  },
+  onSuccess: () => {
+    toast.success("Alerts sent successfully to all officers");
+    queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+    queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+    queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
+  },
+  onError: (error) => {
+    toast.error("Failed to send alerts: " + error.message);
+  },
+});
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
