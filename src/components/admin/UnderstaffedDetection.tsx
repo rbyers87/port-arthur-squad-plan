@@ -9,11 +9,25 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export const UnderstaffedDetection = () => {
   const queryClient = useQueryClient();
   const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
+  const [sentAlerts, setSentAlerts] = useState<Set<string>>(new Set());
+
+  // Load sent alerts from localStorage on component mount
+  useEffect(() => {
+    const savedSentAlerts = localStorage.getItem('sentVacancyAlerts');
+    if (savedSentAlerts) {
+      try {
+        const alertsArray = JSON.parse(savedSentAlerts);
+        setSentAlerts(new Set(alertsArray));
+      } catch (error) {
+        console.error('Error loading sent alerts from localStorage:', error);
+      }
+    }
+  }, []);
 
   // Get all shift types for the dropdown
   const { data: shiftTypes } = useQuery({
@@ -163,7 +177,7 @@ export const UnderstaffedDetection = () => {
               ?.filter(r => r.shift_types?.id === shift.id) || [];
 
             for (const recurringOfficer of recurringOfficers) {
-              // Check if this officer has a working exception for today that overrides their position
+              // Check if this officer has a working exception for today that override their position
               const workingException = workingExceptions?.find(e => 
                 e.officer_id === recurringOfficer.officer_id && 
                 e.shift_types?.id === shift.id
@@ -358,83 +372,83 @@ export const UnderstaffedDetection = () => {
   });
 
   const sendAlertMutation = useMutation({
-  mutationFn: async (alertData: any) => {
-    // Get all officers
-    const { data: officers, error: officersError } = await supabase
-      .from("profiles")
-      .select("id, email, phone, notification_preferences, full_name");
+    mutationFn: async (alertData: any) => {
+      // Get all officers
+      const { data: officers, error: officersError } = await supabase
+        .from("profiles")
+        .select("id, email, phone, notification_preferences, full_name");
 
-    if (officersError) throw officersError;
+      if (officersError) throw officersError;
 
-    console.log(`Found ${officers?.length || 0} officers for notifications`);
+      console.log(`Found ${officers?.length || 0} officers for notifications`);
 
-    // Send email notifications to all officers with email preferences
-    const emailPromises = officers
-      ?.filter(officer => officer.email && officer.notification_preferences?.receiveEmails !== false)
-      .map(async (officer) => {
-        console.log(`📧 Sending email to ${officer.full_name} (${officer.email})`);
-        return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            to: officer.email,
-            subject: `🚨 Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
-            message: `URGENT: Shift vacancy identified!\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}\nStaffing Needed: ${alertData.minimum_required - alertData.current_staffing} more officer(s)\n\nPlease log in to the scheduling system to sign up if available.`,
-            alertId: alertData.alertId
-          }),
-        });
-      }) || [];
+      // Send email notifications to all officers with email preferences
+      const emailPromises = officers
+        ?.filter(officer => officer.email && officer.notification_preferences?.receiveEmails !== false)
+        .map(async (officer) => {
+          console.log(`📧 Sending email to ${officer.full_name} (${officer.email})`);
+          return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: officer.email,
+              subject: `🚨 Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
+              message: `URGENT: Shift vacancy identified!\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}\nStaffing Needed: ${alertData.minimum_required - alertData.current_staffing} more officer(s)\n\nPlease log in to the scheduling system to sign up if available.`,
+              alertId: alertData.alertId
+            }),
+          });
+        }) || [];
 
-    // Send text notifications to officers with phone numbers and text preferences
-    const textPromises = officers
-      ?.filter(officer => officer.phone && officer.notification_preferences?.receiveTexts !== false)
-      .map(async (officer) => {
-        console.log(`📱 Sending text to ${officer.full_name} (${officer.phone})`);
-        return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            to: officer.phone,
-            message: `🚨 VACANCY: ${alertData.shift_types.name} on ${format(new Date(alertData.date), "MMM d")}. Need ${alertData.minimum_required - alertData.current_staffing} more. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Log in to sign up.`
-          }),
-        });
-      }) || [];
+      // Send text notifications to officers with phone numbers and text preferences
+      const textPromises = officers
+        ?.filter(officer => officer.phone && officer.notification_preferences?.receiveTexts !== false)
+        .map(async (officer) => {
+          console.log(`📱 Sending text to ${officer.full_name} (${officer.phone})`);
+          return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: officer.phone,
+              message: `🚨 VACANCY: ${alertData.shift_types.name} on ${format(new Date(alertData.date), "MMM d")}. Need ${alertData.minimum_required - alertData.current_staffing} more. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Log in to sign up.`
+            }),
+          });
+        }) || [];
 
-    // Wait for all notifications to complete
-    const allPromises = [...emailPromises, ...textPromises];
-    console.log(`Sending ${allPromises.length} notifications`);
-    
-    const results = await Promise.allSettled(allPromises);
-    
-    // Count successful notifications
-    const successful = results.filter(result => 
-      result.status === 'fulfilled'
-    ).length;
-    
-    console.log(`Successfully sent ${successful}/${allPromises.length} notifications`);
+      // Wait for all notifications to complete
+      const allPromises = [...emailPromises, ...textPromises];
+      console.log(`Sending ${allPromises.length} notifications`);
+      
+      const results = await Promise.allSettled(allPromises);
+      
+      // Count successful notifications
+      const successful = results.filter(result => 
+        result.status === 'fulfilled'
+      ).length;
+      
+      console.log(`Successfully sent ${successful}/${allPromises.length} notifications`);
 
-    // Since we can't update the status, we'll track this locally
-    // Return the alert ID so we can track it
-    return { 
-      success: true, 
-      notificationsSent: successful,
-      alertId: alertData.alertId,
-      totalOfficers: officers?.length || 0
-    };
-  },
-  onSuccess: (data) => {
-    toast.success(`Alerts sent successfully! ${data.notificationsSent} notifications delivered to ${data.totalOfficers} officers.`);
-    // We'll track sent alerts locally since we can't update the database status
-  },
-  onError: (error) => {
-    console.error("Send alert error:", error);
-    toast.error("Failed to send alerts: " + error.message);
-  },
-});
+      // Since we can't update the status, we'll track this locally
+      // Return the alert ID so we can track it
+      return { 
+        success: true, 
+        notificationsSent: successful,
+        alertId: alertData.alertId,
+        totalOfficers: officers?.length || 0
+      };
+    },
+    onSuccess: (data) => {
+      toast.success(`Alerts sent successfully! ${data.notificationsSent} notifications delivered to ${data.totalOfficers} officers.`);
+      // We'll track sent alerts locally since we can't update the database status
+    },
+    onError: (error) => {
+      console.error("Send alert error:", error);
+      toast.error("Failed to send alerts: " + error.message);
+    },
+  });
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
@@ -448,12 +462,19 @@ export const UnderstaffedDetection = () => {
     },
   });
 
-const isAlertCreated = (shift: any) => {
-  return existingAlerts?.find(alert => 
-    alert.date === shift.date && 
-    alert.shift_type_id === shift.shift_type_id
-  );
-};
+  const isAlertCreated = (shift: any) => {
+    return existingAlerts?.find(alert => 
+      alert.date === shift.date && 
+      alert.shift_type_id === shift.shift_type_id
+    );
+  };
+
+  const isAlertSent = (shift: any) => {
+    const existingAlert = existingAlerts?.find(a => 
+      a.date === shift.date && a.shift_type_id === shift.shift_type_id
+    );
+    return existingAlert ? sentAlerts.has(existingAlert.id) : false;
+  };
 
   const handleCreateAlert = (shift: any) => {
     createAlertMutation.mutate(shift);
@@ -485,9 +506,23 @@ const isAlertCreated = (shift: any) => {
       return;
     }
 
+    // Check if already sent
+    if (sentAlerts.has(alert.id)) {
+      toast.info("Alert has already been sent");
+      return;
+    }
+
     sendAlertMutation.mutate({
       ...shift,
       alertId: alert.id
+    }, {
+      onSuccess: (data) => {
+        // Track this alert as sent locally and save to localStorage
+        const newSentAlerts = new Set(sentAlerts).add(alert.id);
+        setSentAlerts(newSentAlerts);
+        localStorage.setItem('sentVacancyAlerts', JSON.stringify([...newSentAlerts]));
+        console.log(`✅ Alert ${alert.id} marked as sent and saved to localStorage`);
+      }
     });
   };
 
@@ -584,6 +619,7 @@ const isAlertCreated = (shift: any) => {
             {understaffedShifts.map((shift, index) => {
               const existingAlert = isAlertCreated(shift);
               const alertExists = !!existingAlert;
+              const isSent = isAlertSent(shift);
               
               const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
               const shiftTime = shift.shift_types 
@@ -632,44 +668,49 @@ const isAlertCreated = (shift: any) => {
                             Alert Created
                           </Badge>
                         )}
+                        {isSent && (
+                          <Badge variant="outline" className="bg-blue-500/10 text-blue-700">
+                            Alert Sent
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                   <div className="flex flex-col gap-2">
-  {!alertExists ? (
-    <Button
-      size="sm"
-      onClick={() => handleCreateAlert(shift)}
-      disabled={createAlertMutation.isPending}
-    >
-      {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
-    </Button>
-  ) : (
-    <>
-      {existingAlert?.status === 'sent' ? (
-        <div className="flex items-center gap-2 px-3 py-2 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md">
-          <Mail className="h-3 w-3" />
-          Alert Sent
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
-            <Mail className="h-3 w-3" />
-            Awaiting Response
-          </div>
-          <Button
-            size="sm"
-            onClick={() => handleSendAlert(shift)}
-            disabled={sendAlertMutation.isPending}
-            variant="outline"
-          >
-            <Mail className="h-3 w-3 mr-1" />
-            {sendAlertMutation.isPending ? "Sending..." : "Send Alert"}
-          </Button>
-        </div>
-      )}
-    </>
-  )}
-</div>
+                    <div className="flex flex-col gap-2">
+                      {!alertExists ? (
+                        <Button
+                          size="sm"
+                          onClick={() => handleCreateAlert(shift)}
+                          disabled={createAlertMutation.isPending}
+                        >
+                          {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
+                        </Button>
+                      ) : (
+                        <>
+                          {isSent ? (
+                            <div className="flex items-center gap-2 px-3 py-2 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md">
+                              <Mail className="h-3 w-3" />
+                              Alert Sent
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
+                                <Mail className="h-3 w-3" />
+                                Awaiting Response
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => handleSendAlert(shift)}
+                                disabled={sendAlertMutation.isPending}
+                                variant="outline"
+                              >
+                                <Mail className="h-3 w-3 mr-1" />
+                                {sendAlertMutation.isPending ? "Sending..." : "Send Alert"}
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
