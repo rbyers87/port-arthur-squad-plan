@@ -5,42 +5,21 @@ const resend = new Resend(Deno.env.get('RESEND_API_KEY'))
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-@@ -14,78 +11,43 @@ serve(async (req) => {
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // For now, let's just log and return success without actually sending emails
     const { to, subject, message, alertId } = await req.json()
 
-    console.log('📧 WOULD SEND EMAIL (Resend API configured):')
-    console.log('To:', to)
-    console.log('Subject:', subject)
-    console.log('Message:', message)
-    console.log('Alert ID:', alertId)
-    console.log('---')
-
-    // Simulate success - remove this when ready to send real emails
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: 'Email would be sent (Resend configured)',
-        simulated: true
-
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      },
-    )
-
-    /* UNCOMMENT WHEN READY FOR REAL EMAILS:
     console.log('Sending real vacancy alert email to:', to)
 
     const { data, error } = await resend.emails.send({
-      from: 'Shift Alerts <alerts@resend.dev>',
+      from: 'Shift Alerts <alerts@resend.dev>', // Update this to your verified domain
       to: [to],
       subject: subject,
       html: `
@@ -74,19 +53,14 @@ const corsHeaders = {
         status: 200,
       },
     )
-    */
-
   } catch (error) {
-    console.error('Error in vacancy alert function:', error)
+    console.error('Error sending vacancy alert:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
-
-
-
-
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       },
     )
   }
+})
