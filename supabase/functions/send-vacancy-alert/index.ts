@@ -16,24 +16,24 @@ serve(async (req) => {
   try {
     const { to, subject, message, alertId } = await req.json()
 
-    console.log('Sending real vacancy alert email to:', to)
+    console.log('Sending vacancy alert email to:', to)
 
     const { data, error } = await resend.emails.send({
-      from: 'Shift Alerts <alerts@resend.dev>', // Update this to your verified domain
+      from: 'Shift Alerts <alerts@your-domain.com>',
       to: [to],
       subject: subject,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #1a56db;">🚨 Shift Vacancy Alert</h2>
-          <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #1a56db;">
+          <h2 style="color: #1a56db;">Shift Vacancy Alert</h2>
+          <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
             ${message.replace(/\n/g, '<br>')}
           </div>
           <p style="color: #6b7280; font-size: 14px;">
-            <strong>Action Required:</strong> Please log in to the scheduling system to sign up for this shift if you're available.
+            Please log in to the scheduling system to sign up for this shift if you're available.
           </p>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
           <p style="color: #9ca3af; font-size: 12px;">
-            This is an automated message from your department's scheduling system. Please do not reply to this email.
+            This is an automated message. Please do not reply to this email.
           </p>
         </div>
       `
@@ -43,8 +43,6 @@ serve(async (req) => {
       console.error('Resend error:', error)
       throw error
     }
-
-    console.log('Email sent successfully, message ID:', data?.id)
 
     return new Response(
       JSON.stringify({ success: true, messageId: data?.id }),
