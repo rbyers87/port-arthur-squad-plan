@@ -905,8 +905,6 @@ const WeeklySchedule = () => {
     // Get all unique officers across the week for consistent rows
     const allOfficers = new Map();
 
-
-
     // First, get all recurring schedules to know each officer's normal pattern
     const recurringSchedulesByOfficer = new Map();
     schedules?.recurring?.forEach(recurring => {
