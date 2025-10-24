@@ -240,68 +240,59 @@ const respondMutation = useMutation({
                       </div>
                     </div>
 
-{!isAdminOrSupervisor && (
-  <div className="flex gap-2">
-    {userResponse ? (
-      <div className="space-y-2 w-full">
-        <Badge 
-          variant={
-            userResponse.status === "accepted" ? "default" :
-            userResponse.status === "rejected" ? "destructive" : "outline"
-          }
-          className="capitalize"
-        >
-          {userResponse.status === "accepted" ? "Approved" :
-          userResponse.status === "rejected" ? "Not Approved" :
-          "Pending Review"}
-        </Badge>
-        
-        {/* Show approval message when approved */}
-        {userResponse.status === "accepted" && (
-          <div className="p-2 bg-green-50 border border-green-200 rounded text-sm">
-            <p className="text-green-800 font-medium">✓ Your request has been approved</p>
-            <p className="text-green-700 mt-1">
-              Your request for {alert.shift_types?.name} on {format(new Date(alert.date), "MMM d, yyyy")} has been approved. 
-              Please report for duty as scheduled.
-            </p>
-          </div>
-        )}
-        
-        {/* Show rejection message when denied */}
-        {userResponse.status === "rejected" && userResponse.rejection_reason && (
-          <div className="p-2 bg-red-50 border border-red-200 rounded text-sm">
-            <p className="text-red-800 font-medium">✗ Your request was not approved</p>
-            <p className="text-red-700 mt-1">
-              {userResponse.rejection_reason}
-            </p>
-          </div>
-        )}
-      </div>
-    ) : (
-      <>
-        {alert.notification_sent ? (
-          <Button
-            size="sm"
-            onClick={() =>
-              respondMutation.mutate({
-                alertId: alert.id,
-                status: "interested",
-              })
-            }
-            disabled={respondMutation.isPending || isStaffed || !!userResponse}
-          >
-            {respondMutation.isPending ? "Submitting..." : "I'm Available"}
-          </Button>
-        ) : (
-          <div className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
-            <Clock className="h-3 w-3" />
-            Awaiting Alert Notification
-          </div>
-        )}
-      </>
-    )}
-  </div>
-)}
+                    {!isAdminOrSupervisor && (
+                      <div className="flex gap-2">
+                        {userResponse ? (
+                          <div className="space-y-2 w-full">
+                            <Badge 
+                              variant={
+                                userResponse.status === "accepted" ? "default" :
+                                userResponse.status === "rejected" ? "destructive" : "outline"
+                              }
+                              className="capitalize"
+                            >
+                              {userResponse.status === "accepted" ? "Approved" :
+                              userResponse.status === "rejected" ? "Not Approved" :
+                              "Pending Review"}
+                            </Badge>
+                            
+                            {/* Show approval message when approved */}
+                            {userResponse.status === "accepted" && (
+                              <div className="p-2 bg-green-50 border border-green-200 rounded text-sm">
+                                <p className="text-green-800 font-medium">✓ Your request has been approved</p>
+                                <p className="text-green-700 mt-1">
+                                  Your request for {alert.shift_types?.name} on {format(new Date(alert.date), "MMM d, yyyy")} has been approved. 
+                                  Please report for duty as scheduled.
+                                </p>
+                              </div>
+                            )}
+                            
+                            {/* Show rejection message when denied */}
+                            {userResponse.status === "rejected" && userResponse.rejection_reason && (
+                              <div className="p-2 bg-red-50 border border-red-200 rounded text-sm">
+                                <p className="text-red-800 font-medium">✗ Your request was not approved</p>
+                                <p className="text-red-700 mt-1">
+                                  {userResponse.rejection_reason}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <Button
+  size="sm"
+  onClick={() =>
+    respondMutation.mutate({
+      alertId: alert.id,
+      status: "interested",
+    })
+  }
+  disabled={respondMutation.isPending || isStaffed || !!userResponse}
+>
+  {respondMutation.isPending ? "Submitting..." : "I'm Available"}
+</Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
