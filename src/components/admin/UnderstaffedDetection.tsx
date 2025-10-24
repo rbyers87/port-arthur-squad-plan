@@ -561,5 +561,194 @@ export const UnderstaffedDetection = () => {
     refreshMutation.mutate();
   };
 
-  // ... rest of your component (the rendering part remains the same)
-  // [Include the exact same rendering code from your previous component]
+ if (error) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center text-red-600">
+            Error loading understaffed shifts: {error.message}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center">Scanning for understaffed shifts...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Automatic Understaffed Shift Detection
+            </CardTitle>
+            <CardDescription>
+              Detects understaffing based on actual assigned positions in the daily schedule
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={refreshMutation.isPending}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshMutation.isPending ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleCreateAllAlerts}
+              disabled={createAlertMutation.isPending || !understaffedShifts?.length}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create All Alerts
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-6">
+          <Label htmlFor="shift-select" className="text-sm font-medium mb-2 block">
+            Select Shift to Scan
+          </Label>
+          <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a shift to scan" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Shifts</SelectItem>
+              {shiftTypes?.map((shift) => (
+                <SelectItem key={shift.id} value={shift.id}>
+                  {shift.name} ({shift.start_time} - {shift.end_time})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {!understaffedShifts || understaffedShifts.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-muted-foreground">
+              No understaffed shifts found in the next 7 days.
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Check browser console for detailed scan results.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {understaffedShifts.map((shift, index) => {
+              const existingAlert = isAlertCreated(shift);
+              const alertExists = !!existingAlert;
+              const isSent = isAlertSent(shift);
+              
+              const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
+              const shiftTime = shift.shift_types 
+                ? `${shift.shift_types.start_time} - ${shift.shift_types.end_time}`
+                : "Time not available";
+
+              return (
+                <div
+                  key={`${shift.date}-${shift.shift_type_id}-${index}`}
+                  className="p-4 border rounded-lg space-y-3"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <p className="font-medium">{shiftName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(shift.date), "EEEE, MMM d, yyyy")} • {shiftTime}
+                      </p>
+                      
+                      <div className="bg-gray-100 p-2 rounded text-xs mt-2">
+                        <p className="text-gray-600">
+                          <strong>Staffing:</strong> {shift.current_staffing}/{shift.minimum_required} |
+                          <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
+                          <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
+                        </p>
+                        <p className="text-gray-500 mt-1">
+                          <strong>Assigned:</strong> {shift.assigned_officers?.map(o => `${o.name} (${o.position || 'No position'})`).join(', ') || 'None'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant="destructive">
+                          Total: {shift.current_staffing}/{shift.minimum_required}
+                        </Badge>
+                        {shift.isSupervisorsUnderstaffed && (
+                          <Badge variant="destructive">
+                            Needs {shift.min_supervisors - shift.current_supervisors} supervisor(s)
+                          </Badge>
+                        )}
+                        {shift.isOfficersUnderstaffed && (
+                          <Badge variant="destructive">
+                            Needs {shift.min_officers - shift.current_officers} officer(s)
+                          </Badge>
+                        )}
+                        {alertExists && (
+                          <Badge variant="outline" className="bg-green-500/10 text-green-700">
+                            Alert Created
+                          </Badge>
+                        )}
+                        {isSent && (
+                          <Badge variant="outline" className="bg-blue-500/10 text-blue-700">
+                            Alert Sent
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {!alertExists ? (
+                        <Button
+                          size="sm"
+                          onClick={() => handleCreateAlert(shift)}
+                          disabled={createAlertMutation.isPending}
+                        >
+                          {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
+                        </Button>
+                      ) : (
+                        <>
+                          {isSent ? (
+                            <div className="flex items-center gap-2 px-3 py-2 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md">
+                              <Mail className="h-3 w-3" />
+                              Alert Sent
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
+                                <Mail className="h-3 w-3" />
+                                Awaiting Response
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => handleSendAlert(shift)}
+                                disabled={sendAlertMutation.isPending}
+                                variant="outline"
+                              >
+                                <Mail className="h-3 w-3 mr-1" />
+                                {sendAlertMutation.isPending ? "Sending..." : "Send Alert"}
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
