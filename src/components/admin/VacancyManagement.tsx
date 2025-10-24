@@ -1367,60 +1367,59 @@ const isAlertCreated = (shift: any) => {
                           )}
                         </div>
                       </div>
-<div className="space-y-4">
-  {understaffedShifts.map((shift, index) => {
-    const existingAlert = isAlertCreated(shift);
-    const alertExists = !!existingAlert;
-    
-    return (
-      <div key={`${shift.date}-${shift.shift_type_id}-${index}`} className="p-4 border rounded-lg space-y-3">
-        <div className="flex items-start justify-between">
-          {/* Shift info content here */}
-          
-          {/* Our fixed button section */}
-          <div className="flex flex-col gap-2">
-            {!alertExists ? (
+<div className="flex flex-col gap-2">
+  {!alertExists ? (
+    <Button
+      size="sm"
+      onClick={() => handleCreateAlertFromDetection(shift)}
+      disabled={createAlertMutation.isPending}
+    >
+      {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
+    </Button>
+  ) : (
+    <>
+      {(() => {
+        // Use the main alerts query data which should have notification_sent
+        const mainAlert = alerts?.find(a => 
+          a.date === shift.date && 
+          a.shift_type_id === shift.shift_type_id
+        );
+        
+        if (mainAlert?.notification_sent) {
+          return (
+            <div className="flex items-center gap-2 px-3 py-2 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md">
+              <Check className="h-3 w-3" />
+              Alert Sent
+              {mainAlert.notified_at && (
+                <span className="text-xs ml-1">
+                  {format(new Date(mainAlert.notified_at), "MMM d, h:mm a")}
+                </span>
+              )}
+            </div>
+          );
+        } else {
+          return (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
+                <Clock className="h-3 w-3" />
+                Awaiting Response
+              </div>
               <Button
                 size="sm"
-                onClick={() => handleCreateAlertFromDetection(shift)}
-                disabled={createAlertMutation.isPending}
+                onClick={() => handleSendAlert(shift)}
+                disabled={sendAlertMutation.isPending}
+                variant="outline"
               >
-                {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
+                <Mail className="h-3 w-3 mr-1" />
+                {sendAlertMutation.isPending ? "Sending..." : "Send Alert"}
               </Button>
-            ) : (
-              <>
-                {existingAlert?.notification_sent ? (
-                  <div className="flex items-center gap-2 px-3 py-2 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md">
-                    <Check className="h-3 w-3" />
-                    Alert Sent
-                    {existingAlert.notified_at && (
-                      <span className="text-xs ml-1">
-                        {format(new Date(existingAlert.notified_at), "MMM d, h:mm a")}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
-                      <Clock className="h-3 w-3" />
-                      Awaiting Response
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleSendAlert(shift)}
-                      disabled={sendAlertMutation.isPending}
-                      variant="outline"
-                    >
-                      <Mail className="h-3 w-3 mr-1" />
-                      {sendAlertMutation.isPending ? "Sending..." : "Send Alert"}
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div> {/* closes flex items-start justify-between */}
-      </div> {/* closes p-4 border rounded-lg */}
+            </div>
+          );
+        }
+      })()}
+    </>
+  )}
+</div>
     );
   })}
 </div>
