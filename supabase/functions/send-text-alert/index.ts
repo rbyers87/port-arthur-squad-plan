@@ -14,14 +14,8 @@ serve(async (req) => {
   try {
     const { to, message } = await req.json()
 
-    console.log('Sending text alert to:', to)
+    console.log('Sending real text alert to:', to)
 
-    // For demo purposes, we'll just log the message
-    // In production, you'd use Twilio or another SMS service
-    console.log('Text message content:', message)
-    
-    // Example with Twilio (uncomment and configure when ready):
-    /*
     const client = twilio(
       Deno.env.get('TWILIO_ACCOUNT_SID'),
       Deno.env.get('TWILIO_AUTH_TOKEN')
@@ -32,14 +26,14 @@ serve(async (req) => {
       from: Deno.env.get('TWILIO_PHONE_NUMBER'),
       to: to
     })
-    */
 
-    // For now, we'll simulate success
+    console.log('Text sent successfully, message SID:', result.sid)
+
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Text alert simulated successfully',
-        // messageId: result.sid // Uncomment when using Twilio
+        message: 'Text alert sent successfully',
+        messageId: result.sid
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
