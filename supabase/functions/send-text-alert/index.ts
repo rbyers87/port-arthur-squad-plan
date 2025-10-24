@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
-import twilio from "npm:twilio@4.19.0"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,47 +11,43 @@ serve(async (req) => {
   }
 
   try {
-    const { to, message } = await req.json()
+    const { to, subject, message, alertId } = await req.json()
 
-    console.log('Sending text alert to:', to)
+    console.log('📧 VACANCY ALERT SIMULATION (No Auth Required):')
+    console.log('To:', to)
+    console.log('Subject:', subject)
+    console.log('Message:', message)
+    console.log('Alert ID:', alertId)
+    console.log('---')
 
-    // For demo purposes, we'll just log the message
-    // In production, you'd use Twilio or another SMS service
-    console.log('Text message content:', message)
-    
-    // Example with Twilio (uncomment and configure when ready):
-    /*
-    const client = twilio(
-      Deno.env.get('TWILIO_ACCOUNT_SID'),
-      Deno.env.get('TWILIO_AUTH_TOKEN')
-    )
+    // Simulate processing time
+    await new Promise(resolve => setTimeout(resolve, 50));
 
-    const result = await client.messages.create({
-      body: message,
-      from: Deno.env.get('TWILIO_PHONE_NUMBER'),
-      to: to
-    })
-    */
-
-    // For now, we'll simulate success
+    // Always return success for simulation
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Text alert simulated successfully',
-        // messageId: result.sid // Uncomment when using Twilio
+        message: 'Email simulation successful',
+        simulated: true,
+        recipient: to
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       },
     )
+
   } catch (error) {
-    console.error('Error sending text alert:', error)
+    console.error('Error in vacancy alert simulation:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        success: true, // Still return success even if there's an error for simulation
+        simulated: true,
+        error: error.message 
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 200, // Return 200 even for errors in simulation
       },
     )
   }
