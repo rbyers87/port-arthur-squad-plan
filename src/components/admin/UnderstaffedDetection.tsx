@@ -434,12 +434,12 @@ export const UnderstaffedDetection = () => {
     },
   });
 
-  const isAlertCreated = (shift: any) => {
-    return existingAlerts?.some(alert => 
-      alert.date === shift.date && 
-      alert.shift_type_id === shift.shift_type_id
-    );
-  };
+const isAlertCreated = (shift: any) => {
+  return existingAlerts?.find(alert => 
+    alert.date === shift.date && 
+    alert.shift_type_id === shift.shift_type_id
+  );
+};
 
   const handleCreateAlert = (shift: any) => {
     createAlertMutation.mutate(shift);
