@@ -873,37 +873,49 @@ This is an automated vacancy alert. Please do not reply to this message.
         receiveTexts: true 
       };
       
-      // Send email if enabled and officer has email
-      if (preferences.receiveEmails !== false && officer.email) {
-        console.log(`Sending email to ${officer.full_name} (${officer.email})`);
-        
-        emailPromises.push(
-          fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: officer.email,
-              subject: emailSubject,
-              message: emailBody,
-              alertId: alertData.alertId
-            }),
-          })
-          .then(async (response) => {
-            if (!response.ok) {
-              const errorText = await response.text();
-              throw new Error(`Email failed for ${officer.email}: ${errorText}`);
-            }
-            return response.json();
-          })
-          .catch(err => {
-            console.error(`Failed to send email to ${officer.email}:`, err);
-            // Don't throw here - we want to continue with other officers
-            return { success: false, error: err.message };
-          })
-        );
+      // In the email section of sendAlertMutation:
+if (preferences.receiveEmails !== false && officer.email) {
+  console.log(`📧 Sending email to ${officer.full_name} (${officer.email})`);
+  
+  // Use formatted email body for real emails
+  const emailBody = `
+Shift: ${shiftName}
+Date: ${date}
+Time: ${alertData.shift_types?.start_time} - ${alertData.shift_types?.end_time}
+Staffing Needed: ${staffingNeeded} more officer(s)
+Current Staffing: ${alertData.current_staffing}/${alertData.minimum_required}
+
+${alertData.custom_message ? `Message: ${alertData.custom_message}` : 'Please log in to the scheduling system to volunteer for this shift.'}
+
+This is an automated vacancy alert. Please do not reply to this message.
+  `.trim();
+
+  notificationPromises.push(
+    fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: officer.email,
+        subject: emailSubject,
+        message: emailBody,
+        alertId: alertData.alertId
+      }),
+    })
+    .then(async (response) => {
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Email failed for ${officer.email}: ${errorText}`);
       }
+      return response.json();
+    })
+    .catch(err => {
+      console.error(`Failed to send email to ${officer.email}:`, err);
+      return { success: false, error: err.message };
+    })
+  );
+}
 
       // Send text if enabled and officer has phone
       if (preferences.receiveTexts !== false && officer.phone) {
