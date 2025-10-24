@@ -325,51 +325,68 @@ export const UnderstaffedDetection = () => {
     },
   });
 
-  const createAlertMutation = useMutation({
-    mutationFn: async (shiftData: any) => {
-      console.log("🔍 Creating alert for:", {
+ const createAlertMutation = useMutation({
+  mutationFn: async (shiftData: any) => {
+    console.log("🔍 Creating alert for:", {
+      shift_type_id: shiftData.shift_type_id,
+      shift_name: shiftData.shift_types?.name,
+      date: shiftData.date
+    });
+
+    // Check if alert already exists
+    const existingAlert = existingAlerts?.find(alert => 
+      alert.date === shiftData.date && 
+      alert.shift_type_id === shiftData.shift_type_id
+    );
+
+    if (existingAlert) {
+      console.log("⚠️ Alert already exists, returning existing alert");
+      return existingAlert; // Return the existing alert instead of throwing error
+    }
+
+    const { data, error } = await supabase
+      .from("vacancy_alerts")
+      .insert({
+        date: shiftData.date,
         shift_type_id: shiftData.shift_type_id,
-        shift_name: shiftData.shift_types?.name,
-        date: shiftData.date
-      });
+        current_staffing: shiftData.current_staffing,
+        minimum_required: shiftData.minimum_required,
+        status: "open",
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-      // Check if alert already exists
-      const existingAlert = existingAlerts?.find(alert => 
-        alert.date === shiftData.date && 
-        alert.shift_type_id === shiftData.shift_type_id
-      );
-
-      if (existingAlert) {
-        console.log("⚠️ Alert already exists");
-        throw new Error("Alert already exists for this shift");
+    if (error) {
+      // If it's a duplicate error, try to fetch the existing alert
+      if (error.code === '23505') {
+        console.log("🔄 Duplicate alert detected, fetching existing alert");
+        const { data: existingData } = await supabase
+          .from("vacancy_alerts")
+          .select("*")
+          .eq("date", shiftData.date)
+          .eq("shift_type_id", shiftData.shift_type_id)
+          .eq("status", "open")
+          .single();
+        
+        if (existingData) {
+          return existingData;
+        }
       }
-
-      const { data, error } = await supabase
-        .from("vacancy_alerts")
-        .insert({
-          date: shiftData.date,
-          shift_type_id: shiftData.shift_type_id,
-          current_staffing: shiftData.current_staffing,
-          minimum_required: shiftData.minimum_required,
-          status: "open",
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
-      queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      toast.success("Vacancy alert created");
-    },
-    onError: (error) => {
-      toast.error("Failed to create alert: " + error.message);
-    },
-  });
+      throw error;
+    }
+    return data;
+  },
+  onSuccess: (data) => {
+    queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+    queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    toast.success("Vacancy alert created");
+  },
+  onError: (error) => {
+    toast.error("Failed to create alert: " + error.message);
+  },
+});
 
 const sendAlertMutation = useMutation({
   mutationFn: async (alertData: any) => {
