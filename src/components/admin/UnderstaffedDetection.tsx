@@ -371,9 +371,9 @@ export const UnderstaffedDetection = () => {
     },
   });
 
-  const sendAlertMutation = useMutation({
+const sendAlertMutation = useMutation({
     mutationFn: async (alertData: any) => {
-      console.log("🔄 Starting alert sending process for:", alertData.alertId);
+      console.log("🔄 Starting REAL alert sending process for:", alertData.alertId);
 
       // Get all officers
       const { data: officers, error: officersError } = await supabase
@@ -384,99 +384,188 @@ export const UnderstaffedDetection = () => {
 
       console.log(`Found ${officers?.length || 0} officers for notifications`);
 
-      const notificationPromises = [];
+      const emailPromises = [];
+      const textPromises = [];
 
-      // Send email notifications to all officers with email preferences
+      // Prepare alert details for real notifications
+      const shiftName = alertData.shift_types?.name || "Unknown Shift";
+      const date = alertData.date ? format(new Date(alertData.date), "EEEE, MMM d, yyyy") : "Unknown Date";
+      const staffingNeeded = alertData.minimum_required - alertData.current_staffing;
+      
+      // Email content
+      const emailSubject = `🚨 Vacancy Alert - ${shiftName} - ${format(new Date(alertData.date), "MMM d, yyyy")}`;
+      const emailBody = `
+Shift: ${shiftName}
+Date: ${date}
+Time: ${alertData.shift_types?.start_time} - ${alertData.shift_types?.end_time}
+Staffing Needed: ${staffingNeeded} more officer(s)
+Current Staffing: ${alertData.current_staffing}/${alertData.minimum_required}
+
+Please log in to the scheduling system to volunteer for this shift.
+
+This is an automated vacancy alert. Please do not reply to this message.
+      `.trim();
+
+      // Text message content (shorter)
+      const textMessage = `🚨 VACANCY: ${shiftName} on ${format(new Date(alertData.date), "MMM d")}. Need ${staffingNeeded} more. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Log in to sign up.`;
+
+      // Send real notifications to each officer
       for (const officer of officers || []) {
         const preferences = officer.notification_preferences || { 
           receiveEmails: true, 
           receiveTexts: true 
         };
 
+        // Send real email via Resend
         if (preferences.receiveEmails !== false && officer.email) {
-          console.log(`📧 Sending email to ${officer.full_name} (${officer.email})`);
+          console.log(`📧 Sending REAL email to ${officer.full_name} (${officer.email})`);
           
-          notificationPromises.push(
+          emailPromises.push(
             fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}` // Add auth header
               },
               body: JSON.stringify({
                 to: officer.email,
-                subject: `🚨 Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
-                message: `URGENT: Shift vacancy identified!\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}\nStaffing Needed: ${alertData.minimum_required - alertData.current_staffing} more officer(s)\n\nPlease log in to the scheduling system to sign up if available.`,
+                subject: emailSubject,
+                message: emailBody,
                 alertId: alertData.alertId
               }),
             }).then(async (response) => {
-              // The edge function should always return success now
-              const result = await response.json();
-              console.log(`Email result for ${officer.email}:`, result);
-              return result;
+              if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Email failed for ${officer.email}: ${errorText}`);
+              }
+              return response.json();
             }).catch(err => {
               console.error(`Failed to send email to ${officer.email}:`, err);
-              // Still return success for simulation
-              return { success: true, simulated: true, error: err.message };
+              throw err; // Re-throw to fail the entire mutation
             })
           );
         }
 
+        // Send real text via Twilio
         if (preferences.receiveTexts !== false && officer.phone) {
-          console.log(`📱 Sending text to ${officer.full_name} (${officer.phone})`);
+          console.log(`📱 Sending REAL text to ${officer.full_name} (${officer.phone})`);
           
-          notificationPromises.push(
+          textPromises.push(
             fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}` // Add auth header
               },
               body: JSON.stringify({
                 to: officer.phone,
-                message: `🚨 VACANCY: ${alertData.shift_types.name} on ${format(new Date(alertData.date), "MMM d")}. Need ${alertData.minimum_required - alertData.current_staffing} more. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Log in to sign up.`
+                message: textMessage
               }),
             }).then(async (response) => {
-              // The edge function should always return success now
-              const result = await response.json();
-              console.log(`Text result for ${officer.phone}:`, result);
-              return result;
+              if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Text failed for ${officer.phone}: ${errorText}`);
+              }
+              return response.json();
             }).catch(err => {
               console.error(`Failed to send text to ${officer.phone}:`, err);
-              // Still return success for simulation
-              return { success: true, simulated: true, error: err.message };
+              throw err; // Re-throw to fail the entire mutation
             })
           );
         }
       }
 
-      console.log(`Sending ${notificationPromises.length} notifications`);
+      console.log(`Sending ${emailPromises.length} emails and ${textPromises.length} texts`);
 
       // Wait for all notifications to complete
-      const results = await Promise.allSettled(notificationPromises);
-      
-      // Count successful notifications (all should be successful in simulation)
-      const successful = results.filter(result => 
+      const [emailResults, textResults] = await Promise.all([
+        Promise.allSettled(emailPromises),
+        Promise.allSettled(textPromises)
+      ]);
+
+      // Count successful notifications
+      const successfulEmails = emailResults.filter(result => 
         result.status === 'fulfilled'
       ).length;
       
-      console.log(`Successfully processed ${successful}/${notificationPromises.length} notifications`);
+      const successfulTexts = textResults.filter(result => 
+        result.status === 'fulfilled'
+      ).length;
 
-      // NO DATABASE UPDATES - only return success
+      console.log(`Successfully sent ${successfulEmails}/${emailPromises.length} emails and ${successfulTexts}/${textPromises.length} texts`);
+
+      // Check if any critical failures occurred
+      const failedEmails = emailResults.filter(result => 
+        result.status === 'rejected'
+      );
+      
+      const failedTexts = textResults.filter(result => 
+        result.status === 'rejected'
+      );
+
+      if (failedEmails.length > 0 || failedTexts.length > 0) {
+        console.error('Some notifications failed:', { failedEmails, failedTexts });
+        // You might want to throw an error here if any critical failures occur
+        // throw new Error(`${failedEmails.length} emails and ${failedTexts.length} texts failed to send`);
+      }
+
+      // Return success with counts
       return { 
         success: true, 
-        notificationsSent: successful,
+        emailsSent: successfulEmails,
+        textsSent: successfulTexts,
         alertId: alertData.alertId,
         totalOfficers: officers?.length || 0
       };
     },
     onSuccess: (data) => {
-      toast.success(`Alerts sent successfully! ${data.notificationsSent} notifications processed.`);
-      // No database updates - only local state tracking
+      toast.success(`Alerts sent successfully! ${data.emailsSent} emails and ${data.textsSent} texts delivered.`);
     },
     onError: (error) => {
       console.error("Send alert error:", error);
       toast.error("Failed to send alerts: " + error.message);
     },
   });
+
+  const isAlertSent = (shift: any) => {
+    const existingAlert = existingAlerts?.find(a => 
+      a.date === shift.date && a.shift_type_id === shift.shift_type_id
+    );
+    return existingAlert ? sentAlerts.has(existingAlert.id) : false;
+  };
+
+  const handleSendAlert = (shift: any) => {
+    const alert = existingAlerts?.find(a => 
+      a.date === shift.date && a.shift_type_id === shift.shift_type_id
+    );
+
+    if (!alert) {
+      toast.error("Please create an alert first");
+      return;
+    }
+
+    // Check if already sent
+    if (sentAlerts.has(alert.id)) {
+      toast.info("Alert has already been sent");
+      return;
+    }
+
+    sendAlertMutation.mutate({
+      ...shift,
+      alertId: alert.id
+    }, {
+      onSuccess: (data) => {
+        // Track this alert as sent locally and save to localStorage
+        const newSentAlerts = new Set(sentAlerts).add(alert.id);
+        setSentAlerts(newSentAlerts);
+        localStorage.setItem('sentVacancyAlerts', JSON.stringify([...newSentAlerts]));
+        console.log(`✅ Alert ${alert.id} marked as sent`);
+        
+        // Refresh the UI
+        queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+      }
+    });
+  };
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
@@ -583,7 +672,7 @@ export const UnderstaffedDetection = () => {
     );
   }
 
-  return (
+    return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
