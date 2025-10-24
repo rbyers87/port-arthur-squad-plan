@@ -568,38 +568,43 @@ Alert ID: ${alertData.alertId}
     return existingAlert ? sentAlerts.has(existingAlert.id) : false;
   };
 
-  const handleSendAlert = (shift: any) => {
-    const alert = existingAlerts?.find(a => 
-      a.date === shift.date && a.shift_type_id === shift.shift_type_id
-    );
+const handleSendAlert = (shift: any) => {
+  const alert = existingAlerts?.find(a => 
+    a.date === shift.date && a.shift_type_id === shift.shift_type_id
+  );
 
-    if (!alert) {
-      toast.error("Please create an alert first");
-      return;
+  if (!alert) {
+    toast.error("Please create an alert first");
+    return;
+  }
+
+  // Check if already sent
+  if (sentAlerts.has(alert.id)) {
+    toast.info("Alert has already been sent");
+    return;
+  }
+
+  console.log(`🔄 Starting send process for alert:`, alert);
+
+  sendAlertMutation.mutate({
+    ...shift,
+    alertId: alert.id
+  }, {
+    onSuccess: (data) => {
+      // Track this alert as sent locally and save to localStorage
+      const newSentAlerts = new Set(sentAlerts).add(alert.id);
+      setSentAlerts(newSentAlerts);
+      localStorage.setItem('sentVacancyAlerts', JSON.stringify([...newSentAlerts]));
+      console.log(`✅ Alert ${alert.id} marked as sent locally`);
+      
+      // Refresh the UI
+      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+    },
+    onError: (error) => {
+      console.error(`❌ Failed to send alert ${alert.id}:`, error);
     }
-
-    // Check if already sent
-    if (sentAlerts.has(alert.id)) {
-      toast.info("Alert has already been sent");
-      return;
-    }
-
-    sendAlertMutation.mutate({
-      ...shift,
-      alertId: alert.id
-    }, {
-      onSuccess: (data) => {
-        // Track this alert as sent locally and save to localStorage
-        const newSentAlerts = new Set(sentAlerts).add(alert.id);
-        setSentAlerts(newSentAlerts);
-        localStorage.setItem('sentVacancyAlerts', JSON.stringify([...newSentAlerts]));
-        console.log(`✅ Alert ${alert.id} marked as sent`);
-        
-        // Refresh the UI
-        queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
-      }
-    });
-  };
+  });
+};
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
