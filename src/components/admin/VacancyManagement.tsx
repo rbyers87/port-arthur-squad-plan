@@ -1289,141 +1289,133 @@ const isAlertCreated = (shift: any) => {
             </Select>
           </div>
 
-          {understaffedLoading ? (
-            <div className="text-center py-4">
-              <p className="text-sm text-muted-foreground">Scanning for understaffed shifts...</p>
-            </div>
-          ) : !understaffedShifts || understaffedShifts.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-sm text-muted-foreground">
-                No understaffed shifts found in the next 7 days.
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Check browser console for detailed scan results.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {understaffedShifts.map((shift, index) => {
-                console.log("🔄 RENDERING SHIFT - ACTUAL DATA:", {
-                  rawDate: shift.date,
-                  formattedDate: format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy"),
-                  shiftName: shift.shift_types?.name,
-                  supervisors: shift.current_supervisors,
-                  officers: shift.current_officers
-                });
-                
-                const existingAlert = isAlertCreated(shift);
-                const alertExists = !!existingAlert;
-                
-                const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
-                const shiftTime = shift.shift_types 
-                  ? `${shift.shift_types.start_time} - ${shift.shift_types.end_time}`
-                  : "Time not available";
-
-                return (
-                  <div
-                    key={`${shift.date}-${shift.shift_type_id}-${index}`}
-                    className="p-4 border rounded-lg space-y-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <p className="font-medium">{shiftName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy")} • {shiftTime}
-                        </p>
-                        
-                        <div className="bg-gray-100 p-2 rounded text-xs mt-2">
-                          <p className="text-gray-600">
-                            <strong>Staffing:</strong> {shift.current_staffing}/{shift.minimum_required} |
-                            <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
-                            <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
-                          </p>
-                          <p className="text-gray-500 mt-1">
-                            <strong>Assigned:</strong> {shift.assigned_officers?.map(o => 
-                              `${o.name} (${o.position || 'No position'} - ${o.isSupervisor ? 'Supervisor' : 'Officer'})`
-                            ).join(', ') || 'None'}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge variant="destructive">
-                            Total: {shift.current_staffing}/{shift.minimum_required}
-                          </Badge>
-                          {shift.isSupervisorsUnderstaffed && (
-                            <Badge variant="destructive">
-                              Needs {shift.min_supervisors - shift.current_supervisors} supervisor(s)
-                            </Badge>
-                          )}
-                          {shift.isOfficersUnderstaffed && (
-                            <Badge variant="destructive">
-                              Needs {shift.min_officers - shift.current_officers} officer(s)
-                            </Badge>
-                          )}
-                          {alertExists && (
-                            <Badge variant="outline" className="bg-green-500/10 text-green-700">
-                              Alert Created
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-<div className="flex flex-col gap-2">
-  {!alertExists ? (
-    <Button
-      size="sm"
-      onClick={() => handleCreateAlertFromDetection(shift)}
-      disabled={createAlertMutation.isPending}
-    >
-      {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
-    </Button>
+<CardContent>
+  {understaffedLoading ? (
+    <div className="text-center py-4">
+      <p className="text-sm text-muted-foreground">Scanning for understaffed shifts...</p>
+    </div>
+  ) : !understaffedShifts || understaffedShifts.length === 0 ? (
+    <div className="text-center py-8">
+      <p className="text-sm text-muted-foreground">
+        No understaffed shifts found in the next 7 days.
+      </p>
+      <p className="text-xs text-muted-foreground mt-2">
+        Check browser console for detailed scan results.
+      </p>
+    </div>
   ) : (
-    <>
-      {(() => {
-        // Use the main alerts query data which should have notification_sent
-        const mainAlert = alerts?.find(a => 
-          a.date === shift.date && 
-          a.shift_type_id === shift.shift_type_id
-        );
+    <div className="space-y-4">
+      {understaffedShifts.map((shift, index) => {
+        const existingAlert = isAlertCreated(shift);
+        const alertExists = !!existingAlert;
         
-        if (mainAlert?.notification_sent) {
-          return (
-            <div className="flex items-center gap-2 px-3 py-2 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md">
-              <Check className="h-3 w-3" />
-              Alert Sent
-              {mainAlert.notified_at && (
-                <span className="text-xs ml-1">
-                  {format(new Date(mainAlert.notified_at), "MMM d, h:mm a")}
-                </span>
-              )}
-            </div>
-          );
-        } else {
-          return (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
-                <Clock className="h-3 w-3" />
-                Awaiting Response
+        return (
+          <div
+            key={`${shift.date}-${shift.shift_type_id}-${index}`}
+            className="p-4 border rounded-lg space-y-3"
+          >
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <p className="font-medium">{shift.shift_types?.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy")} • {shift.shift_types?.start_time} - {shift.shift_types?.end_time}
+                </p>
+                
+                <div className="bg-gray-100 p-2 rounded text-xs mt-2">
+                  <p className="text-gray-600">
+                    <strong>Staffing:</strong> {shift.current_staffing}/{shift.minimum_required} |
+                    <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
+                    <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
+                  </p>
+                  <p className="text-gray-500 mt-1">
+                    <strong>Assigned:</strong> {shift.assigned_officers?.map(o => 
+                      `${o.name} (${o.position || 'No position'} - ${o.isSupervisor ? 'Supervisor' : 'Officer'})`
+                    ).join(', ') || 'None'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge variant="destructive">
+                    Total: {shift.current_staffing}/{shift.minimum_required}
+                  </Badge>
+                  {shift.isSupervisorsUnderstaffed && (
+                    <Badge variant="destructive">
+                      Needs {shift.min_supervisors - shift.current_supervisors} supervisor(s)
+                    </Badge>
+                  )}
+                  {shift.isOfficersUnderstaffed && (
+                    <Badge variant="destructive">
+                      Needs {shift.min_officers - shift.current_officers} officer(s)
+                    </Badge>
+                  )}
+                  {alertExists && (
+                    <Badge variant="outline" className="bg-green-500/10 text-green-700">
+                      Alert Created
+                    </Badge>
+                  )}
+                </div>
               </div>
-              <Button
-                size="sm"
-                onClick={() => handleSendAlert(shift)}
-                disabled={sendAlertMutation.isPending}
-                variant="outline"
-              >
-                <Mail className="h-3 w-3 mr-1" />
-                {sendAlertMutation.isPending ? "Sending..." : "Send Alert"}
-              </Button>
+              
+              {/* Button Section - Fixed */}
+              <div className="flex flex-col gap-2">
+                {!alertExists ? (
+                  <Button
+                    size="sm"
+                    onClick={() => handleCreateAlertFromDetection(shift)}
+                    disabled={createAlertMutation.isPending}
+                  >
+                    {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
+                  </Button>
+                ) : (
+                  <>
+                    {(() => {
+                      // Use the main alerts query data which should have notification_sent
+                      const mainAlert = alerts?.find(a => 
+                        a.date === shift.date && 
+                        a.shift_type_id === shift.shift_type_id
+                      );
+                      
+                      if (mainAlert?.notification_sent) {
+                        return (
+                          <div className="flex items-center gap-2 px-3 py-2 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md">
+                            <Check className="h-3 w-3" />
+                            Alert Sent
+                            {mainAlert.notified_at && (
+                              <span className="text-xs ml-1">
+                                {format(new Date(mainAlert.notified_at), "MMM d, h:mm a")}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-md">
+                              <Clock className="h-3 w-3" />
+                              Awaiting Response
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={() => handleSendAlert(shift)}
+                              disabled={sendAlertMutation.isPending}
+                              variant="outline"
+                            >
+                              <Mail className="h-3 w-3 mr-1" />
+                              {sendAlertMutation.isPending ? "Sending..." : "Send Alert"}
+                            </Button>
+                          </div>
+                        );
+                      }
+                    })()}
+                  </>
+                )}
+              </div>
             </div>
-          );
-        }
-      })()}
-    </>
+          </div>
+        );
+      })}
+    </div>
   )}
-</div>
-    );
-  })}
-</div>
-)}
 </CardContent>
 </Card>
 
