@@ -394,7 +394,7 @@ const sendAlertMutation = useMutation({
     console.log("🔄 TEST MODE: Sending to single test email");
 
     // TEST EMAIL - Change this to your test email
-    const TEST_EMAIL = "brandon.lavin@portarthurtx.gov"; // Use your actual email
+    const TEST_EMAIL = "ryan.byers@portarthurtx.gov"; // Use your actual email
     
     // Prepare alert details
     const shiftName = alertData.shift_types?.name || "Unknown Shift";
