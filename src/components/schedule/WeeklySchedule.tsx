@@ -727,168 +727,172 @@ const WeeklySchedule = () => {
   };
 
   // Updated Schedule Cell Component - Proper PTO display like DailyScheduleView
-  const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, onEditAssignment, officerId, officerName }: any) => {
-    // Check if this officer has any schedule data for this date
-    const hasSchedule = !!officer;
-    const isOff = officer?.shiftInfo?.isOff;
-    const hasPTO = officer?.shiftInfo?.hasPTO;
-    const position = officer?.shiftInfo?.position;
-    const ptoData = officer?.shiftInfo?.ptoData;
-    
-    // PROPER LOGIC: Extra shift = schedule exception AND not their regular recurring day
-    const isException = officer?.shiftInfo?.scheduleType === "exception";
-    const isRegularDay = officer?.isRegularRecurringDay;
-    const isExtraShift = isException && !isOff && !hasPTO && !isRegularDay;
+  // FIXED: Updated Schedule Cell Component - Proper Special Assignment detection
+const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRemovePTO, onEditAssignment, officerId, officerName }: any) => {
+  // Check if this officer has any schedule data for this date
+  const hasSchedule = !!officer;
+  const isOff = officer?.shiftInfo?.isOff;
+  const hasPTO = officer?.shiftInfo?.hasPTO;
+  const position = officer?.shiftInfo?.position;
+  const ptoData = officer?.shiftInfo?.ptoData;
+  
+  // PROPER LOGIC: Extra shift = schedule exception AND not their regular recurring day
+  const isException = officer?.shiftInfo?.scheduleType === "exception";
+  const isRegularDay = officer?.isRegularRecurringDay;
+  const isExtraShift = isException && !isOff && !hasPTO && !isRegularDay;
 
-    // Check if this is a special assignment
-    const isSpecialAssignment = position && (
-      position.toLowerCase().includes('other') ||
-      (position && !predefinedPositions.includes(position))
-    );
+  // FIXED: Proper Special Assignment detection
+  const isSpecialAssignment = position && (
+    position.toLowerCase().includes('other') ||
+    position.toLowerCase().includes('special') ||
+    position.toLowerCase().includes('custom') ||
+    (position && !predefinedPositions.some(predefined => 
+      position.toLowerCase().includes(predefined.toLowerCase())
+    ))
+  );
 
-    // PTO Logic - Same as DailyScheduleView
-    const isFullDayPTO = hasPTO && ptoData?.isFullShift;
-    const isPartialPTO = hasPTO && !ptoData?.isFullShift;
+  // PTO Logic - Same as DailyScheduleView
+  const isFullDayPTO = hasPTO && ptoData?.isFullShift;
+  const isPartialPTO = hasPTO && !ptoData?.isFullShift;
 
-    // If no officer data at all, this is an unscheduled day (dark gray)
-    if (!hasSchedule) {
-      return (
-        <div className="p-2 border-r bg-gray-300 dark:bg-gray-600 min-h-10 relative">
-          {/* Dark gray for unscheduled days */}
-        </div>
-      );
-    }
-
+  // If no officer data at all, this is an unscheduled day (dark gray)
+  if (!hasSchedule) {
     return (
-      <div className={`
-        p-2 border-r min-h-10 relative group
-        ${isOff ? 'bg-muted/50' : ''}
-        ${isFullDayPTO ? 'bg-green-50 border-green-200' : ''}
-        ${isPartialPTO ? 'bg-white' : ''}
-        ${!isOff && !hasPTO ? 'bg-white' : ''}
-      `}>
-        {isOff ? (
-          <div className="text-center text-muted-foreground font-medium">DD</div>
-        ) : hasPTO ? (
-          <div className="text-center">
-            {/* PTO Badge - Same styling as DailyScheduleView */}
-            <Badge className={`text-xs ${
-              isFullDayPTO 
-                ? 'bg-green-100 text-green-800 hover:bg-green-200 border-green-200' 
-                : 'bg-green-100 text-green-800 hover:bg-green-200 border-green-200'
-            }`}>
-              {ptoData?.ptoType || 'PTO'}
-            </Badge>
-            
-            {/* Show position for partial PTO (like DailyScheduleView) */}
-            {isPartialPTO && position && (
-              <div className="text-xs text-muted-foreground mt-1 truncate">
-                {position}
-              </div>
-            )}
-            
-            {/* Show "Partial Day" indicator for partial PTO */}
-            {isPartialPTO && (
-              <div className="text-xs text-green-600 font-medium mt-1">
-                Partial Day
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-center">
-            {/* Show "Extra Shift" for true extra days */}
-            {isExtraShift && (
-              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
-                Extra Shift
-              </Badge>
-            )}
-            {/* Show "Special Assignment" badge */}
-            {isSpecialAssignment && !isExtraShift && (
-              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200 mb-1">
-                Special
-              </Badge>
-            )}
-            {position && (
-              <div className="text-sm font-medium truncate">
-                {position}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Action buttons for admin/supervisor */}
-        {isAdminOrSupervisor && officer.shiftInfo && (
-          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-            {/* PENCIL ICON - Edit Assignment (like DailyScheduleView) */}
-            {!isOff && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEditAssignment(officer, dateStr);
-                }}
-                title="Edit Assignment"
-              >
-                <Edit2 className="h-3 w-3" />
-              </Button>
-            )}
-            
-            {/* DELETE BUTTON - Only show for extra shifts (exception officers) */}
-            {isExtraShift && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeOfficerMutation.mutate(officer);
-                }}
-                disabled={removeOfficerMutation.isPending}
-                title="Remove Extra Shift"
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            )}
-            
-            {/* CLOCK ICON - PTO Management (like DailyScheduleView) */}
-            {!isOff && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
-                }}
-                title={hasPTO ? "Edit PTO" : "Assign PTO"}
-              >
-                <Clock className="h-3 w-3" />
-              </Button>
-            )}
-            {/* TRASH ICON - Remove PTO (like DailyScheduleView) */}
-            {hasPTO && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
-                }}
-                disabled={removePTOMutation.isPending}
-                title="Remove PTO"
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            )}
-          </div>
-        )}
+      <div className="p-2 border-r bg-gray-300 dark:bg-gray-600 min-h-10 relative">
+        {/* Dark gray for unscheduled days */}
       </div>
     );
-  };
+  }
 
+  return (
+    <div className={`
+      p-2 border-r min-h-10 relative group
+      ${isOff ? 'bg-muted/50' : ''}
+      ${isFullDayPTO ? 'bg-green-50 border-green-200' : ''}
+      ${isPartialPTO ? 'bg-white' : ''}
+      ${!isOff && !hasPTO ? 'bg-white' : ''}
+    `}>
+      {isOff ? (
+        <div className="text-center text-muted-foreground font-medium">DD</div>
+      ) : hasPTO ? (
+        <div className="text-center">
+          {/* PTO Badge - Same styling as DailyScheduleView */}
+          <Badge className={`text-xs ${
+            isFullDayPTO 
+              ? 'bg-green-100 text-green-800 hover:bg-green-200 border-green-200' 
+              : 'bg-green-100 text-green-800 hover:bg-green-200 border-green-200'
+          }`}>
+            {ptoData?.ptoType || 'PTO'}
+          </Badge>
+          
+          {/* Show position for partial PTO (like DailyScheduleView) */}
+          {isPartialPTO && position && (
+            <div className="text-xs text-muted-foreground mt-1 truncate">
+              {position}
+            </div>
+          )}
+          
+          {/* Show "Partial Day" indicator for partial PTO */}
+          {isPartialPTO && (
+            <div className="text-xs text-green-600 font-medium mt-1">
+              Partial Day
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-center">
+          {/* Show "Extra Shift" for true extra days */}
+          {isExtraShift && (
+            <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200 mb-1">
+              Extra Shift
+            </Badge>
+          )}
+          {/* FIXED: Show "Special Assignment" badge only for actual special assignments */}
+          {isSpecialAssignment && !isExtraShift && (
+            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200 mb-1">
+              Special
+            </Badge>
+          )}
+          {position && (
+            <div className="text-sm font-medium truncate">
+              {position}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* FIXED: Action buttons for admin/supervisor - Always visible */}
+      {isAdminOrSupervisor && officer.shiftInfo && (
+        <div className="absolute top-1 right-1 flex gap-1 opacity-80 hover:opacity-100 transition-opacity">
+          {/* PENCIL ICON - Edit Assignment */}
+          {!isOff && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 bg-background/80 hover:bg-background"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditAssignment(officer, dateStr);
+              }}
+              title="Edit Assignment"
+            >
+              <Edit2 className="h-3 w-3" />
+            </Button>
+          )}
+          
+          {/* DELETE BUTTON - Only show for extra shifts (exception officers) */}
+          {isExtraShift && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeOfficerMutation.mutate(officer);
+              }}
+              disabled={removeOfficerMutation.isPending}
+              title="Remove Extra Shift"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+          
+          {/* CLOCK ICON - PTO Management */}
+          {!isOff && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 bg-background/80 hover:bg-background"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
+              }}
+              title={hasPTO ? "Edit PTO" : "Assign PTO"}
+            >
+              <Clock className="h-3 w-3" />
+            </Button>
+          )}
+          {/* TRASH ICON - Remove PTO */}
+          {hasPTO && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 text-destructive bg-background/80 hover:bg-background"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
+              }}
+              disabled={removePTOMutation.isPending}
+              title="Remove PTO"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
   // NEW: Excel-style weekly view with table layout
   const renderExcelStyleWeeklyView = () => {
     const weekDays = Array.from({ length: 7 }, (_, i) => {
