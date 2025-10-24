@@ -568,7 +568,8 @@ const isAlertCreated = (shift: any) => {
         ) : (
           <div className="space-y-4">
             {understaffedShifts.map((shift, index) => {
-              const alertExists = isAlertCreated(shift);
+              const existingAlert = isAlertCreated(shift);
+              const alertExists = !!existingAlert;
               
               const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
               const shiftTime = shift.shift_types 
