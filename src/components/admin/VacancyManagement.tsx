@@ -1058,21 +1058,25 @@ const isAlertCreated = (shift: any) => {
     toast.success(`Creating ${shiftsWithoutAlerts.length} alerts with default messages`);
   };
 
-  const handleSendAlert = (shift: any) => {
-    const alert = existingAlerts?.find(a => 
-      a.date === shift.date && a.shift_type_id === shift.shift_type_id
-    );
+const handleSendAlert = (shift: any) => {
+  const alert = existingAlerts?.find(a => 
+    a.date === shift.date && a.shift_type_id === shift.shift_type_id
+  );
 
-    if (!alert) {
-      toast.error("Please create an alert first");
-      return;
-    }
+  if (!alert) {
+    toast.error("Please create an alert first");
+    return;
+  }
 
-    sendAlertMutation.mutate({
-      ...shift,
-      alertId: alert.id
-    });
+  // Prepare the data to send
+  const alertData = {
+    ...shift,
+    alertId: alert.id,
+    custom_message: alert.custom_message // Include any custom message
   };
+
+  sendAlertMutation.mutate(alertData);
+};
 
   // If this is officer view, hide all create alert functionality
   if (isOfficerView) {
