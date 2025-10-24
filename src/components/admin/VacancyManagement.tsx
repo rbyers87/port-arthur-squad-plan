@@ -1549,27 +1549,59 @@ const {
                           </div>
                         )}
                       </div> {/* This closes the flex-1 div */}
-                      <div className="flex flex-col items-end gap-2 ml-4">
-                        <span
-                          className={cn(
-                            "text-xs px-2 py-1 rounded",
-                            alert.status === "open"
-                              ? "bg-green-500/10 text-green-700"
-                              : "bg-gray-500/10 text-gray-700"
-                          )}
-                        >
-                          {alert.status}
-                        </span>
-                        {alert.status === "open" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => closeAlertMutation.mutate(alert.id)}
-                          >
-                            Close Alert
-                          </Button>
-                        )}
-                      </div>
+<div className="flex flex-col items-end gap-2 ml-4">
+  <div className="flex flex-col items-end gap-1">
+    <span
+      className={cn(
+        "text-xs px-2 py-1 rounded",
+        alert.status === "open"
+          ? alert.notification_sent
+            ? "bg-green-500/10 text-green-700"
+            : "bg-blue-500/10 text-blue-700"
+          : "bg-gray-500/10 text-gray-700"
+      )}
+    >
+      {alert.status === "open" 
+        ? (alert.notification_sent ? "Alert Sent" : "Awaiting Response")
+        : "Closed"
+      }
+    </span>
+    {alert.notification_sent && alert.notified_at && (
+      <span className="text-xs text-muted-foreground">
+        Sent: {format(new Date(alert.notified_at), "MMM d, h:mm a")}
+      </span>
+    )}
+  </div>
+  {alert.status === "open" && (
+    <div className="flex flex-col gap-2">
+      {!alert.notification_sent ? (
+        <Button
+          size="sm"
+          onClick={() => {
+            const shiftData = {
+              ...alert,
+              alertId: alert.id,
+              shift_types: alert.shift_types
+            };
+            handleSendAlert(shiftData);
+          }}
+          disabled={sendAlertMutation.isPending}
+        >
+          <Mail className="h-3 w-3 mr-1" />
+          {sendAlertMutation.isPending ? "Sending..." : "Send Alert"}
+        </Button>
+      ) : null}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => closeAlertMutation.mutate(alert.id)}
+        disabled={closeAlertMutation.isPending}
+      >
+        {closeAlertMutation.isPending ? "Closing..." : "Close Alert"}
+      </Button>
+    </div>
+  )}
+</div>
                     </div>
                   </div>
                 );
