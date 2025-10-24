@@ -11,23 +11,20 @@ serve(async (req) => {
   }
 
   try {
-    const { to, subject, message, alertId } = await req.json()
+    const { to, message } = await req.json()
 
-    console.log('📧 VACANCY ALERT SIMULATION (No Auth Required):')
+    console.log('📱 TEXT ALERT SIMULATION:')
     console.log('To:', to)
-    console.log('Subject:', subject)
     console.log('Message:', message)
-    console.log('Alert ID:', alertId)
     console.log('---')
 
     // Simulate processing time
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Always return success for simulation
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Email simulation successful',
+        message: 'Text simulation successful',
         simulated: true,
         recipient: to
       }),
@@ -38,16 +35,16 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error in vacancy alert simulation:', error)
+    console.error('Error in text alert simulation:', error)
     return new Response(
       JSON.stringify({ 
-        success: true, // Still return success even if there's an error for simulation
+        success: true, // Still return success for simulation
         simulated: true,
         error: error.message 
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200, // Return 200 even for errors in simulation
+        status: 200,
       },
     )
   }
