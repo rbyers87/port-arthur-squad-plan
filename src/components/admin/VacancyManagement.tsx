@@ -826,11 +826,10 @@ const sendAlertMutation = useMutation({
   mutationFn: async (alertData: any) => {
     console.log("Sending alerts for:", alertData);
 
-    // Get all officers (remove the .eq('active', true) filter since the column doesn't exist)
+    // Get all officers
     const { data: officers, error: officersError } = await supabase
       .from("profiles")
       .select("id, email, phone, notification_preferences, full_name");
-      // Remove this line: .eq('active', true)
 
     if (officersError) {
       console.error("Error fetching officers:", officersError);
@@ -950,12 +949,11 @@ This is an automated vacancy alert. Please do not reply to this message.
 
     console.log(`Notification results: ${successfulNotifications}/${notificationPromises.length} successful`);
 
-    // Update alert status to indicate notification was sent
+    // 🚨 UPDATED: Only update status to 'sent' instead of using notification_sent column
     const { error } = await supabase
       .from("vacancy_alerts")
       .update({ 
-        notification_sent: true,
-        notified_at: new Date().toISOString(),
+        status: 'sent', // Use existing status column instead of notification_sent
         custom_message: alertData.custom_message || null
       })
       .eq("id", alertData.alertId);
