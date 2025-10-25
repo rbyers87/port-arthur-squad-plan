@@ -126,14 +126,17 @@ const rankOrder = {
   'Recruit': 10
 };
 
-// Predefined positions
+// Predefined positions - UPDATED TO MATCH DAILY SCHEDULE
 const predefinedPositions = [
   "Supervisor",
-  "Officer",
-  "Rover",
-  "Booking",
-  "Transport",
-  "Courts",
+  "District 1",
+  "District 2", 
+  "District 3",
+  "District 4",
+  "District 5",
+  "District 6",
+  "District 7/8",
+  "District 9",
   "Other (Custom)"
 ];
 
@@ -741,15 +744,11 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
   const isRegularDay = officer?.isRegularRecurringDay;
   const isExtraShift = isException && !isOff && !hasPTO && !isRegularDay;
 
-  // FIXED: Proper Special Assignment detection
-  const isSpecialAssignment = position && (
-    position.toLowerCase().includes('other') ||
-    position.toLowerCase().includes('special') ||
-    position.toLowerCase().includes('custom') ||
-    (position && !predefinedPositions.some(predefined => 
-      position.toLowerCase().includes(predefined.toLowerCase())
-    ))
-  );
+// FIXED: Proper Special Assignment detection (same as DailyScheduleView)
+const isSpecialAssignment = position && (
+  position.toLowerCase().includes('other') ||
+  (position && !predefinedPositions.includes(position))
+);
 
   // PTO Logic - Same as DailyScheduleView
   const isFullDayPTO = hasPTO && ptoData?.isFullShift;
@@ -1025,13 +1024,14 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
       !officer.shiftInfo?.hasPTO
     ).length || 0;
     
-    const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
-      const isSpecialAssignment = officer.shiftInfo?.position && (
-        officer.shiftInfo.position.toLowerCase().includes('other') ||
-        (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
-      );
-      return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-    }).length || 0;
+const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
+  const position = officer.shiftInfo?.position;
+  const isSpecialAssignment = position && (
+    position.toLowerCase().includes('other') ||
+    (position && !predefinedPositions.includes(position))
+  );
+  return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+}).length || 0;
     
     const minimumOfficers = minimumStaffing[dayName as keyof typeof minimumStaffing];
     const minimumSupervisors = 1;
@@ -1207,13 +1207,14 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
               !officer.shiftInfo?.hasPTO
             ).length || 0;
             
-            const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter((officer: any) => {
-              const isSpecialAssignment = officer.shiftInfo?.position && (
-                officer.shiftInfo.position.toLowerCase().includes('other') ||
-                (officer.shiftInfo.position && !predefinedPositions.includes(officer.shiftInfo.position))
-              );
-              return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-            }).length || 0;
+const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter((officer: any) => {
+  const position = officer.shiftInfo?.position;
+  const isSpecialAssignment = position && (
+    position.toLowerCase().includes('other') ||
+    (position && !predefinedPositions.includes(position))
+  );
+  return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+}).length || 0;
             
             const minimumOfficers = minimumStaffing[dayName];
             const minimumSupervisors = 1;
