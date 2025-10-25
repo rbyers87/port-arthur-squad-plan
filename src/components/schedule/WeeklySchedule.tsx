@@ -820,75 +820,75 @@ const isSpecialAssignment = position && (
         </div>
       )}
 
-      {/* FIXED: Action buttons for admin/supervisor - Always visible */}
-      {isAdminOrSupervisor && officer.shiftInfo && (
-        <div className="absolute top-1 right-1 flex gap-1 opacity-80 hover:opacity-100 transition-opacity">
-          {/* PENCIL ICON - Edit Assignment */}
-          {!isOff && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 bg-background/80 hover:bg-background"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEditAssignment(officer, dateStr);
-              }}
-              title="Edit Assignment"
-            >
-              <Edit2 className="h-3 w-3" />
-            </Button>
-          )}
-          
-          {/* DELETE BUTTON - Only show for extra shifts (exception officers) */}
-          {isExtraShift && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                removeOfficerMutation.mutate(officer);
-              }}
-              disabled={removeOfficerMutation.isPending}
-              title="Remove Extra Shift"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          )}
-          
-          {/* CLOCK ICON - PTO Management */}
-          {!isOff && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 bg-background/80 hover:bg-background"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
-              }}
-              title={hasPTO ? "Edit PTO" : "Assign PTO"}
-            >
-              <Clock className="h-3 w-3" />
-            </Button>
-          )}
-          {/* TRASH ICON - Remove PTO */}
-          {hasPTO && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 text-destructive bg-background/80 hover:bg-background"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
-              }}
-              disabled={removePTOMutation.isPending}
-              title="Remove PTO"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
-      )}
+{/* FIXED: Action buttons for admin/supervisor - Always visible and properly styled */}
+{isAdminOrSupervisor && officer.shiftInfo && (
+  <div className="absolute top-1 right-1 flex gap-1 opacity-100"> {/* Removed hover opacity change */}
+    {/* PENCIL ICON - Edit Assignment */}
+    {!isOff && (
+      <Button
+        size="icon"
+        variant="secondary"
+        className="h-6 w-6 bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200 shadow-sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          onEditAssignment(officer, dateStr);
+        }}
+        title="Edit Assignment"
+      >
+        <Edit2 className="h-3 w-3" />
+      </Button>
+    )}
+    
+    {/* DELETE BUTTON - Only show for extra shifts (exception officers) */}
+    {isExtraShift && (
+      <Button
+        size="icon"
+        variant="secondary"
+        className="h-6 w-6 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 shadow-sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          removeOfficerMutation.mutate(officer);
+        }}
+        disabled={removeOfficerMutation.isPending}
+        title="Remove Extra Shift"
+      >
+        <Trash2 className="h-3 w-3" />
+      </Button>
+    )}
+    
+    {/* CLOCK ICON - PTO Management */}
+    {!isOff && (
+      <Button
+        size="icon"
+        variant="secondary"
+        className="h-6 w-6 bg-green-100 hover:bg-green-200 text-green-700 border border-green-200 shadow-sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
+        }}
+        title={hasPTO ? "Edit PTO" : "Assign PTO"}
+      >
+        <Clock className="h-3 w-3" />
+      </Button>
+    )}
+    {/* TRASH ICON - Remove PTO */}
+    {hasPTO && (
+      <Button
+        size="icon"
+        variant="secondary"
+        className="h-6 w-6 bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-200 shadow-sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
+        }}
+        disabled={removePTOMutation.isPending}
+        title="Remove PTO"
+      >
+        <Trash2 className="h-3 w-3" />
+      </Button>
+    )}
+  </div>
+)}
     </div>
   );
 };
