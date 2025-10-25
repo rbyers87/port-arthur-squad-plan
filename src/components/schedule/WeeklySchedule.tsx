@@ -18,43 +18,52 @@ import { toast } from "sonner";
 
 {/* TEMPORARY DEBUG - Remove after testing */}
 {process.env.NODE_ENV === 'development' && (
-  <div className="fixed top-4 right-4 bg-blue-400 text-white p-2 rounded text-xs z-50">
-    <div>User Role: {profile?.role || 'none'}</div>
-    <div>User Metadata Role: {currentUser?.user_metadata?.role || 'none'}</div>
-    <div>Is Admin/Supervisor: {isAdminOrSupervisor ? 'YES' : 'NO'}</div>
+  <div className="fixed top-4 right-4 bg-green-500 text-white p-3 rounded text-sm z-50 shadow-lg">
+    <div className="font-bold">WeeklySchedule Debug:</div>
+    <div>User Role: <strong>{userRole}</strong></div>
+    <div>Is Admin/Supervisor: <strong>{isAdminOrSupervisor ? 'YES ✅' : 'NO ❌'}</strong></div>
   </div>
 )}
 
-// FIXED: useUser hook that gets profile data with role
-const useUser = () => {
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
+const WeeklySchedule = () => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   
+  // FIXED: Get user role properly
+  const [userRole, setUserRole] = useState<'officer' | 'supervisor' | 'admin'>('officer');
+  const [isAdminOrSupervisor, setIsAdminOrSupervisor] = useState(false);
+
   useEffect(() => {
-    const getCurrentUser = async () => {
-      // Get auth user
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      
-      if (user) {
-        // Get profile data with role
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-          
-        if (!error && profile) {
-          setProfile(profile);
+    const fetchUserRole = async () => {
+      try {
+        // Get current user
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user) {
+          // Get profile with role - same as DailyScheduleView
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+            
+          if (!error && profile) {
+            const role = profile.role as 'officer' | 'supervisor' | 'admin';
+            setUserRole(role);
+            setIsAdminOrSupervisor(role === 'admin' || role === 'supervisor');
+            
+            console.log("🔄 WeeklySchedule User Role:", role, "Admin/Supervisor:", (role === 'admin' || role === 'supervisor'));
+          } else {
+            console.error("❌ Error fetching profile:", error);
+          }
         }
+      } catch (error) {
+        console.error('Error getting user role:', error);
       }
     };
-    
-    getCurrentUser();
+
+    fetchUserRole();
   }, []);
-  
-  return { user, profile };
-};
 
 // If these hooks don't exist, we'll create simple alternatives
 const usePositionMutation = () => {
