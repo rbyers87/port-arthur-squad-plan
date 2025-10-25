@@ -1198,31 +1198,34 @@ const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(of
             const isCurrentMonthDay = isSameMonth(day, currentMonth);
             const isToday = isSameDay(day, new Date());
             
-            // Calculate staffing for ALL days (current month AND padding days)
-            const ptoOfficers = daySchedule?.officers.filter((officer: any) => 
-              officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
-            ) || [];
-            
-            const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter((officer: any) => 
-              !officer.shiftInfo?.hasPTO
-            ).length || 0;
-            
-const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter((officer: any) => {
-  const position = officer.shiftInfo?.position;
-  const isSpecialAssignment = position && (
-    position.toLowerCase().includes('other') ||
-    (position && !predefinedPositions.includes(position))
-  );
-  return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-}).length || 0;
-            
-            const minimumOfficers = minimumStaffing[dayName];
-            const minimumSupervisors = 1;
-            
-            const isOfficersUnderstaffed = officerCount < minimumOfficers;
-            const isSupervisorsUnderstaffed = supervisorCount < minimumSupervisors;
-            const isUnderstaffed = isOfficersUnderstaffed || isSupervisorsUnderstaffed;
+// Calculate staffing - ONLY FOR CURRENT MONTH DAYS
+// For padded days (previous/next month), don't show understaffing
+const ptoOfficers = daySchedule?.officers.filter((officer: any) => 
+  officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
+) || [];
 
+const supervisorCount = isCurrentMonthDay ? 
+  (daySchedule?.categorizedOfficers?.supervisors.filter((officer: any) => 
+    !officer.shiftInfo?.hasPTO
+  ).length || 0) : 0;
+
+const officerCount = isCurrentMonthDay ? 
+  (daySchedule?.categorizedOfficers?.regularOfficers.filter((officer: any) => {
+    const position = officer.shiftInfo?.position;
+    const isSpecialAssignment = position && (
+      position.toLowerCase().includes('other') ||
+      (position && !predefinedPositions.includes(position))
+    );
+    return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+  }).length || 0) : 0;
+
+const minimumOfficers = minimumStaffing[dayName];
+const minimumSupervisors = 1;
+
+// Only show understaffing for current month days
+const isOfficersUnderstaffed = isCurrentMonthDay && (officerCount < minimumOfficers);
+const isSupervisorsUnderstaffed = isCurrentMonthDay && (supervisorCount < minimumSupervisors);
+const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervisorsUnderstaffed);
             return (
               <div
                 key={day.toISOString()}
