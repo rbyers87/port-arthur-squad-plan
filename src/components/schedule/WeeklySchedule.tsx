@@ -16,6 +16,15 @@ import { Calendar, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Clock, Grid, 
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO } from "date-fns";
 import { toast } from "sonner";
 
+{/* TEMPORARY DEBUG - Remove after testing */}
+{process.env.NODE_ENV === 'development' && (
+  <div className="fixed top-4 right-4 bg-blue-400 text-white p-2 rounded text-xs z-50">
+    <div>User Role: {profile?.role || 'none'}</div>
+    <div>User Metadata Role: {currentUser?.user_metadata?.role || 'none'}</div>
+    <div>Is Admin/Supervisor: {isAdminOrSupervisor ? 'YES' : 'NO'}</div>
+  </div>
+)}
+
 // FIXED: useUser hook that gets profile data with role
 const useUser = () => {
   const [user, setUser] = useState<any>(null);
