@@ -1255,16 +1255,27 @@ const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervi
                   
                   {/* Staffing badges - SHOW FOR ALL DAYS */}
                   <div className="flex flex-col gap-1">
-                    {isUnderstaffed && (
-                      <Badge variant="destructive" className="text-xs h-4">
-                        Understaffed
-                      </Badge>
-                    )}
-                    {ptoOfficers.length > 0 && (
-                      <Badge variant="outline" className="text-xs h-4 bg-green-50 text-green-800 border-green-200">
-                        {ptoOfficers.length} PTO
-                      </Badge>
-                    )}
+{isUnderstaffed && (
+  <Badge variant="destructive" className="text-xs h-4">
+    Understaffed
+  </Badge>
+)}
+{ptoOfficers.length > 0 && (
+  <Badge variant="outline" className="text-xs h-4 bg-green-50 text-green-800 border-green-200">
+    {ptoOfficers.length} PTO
+  </Badge>
+)}
+{/* Show staffing counts for current month days only */}
+{isCurrentMonthDay && !isUnderstaffed && (
+  <div className="flex flex-col gap-1">
+    <Badge variant="outline" className="text-xs h-4">
+      {supervisorCount}/{minimumSupervisors} Sup
+    </Badge>
+    <Badge variant="outline" className="text-xs h-4">
+      {officerCount}/{minimumOfficers} Ofc
+    </Badge>
+  </div>
+)}
                   </div>
                 </div>
                 
@@ -1293,15 +1304,15 @@ const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervi
                 
                 {/* Understaffing details - SHOW FOR ALL DAYS */}
                 {isUnderstaffed && (
-                  <div className={`mt-1 text-[10px] space-y-0.5 ${!isCurrentMonthDay ? 'text-red-500' : 'text-red-600'}`}>
-                    {isSupervisorsUnderstaffed && (
-                      <div>Sup: {supervisorCount}/{minimumSupervisors}</div>
-                    )}
-                    {isOfficersUnderstaffed && (
-                      <div>Ofc: {officerCount}/{minimumOfficers}</div>
-                    )}
-                  </div>
-                )}
+  <div className={`mt-1 text-[10px] space-y-0.5 text-red-600`}>
+    {isSupervisorsUnderstaffed && (
+      <div>Sup: {supervisorCount}/{minimumSupervisors}</div>
+    )}
+    {isOfficersUnderstaffed && (
+      <div>Ofc: {officerCount}/{minimumOfficers}</div>
+    )}
+  </div>
+)}
                 
                 {/* Month indicator for padding days */}
                 {!isCurrentMonthDay && (
