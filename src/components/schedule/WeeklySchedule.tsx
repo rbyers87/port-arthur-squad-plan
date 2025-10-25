@@ -16,20 +16,35 @@ import { Calendar, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Clock, Grid, 
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO } from "date-fns";
 import { toast } from "sonner";
 
-// If useUser hook doesn't exist, we'll create a simple alternative
+// FIXED: useUser hook that gets profile data with role
 const useUser = () => {
   const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
   
   useEffect(() => {
     const getCurrentUser = async () => {
+      // Get auth user
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
+      
+      if (user) {
+        // Get profile data with role
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+          
+        if (!error && profile) {
+          setProfile(profile);
+        }
+      }
     };
     
     getCurrentUser();
   }, []);
   
-  return { user };
+  return { user, profile };
 };
 
 // If these hooks don't exist, we'll create simple alternatives
@@ -143,7 +158,7 @@ const predefinedPositions = [
 const WeeklySchedule = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user: currentUser } = useUser();
+ const { user: currentUser, profile } = useUser();
   
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -157,7 +172,12 @@ const WeeklySchedule = () => {
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
 
-  const isAdminOrSupervisor = currentUser?.user_metadata?.role === 'admin' || currentUser?.user_metadata?.role === 'supervisor';
+// FIXED: Check both auth metadata and profile role
+const isAdminOrSupervisor = 
+  currentUser?.user_metadata?.role === 'admin' || 
+  currentUser?.user_metadata?.role === 'supervisor' ||
+  profile?.role === 'admin' ||
+  profile?.role === 'supervisor';
 
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
