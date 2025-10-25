@@ -820,6 +820,14 @@ const isSpecialAssignment = position && (
         </div>
       )}
 
+      {/* TEMPORARY DEBUG - Remove after testing */}
+{process.env.NODE_ENV === 'development' && (
+  <div className="text-xs absolute top-0 left-0 bg-yellow-200 p-1">
+    Admin: {isAdminOrSupervisor ? 'Yes' : 'No'}, 
+    HasShift: {officer.shiftInfo ? 'Yes' : 'No'}
+  </div>
+)}
+
 {/* FIXED: Action buttons for admin/supervisor - Always visible and properly styled */}
 {isAdminOrSupervisor && officer.shiftInfo && (
   <div className="absolute top-1 right-1 flex gap-1 opacity-100"> {/* Removed hover opacity change */}
