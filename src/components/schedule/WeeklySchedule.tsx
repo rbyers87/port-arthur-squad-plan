@@ -139,14 +139,17 @@ const WeeklySchedule = () => {
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user) {
+          console.log("🔍 Auth User ID:", user.id);
+          
           // Get profile with role - same as DailyScheduleView
           const { data: profile, error } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, full_name, email')
             .eq('id', user.id)
             .single();
             
           if (!error && profile) {
+            console.log("✅ Profile found:", profile);
             const role = profile.role as 'officer' | 'supervisor' | 'admin';
             setUserRole(role);
             setIsAdminOrSupervisor(role === 'admin' || role === 'supervisor');
@@ -154,14 +157,23 @@ const WeeklySchedule = () => {
             console.log("🔄 WeeklySchedule User Role:", role, "Admin/Supervisor:", (role === 'admin' || role === 'supervisor'));
           } else {
             console.error("❌ Error fetching profile:", error);
-            // If there's an error, try to get role from user_metadata as fallback
-            const metadataRole = user.user_metadata?.role;
-            if (metadataRole) {
-              setUserRole(metadataRole);
-              setIsAdminOrSupervisor(metadataRole === 'admin' || metadataRole === 'supervisor');
-              console.log("🔄 Using metadata role:", metadataRole);
+            // Try alternative role sources
+            const appMetadataRole = user.app_metadata?.role;
+            const userMetadataRole = user.user_metadata?.role;
+            
+            console.log("🔍 App Metadata Role:", appMetadataRole);
+            console.log("🔍 User Metadata Role:", userMetadataRole);
+            
+            if (appMetadataRole) {
+              setUserRole(appMetadataRole);
+              setIsAdminOrSupervisor(appMetadataRole === 'admin' || appMetadataRole === 'supervisor');
+            } else if (userMetadataRole) {
+              setUserRole(userMetadataRole);
+              setIsAdminOrSupervisor(userMetadataRole === 'admin' || userMetadataRole === 'supervisor');
             }
           }
+        } else {
+          console.log("❌ No authenticated user found");
         }
       } catch (error) {
         console.error('Error getting user role:', error);
