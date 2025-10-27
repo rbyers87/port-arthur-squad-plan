@@ -128,7 +128,7 @@ const WeeklySchedule = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   
-  // FIXED: Get user role properly
+  // FIXED: Get user role from the same source as DailyScheduleView
   const [userRole, setUserRole] = useState<'officer' | 'supervisor' | 'admin'>('officer');
   const [isAdminOrSupervisor, setIsAdminOrSupervisor] = useState(false);
 
@@ -154,6 +154,13 @@ const WeeklySchedule = () => {
             console.log("🔄 WeeklySchedule User Role:", role, "Admin/Supervisor:", (role === 'admin' || role === 'supervisor'));
           } else {
             console.error("❌ Error fetching profile:", error);
+            // If there's an error, try to get role from user_metadata as fallback
+            const metadataRole = user.user_metadata?.role;
+            if (metadataRole) {
+              setUserRole(metadataRole);
+              setIsAdminOrSupervisor(metadataRole === 'admin' || metadataRole === 'supervisor');
+              console.log("🔄 Using metadata role:", metadataRole);
+            }
           }
         }
       } catch (error) {
