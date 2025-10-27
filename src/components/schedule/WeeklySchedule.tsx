@@ -16,54 +16,21 @@ import { Calendar, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Clock, Grid, 
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO } from "date-fns";
 import { toast } from "sonner";
 
-{/* TEMPORARY DEBUG - Remove after testing */}
-{process.env.NODE_ENV === 'development' && (
-  <div className="fixed top-4 right-4 bg-green-500 text-white p-3 rounded text-sm z-50 shadow-lg">
-    <div className="font-bold">WeeklySchedule Debug:</div>
-    <div>User Role: <strong>{userRole}</strong></div>
-    <div>Is Admin/Supervisor: <strong>{isAdminOrSupervisor ? 'YES ✅' : 'NO ❌'}</strong></div>
-  </div>
-)}
-
-const WeeklySchedule = () => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+// If useUser hook doesn't exist, we'll create a simple alternative
+const useUser = () => {
+  const [user, setUser] = useState<any>(null);
   
-  // FIXED: Get user role properly
-  const [userRole, setUserRole] = useState<'officer' | 'supervisor' | 'admin'>('officer');
-  const [isAdminOrSupervisor, setIsAdminOrSupervisor] = useState(false);
-
   useEffect(() => {
-    const fetchUserRole = async () => {
-      try {
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (user) {
-          // Get profile with role - same as DailyScheduleView
-          const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-            
-          if (!error && profile) {
-            const role = profile.role as 'officer' | 'supervisor' | 'admin';
-            setUserRole(role);
-            setIsAdminOrSupervisor(role === 'admin' || role === 'supervisor');
-            
-            console.log("🔄 WeeklySchedule User Role:", role, "Admin/Supervisor:", (role === 'admin' || role === 'supervisor'));
-          } else {
-            console.error("❌ Error fetching profile:", error);
-          }
-        }
-      } catch (error) {
-        console.error('Error getting user role:', error);
-      }
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
     };
-
-    fetchUserRole();
+    
+    getCurrentUser();
   }, []);
+  
+  return { user };
+};
 
 // If these hooks don't exist, we'll create simple alternatives
 const usePositionMutation = () => {
@@ -176,7 +143,7 @@ const predefinedPositions = [
 const WeeklySchedule = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
- const { user: currentUser, profile } = useUser();
+  const { user: currentUser } = useUser();
   
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -190,12 +157,7 @@ const WeeklySchedule = () => {
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
 
-// FIXED: Check both auth metadata and profile role
-const isAdminOrSupervisor = 
-  currentUser?.user_metadata?.role === 'admin' || 
-  currentUser?.user_metadata?.role === 'supervisor' ||
-  profile?.role === 'admin' ||
-  profile?.role === 'supervisor';
+  const isAdminOrSupervisor = currentUser?.user_metadata?.role === 'admin' || currentUser?.user_metadata?.role === 'supervisor';
 
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
@@ -858,83 +820,75 @@ const isSpecialAssignment = position && (
         </div>
       )}
 
-      {/* TEMPORARY DEBUG - Remove after testing */}
-{process.env.NODE_ENV === 'development' && (
-  <div className="text-xs absolute top-0 left-0 bg-yellow-200 p-1">
-    Admin: {isAdminOrSupervisor ? 'Yes' : 'No'}, 
-    HasShift: {officer.shiftInfo ? 'Yes' : 'No'}
-  </div>
-)}
-
-{/* FIXED: Action buttons for admin/supervisor - Always visible and properly styled */}
-{isAdminOrSupervisor && officer.shiftInfo && (
-  <div className="absolute top-1 right-1 flex gap-1 opacity-100"> {/* Removed hover opacity change */}
-    {/* PENCIL ICON - Edit Assignment */}
-    {!isOff && (
-      <Button
-        size="icon"
-        variant="secondary"
-        className="h-6 w-6 bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200 shadow-sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          onEditAssignment(officer, dateStr);
-        }}
-        title="Edit Assignment"
-      >
-        <Edit2 className="h-3 w-3" />
-      </Button>
-    )}
-    
-    {/* DELETE BUTTON - Only show for extra shifts (exception officers) */}
-    {isExtraShift && (
-      <Button
-        size="icon"
-        variant="secondary"
-        className="h-6 w-6 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 shadow-sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          removeOfficerMutation.mutate(officer);
-        }}
-        disabled={removeOfficerMutation.isPending}
-        title="Remove Extra Shift"
-      >
-        <Trash2 className="h-3 w-3" />
-      </Button>
-    )}
-    
-    {/* CLOCK ICON - PTO Management */}
-    {!isOff && (
-      <Button
-        size="icon"
-        variant="secondary"
-        className="h-6 w-6 bg-green-100 hover:bg-green-200 text-green-700 border border-green-200 shadow-sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
-        }}
-        title={hasPTO ? "Edit PTO" : "Assign PTO"}
-      >
-        <Clock className="h-3 w-3" />
-      </Button>
-    )}
-    {/* TRASH ICON - Remove PTO */}
-    {hasPTO && (
-      <Button
-        size="icon"
-        variant="secondary"
-        className="h-6 w-6 bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-200 shadow-sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
-        }}
-        disabled={removePTOMutation.isPending}
-        title="Remove PTO"
-      >
-        <Trash2 className="h-3 w-3" />
-      </Button>
-    )}
-  </div>
-)}
+      {/* FIXED: Action buttons for admin/supervisor - Always visible */}
+      {isAdminOrSupervisor && officer.shiftInfo && (
+        <div className="absolute top-1 right-1 flex gap-1 opacity-80 hover:opacity-100 transition-opacity">
+          {/* PENCIL ICON - Edit Assignment */}
+          {!isOff && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 bg-background/80 hover:bg-background"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditAssignment(officer, dateStr);
+              }}
+              title="Edit Assignment"
+            >
+              <Edit2 className="h-3 w-3" />
+            </Button>
+          )}
+          
+          {/* DELETE BUTTON - Only show for extra shifts (exception officers) */}
+          {isExtraShift && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeOfficerMutation.mutate(officer);
+              }}
+              disabled={removeOfficerMutation.isPending}
+              title="Remove Extra Shift"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+          
+          {/* CLOCK ICON - PTO Management */}
+          {!isOff && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 bg-background/80 hover:bg-background"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
+              }}
+              title={hasPTO ? "Edit PTO" : "Assign PTO"}
+            >
+              <Clock className="h-3 w-3" />
+            </Button>
+          )}
+          {/* TRASH ICON - Remove PTO */}
+          {hasPTO && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 text-destructive bg-background/80 hover:bg-background"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
+              }}
+              disabled={removePTOMutation.isPending}
+              title="Remove PTO"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
