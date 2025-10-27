@@ -273,7 +273,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   });
 
 
-// Enhanced add default assignment mutation with date range matching
+// Add default assignment mutation - now ends previous active assignments
 const addDefaultAssignmentMutation = useMutation({
   mutationFn: async (data: { 
     unitNumber?: string;
@@ -281,7 +281,22 @@ const addDefaultAssignmentMutation = useMutation({
     start: string;
     end?: string;
   }) => {
-    // First, create the default assignment
+    // First, end any existing active assignments that overlap with the new one
+    const { error: endPreviousError } = await supabase
+      .from("officer_default_assignments")
+      .update({ 
+        end_date: data.start // End previous assignments the day before new one starts
+      })
+      .eq("officer_id", officer.id)
+      .is("end_date", null) // Only active assignments (no end date)
+      .lt("start_date", data.start); // That started before the new assignment
+
+    if (endPreviousError) {
+      console.error("Failed to end previous assignments:", endPreviousError);
+      // Continue anyway - don't throw
+    }
+
+    // Second, create the new default assignment
     const { data: assignment, error: assignmentError } = await supabase
       .from("officer_default_assignments")
       .insert({
@@ -296,7 +311,7 @@ const addDefaultAssignmentMutation = useMutation({
 
     if (assignmentError) throw assignmentError;
 
-    // Build the query for updating schedules
+    // Third, update all active schedules with the new assignment
     let scheduleQuery = supabase
       .from("recurring_schedules")
       .update({
@@ -304,13 +319,11 @@ const addDefaultAssignmentMutation = useMutation({
         position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
       })
       .eq("officer_id", officer.id)
-      .gte("start_date", data.start); // Schedules starting on or after the default assignment start
+      .gte("start_date", data.start);
 
-    // If the default assignment has an end date, only update schedules that start before that end date
     if (data.end) {
       scheduleQuery = scheduleQuery.lte("start_date", data.end);
     } else {
-      // If no end date, only update ongoing schedules (no end date or end date in future)
       scheduleQuery = scheduleQuery.or(`end_date.is.null,end_date.gte.${new Date().toISOString().split('T')[0]}`);
     }
 
@@ -318,13 +331,12 @@ const addDefaultAssignmentMutation = useMutation({
 
     if (schedulesError) {
       console.error("Failed to update schedules:", schedulesError);
-      // Don't throw - the default assignment was created successfully
     }
 
     return assignment;
   },
   onSuccess: () => {
-    toast.success("Default assignment added and applied to matching active schedules");
+    toast.success("Default assignment added and previous assignments ended");
     queryClient.invalidateQueries({ queryKey: ["officer-default-assignments", officer.id] });
     queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
     queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
