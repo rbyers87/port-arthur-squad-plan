@@ -16,6 +16,28 @@ import { Calendar, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Clock, Grid, 
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO } from "date-fns";
 import { toast } from "sonner";
 
+  const predefinedPositions = [
+    "Supervisor",
+    "District 1",
+    "District 2", 
+    "District 3",
+    "District 4",
+    "District 5",
+    "District 6",
+    "District 7/8",
+    "District 9",
+    "Other (Custom)",
+  ];
+
+  // Add rank order for sorting supervisors only
+  const rankOrder = {
+    'Chief': 1,
+    'Deputy Chief': 2,
+    'Lieutenant': 3,
+    'Sergeant': 4,
+    'Officer': 5
+  };
+
 const usePositionMutation = () => {
   return useMutation({
     mutationFn: async ({ scheduleId, type, positionName, date, officerId, shiftTypeId, currentPosition }: any) => {
