@@ -16,172 +16,22 @@ import { Calendar, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Clock, Grid, 
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO } from "date-fns";
 import { toast } from "sonner";
 
-// If these hooks don't exist, we'll create simple alternatives
-const usePositionMutation = () => {
-  return useMutation({
-    mutationFn: async ({ scheduleId, type, positionName, date, officerId, shiftTypeId, currentPosition }: any) => {
-      let error;
-      
-      if (type === "recurring") {
-        ({ error } = await supabase
-          .from("recurring_schedules")
-          .update({ position_name: positionName })
-          .eq("id", scheduleId));
-      } else {
-        ({ error } = await supabase
-          .from("schedule_exceptions")
-          .update({ position_name: positionName })
-          .eq("id", scheduleId));
-      }
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Position updated successfully");
-    },
-    onError: (error: any) => {
-      toast.error("Failed to update position: " + error.message);
-    },
-  });
-};
+// Add this interface at the top of the file, after the imports
+interface WeeklyScheduleProps {
+  userRole?: 'officer' | 'supervisor' | 'admin';
+  isAdminOrSupervisor?: boolean;
+}
 
-const useRemoveOfficerMutation = () => {
-  return useMutation({
-    mutationFn: async (officer: any) => {
-      const { error } = await supabase
-        .from("schedule_exceptions")
-        .delete()
-        .eq("id", officer.shiftInfo.scheduleId);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Officer removed from shift");
-    },
-    onError: (error: any) => {
-      toast.error("Failed to remove officer: " + error.message);
-    },
-  });
-};
-
-// Simple dialog components if they don't exist
-const ScheduleManagementDialog = ({ open, onOpenChange }: any) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Add Schedule</DialogTitle>
-        <DialogDescription>
-          This feature is not implemented yet.
-        </DialogDescription>
-      </DialogHeader>
-      <Button onClick={() => onOpenChange(false)}>Close</Button>
-    </DialogContent>
-  </Dialog>
-);
-
-const PTOAssignmentDialog = ({ open, onOpenChange, officer, shift, date }: any) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Assign PTO</DialogTitle>
-        <DialogDescription>
-          PTO assignment for {officer.name} on {date}
-        </DialogDescription>
-      </DialogHeader>
-      <div className="space-y-4">
-        <p>This feature is not fully implemented yet.</p>
-        <Button onClick={() => onOpenChange(false)}>Close</Button>
-      </div>
-    </DialogContent>
-  </Dialog>
-);
-
-// Rank order for sorting
-const rankOrder = {
-  'Chief': 1,
-  'Deputy Chief': 2,
-  'Commander': 3,
-  'Captain': 4,
-  'Lieutenant': 5,
-  'Sergeant': 6,
-  'Corporal': 7,
-  'Senior Officer': 8,
-  'Officer': 9,
-  'Recruit': 10
-};
-
-// Predefined positions - UPDATED TO MATCH DAILY SCHEDULE
-const predefinedPositions = [
-  "Supervisor",
-  "District 1",
-  "District 2", 
-  "District 3",
-  "District 4",
-  "District 5",
-  "District 6",
-  "District 7/8",
-  "District 9",
-  "Other (Custom)"
-];
-
-const WeeklySchedule = () => {
+// Update the component signature
+const WeeklySchedule = ({ 
+  userRole = 'officer', 
+  isAdminOrSupervisor = false 
+}: WeeklyScheduleProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   
-  // FIXED: Get user role from the same source as DailyScheduleView
-  const [userRole, setUserRole] = useState<'officer' | 'supervisor' | 'admin'>('officer');
-  const [isAdminOrSupervisor, setIsAdminOrSupervisor] = useState(false);
-
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      try {
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (user) {
-          console.log("🔍 Auth User ID:", user.id);
-          
-          // Get profile with role - same as DailyScheduleView
-          const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('role, full_name, email')
-            .eq('id', user.id)
-            .single();
-            
-          if (!error && profile) {
-            console.log("✅ Profile found:", profile);
-            const role = profile.role as 'officer' | 'supervisor' | 'admin';
-            setUserRole(role);
-            setIsAdminOrSupervisor(role === 'admin' || role === 'supervisor');
-            
-            console.log("🔄 WeeklySchedule User Role:", role, "Admin/Supervisor:", (role === 'admin' || role === 'supervisor'));
-          } else {
-            console.error("❌ Error fetching profile:", error);
-            // Try alternative role sources
-            const appMetadataRole = user.app_metadata?.role;
-            const userMetadataRole = user.user_metadata?.role;
-            
-            console.log("🔍 App Metadata Role:", appMetadataRole);
-            console.log("🔍 User Metadata Role:", userMetadataRole);
-            
-            if (appMetadataRole) {
-              setUserRole(appMetadataRole);
-              setIsAdminOrSupervisor(appMetadataRole === 'admin' || appMetadataRole === 'supervisor');
-            } else if (userMetadataRole) {
-              setUserRole(userMetadataRole);
-              setIsAdminOrSupervisor(userMetadataRole === 'admin' || userMetadataRole === 'supervisor');
-            }
-          }
-        } else {
-          console.log("❌ No authenticated user found");
-        }
-      } catch (error) {
-        console.error('Error getting user role:', error);
-      }
-    };
-
-    fetchUserRole();
-  }, []);
+  // Remove all the user role state and useEffect - use the props instead
+  console.log("🔄 WeeklySchedule User Role:", userRole, "Admin/Supervisor:", isAdminOrSupervisor);
 
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -194,6 +44,8 @@ const WeeklySchedule = () => {
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
+
+  // ... rest of your component remains exactly the same
 
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
