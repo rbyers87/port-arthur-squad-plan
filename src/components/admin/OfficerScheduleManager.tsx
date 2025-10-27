@@ -313,35 +313,68 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     },
   });
 
-  // Add default assignment mutation
-  const addDefaultAssignmentMutation = useMutation({
-    mutationFn: async (data: { 
-      unitNumber?: string;
-      assignedPosition?: string;
-      start: string;
-      end?: string;
-    }) => {
-      const { error } = await supabase
-        .from("officer_default_assignments")
-        .insert({
-          officer_id: officer.id,
-          unit_number: data.unitNumber || null,
-          position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
-          start_date: data.start,
-          end_date: data.end || null,
-        });
+// Enhanced add default assignment mutation with date range matching
+const addDefaultAssignmentMutation = useMutation({
+  mutationFn: async (data: { 
+    unitNumber?: string;
+    assignedPosition?: string;
+    start: string;
+    end?: string;
+  }) => {
+    // First, create the default assignment
+    const { data: assignment, error: assignmentError } = await supabase
+      .from("officer_default_assignments")
+      .insert({
+        officer_id: officer.id,
+        unit_number: data.unitNumber || null,
+        position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
+        start_date: data.start,
+        end_date: data.end || null,
+      })
+      .select()
+      .single();
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Default assignment added successfully");
-      queryClient.invalidateQueries({ queryKey: ["officer-default-assignments", officer.id] });
-      resetDefaultAssignmentForm();
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to add default assignment");
-    },
-  });
+    if (assignmentError) throw assignmentError;
+
+    // Build the query for updating schedules
+    let scheduleQuery = supabase
+      .from("recurring_schedules")
+      .update({
+        unit_number: data.unitNumber || null,
+        position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
+      })
+      .eq("officer_id", officer.id)
+      .gte("start_date", data.start); // Schedules starting on or after the default assignment start
+
+    // If the default assignment has an end date, only update schedules that start before that end date
+    if (data.end) {
+      scheduleQuery = scheduleQuery.lte("start_date", data.end);
+    } else {
+      // If no end date, only update ongoing schedules (no end date or end date in future)
+      scheduleQuery = scheduleQuery.or(`end_date.is.null,end_date.gte.${new Date().toISOString().split('T')[0]}`);
+    }
+
+    const { error: schedulesError } = await scheduleQuery;
+
+    if (schedulesError) {
+      console.error("Failed to update schedules:", schedulesError);
+      // Don't throw - the default assignment was created successfully
+    }
+
+    return assignment;
+  },
+  onSuccess: () => {
+    toast.success("Default assignment added and applied to matching active schedules");
+    queryClient.invalidateQueries({ queryKey: ["officer-default-assignments", officer.id] });
+    queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
+    queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    resetDefaultAssignmentForm();
+  },
+  onError: (error: any) => {
+    toast.error(error.message || "Failed to add default assignment");
+  },
+});
 
   // Update default assignment mutation
   const updateDefaultAssignmentMutation = useMutation({
@@ -481,19 +514,19 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     setScheduleToDelete(scheduleId);
   };
 
-  const handleAddDefaultAssignment = () => {
-    if (!defaultUnitNumber && defaultAssignedPosition === "none") {
-      toast.error("Please provide at least a unit number or position");
-      return;
-    }
+const handleAddDefaultAssignment = () => {
+  if (!defaultUnitNumber && defaultAssignedPosition === "none") {
+    toast.error("Please provide at least a unit number or position");
+    return;
+  }
 
-    addDefaultAssignmentMutation.mutate({
-      unitNumber: defaultUnitNumber || undefined,
-      assignedPosition: defaultAssignedPosition !== "none" ? defaultAssignedPosition : undefined,
-      start: format(defaultAssignmentStartDate, "yyyy-MM-dd"),
-      end: defaultAssignmentEndDate ? format(defaultAssignmentEndDate, "yyyy-MM-dd") : undefined,
-    });
-  };
+  addDefaultAssignmentMutation.mutate({
+    unitNumber: defaultUnitNumber || undefined,
+    assignedPosition: defaultAssignedPosition !== "none" ? defaultAssignedPosition : undefined,
+    start: format(defaultAssignmentStartDate, "yyyy-MM-dd"),
+    end: defaultAssignmentEndDate ? format(defaultAssignmentEndDate, "yyyy-MM-dd") : undefined,
+  });
+};
 
   const handleEditDefaultAssignment = (assignment: any) => {
     setEditingDefaultAssignment(assignment);
