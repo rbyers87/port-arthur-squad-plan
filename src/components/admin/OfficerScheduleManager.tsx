@@ -59,7 +59,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   const [assignedPosition, setAssignedPosition] = useState("none");
   const [shiftPositions, setShiftPositions] = useState<string[]>([]);
   const [editingSchedule, setEditingSchedule] = useState<any>(null);
-  const [showEditAssignment, setShowEditAssignment] = useState(false);
+  // const [showEditAssignment, setShowEditAssignment] = useState(false);
   const [bulkUnitNumber, setBulkUnitNumber] = useState("");
   const [bulkAssignedPosition, setBulkAssignedPosition] = useState("none");
   
@@ -646,74 +646,7 @@ const handleAddDefaultAssignment = () => {
                   <CalendarIcon className="h-4 w-4" />
                   Regular Schedules
                 </h3>
-                
-                {/* Bulk Edit Assignment Form */}
-                {showEditAssignment && (
-                  <div className="border rounded-lg p-4 space-y-4 bg-blue-50/30">
-                    <h3 className="font-medium flex items-center gap-2">
-                      <Edit className="h-4 w-4" />
-                      Edit Assignment for All Active Schedules
-                    </h3>
-                    
-                    <div className="space-y-4 p-4 border rounded-lg bg-white">
-                      <h4 className="font-medium text-sm flex items-center gap-2">
-                        <Building className="h-4 w-4" />
-                        Assignment Details
-                      </h4>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <Label htmlFor="bulk-unit" className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            Unit Number
-                          </Label>
-                          <Input
-                            id="bulk-unit"
-                            placeholder="e.g., Unit 1, Patrol, Traffic"
-                            value={bulkUnitNumber}
-                            onChange={(e) => setBulkUnitNumber(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="bulk-position">Assigned Position</Label>
-                          <Select
-                            value={bulkAssignedPosition}
-                            onValueChange={setBulkAssignedPosition}
-                          >
-                            <SelectTrigger id="bulk-position">
-                              <SelectValue placeholder="Select position" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">No position assigned</SelectItem>
-                              {shiftPositions.map((position) => (
-                                <SelectItem key={position} value={position}>
-                                  {position}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        This will update the unit number and position for all active schedules.
-                      </p>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowEditAssignment(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        onClick={handleBulkUpdateAssignment}
-                        disabled={bulkUpdateAssignmentMutation.isPending}
-                      >
-                        {bulkUpdateAssignmentMutation.isPending ? "Updating..." : "Update All Assignments"}
-                      </Button>
-                    </div>
-                  </div>
-                )}
+            
 
                 {schedulesLoading ? (
                   <p className="text-sm text-muted-foreground">Loading schedules...</p>
