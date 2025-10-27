@@ -16,6 +16,53 @@ import { Calendar, ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Clock, Grid, 
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO } from "date-fns";
 import { toast } from "sonner";
 
+const usePositionMutation = () => {
+  return useMutation({
+    mutationFn: async ({ scheduleId, type, positionName, date, officerId, shiftTypeId, currentPosition }: any) => {
+      let error;
+      
+      if (type === "recurring") {
+        ({ error } = await supabase
+          .from("recurring_schedules")
+          .update({ position_name: positionName })
+          .eq("id", scheduleId));
+      } else {
+        ({ error } = await supabase
+          .from("schedule_exceptions")
+          .update({ position_name: positionName })
+          .eq("id", scheduleId));
+      }
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Position updated successfully");
+    },
+    onError: (error: any) => {
+      toast.error("Failed to update position: " + error.message);
+    },
+  });
+};
+
+const useRemoveOfficerMutation = () => {
+  return useMutation({
+    mutationFn: async (officer: any) => {
+      const { error } = await supabase
+        .from("schedule_exceptions")
+        .delete()
+        .eq("id", officer.shiftInfo.scheduleId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Officer removed from shift");
+    },
+    onError: (error: any) => {
+      toast.error("Failed to remove officer: " + error.message);
+    },
+  });
+};
+
 // Add this interface
 interface WeeklyScheduleProps {
   userRole?: 'officer' | 'supervisor' | 'admin';
@@ -384,8 +431,6 @@ const WeeklySchedule = ({
     enabled: !!selectedShiftId,
   });
 
-  const updatePositionMutation = usePositionMutation();
-  const removeOfficerMutation = useRemoveOfficerMutation();
 
   // Add mutation for removing PTO
   const removePTOMutation = useMutation({
