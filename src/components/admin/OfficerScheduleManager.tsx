@@ -59,9 +59,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   const [assignedPosition, setAssignedPosition] = useState("none");
   const [shiftPositions, setShiftPositions] = useState<string[]>([]);
   const [editingSchedule, setEditingSchedule] = useState<any>(null);
-  // const [showEditAssignment, setShowEditAssignment] = useState(false);
-  const [bulkUnitNumber, setBulkUnitNumber] = useState("");
-  const [bulkAssignedPosition, setBulkAssignedPosition] = useState("none");
   
   // New state for default assignments
   const [activeTab, setActiveTab] = useState("schedules");
@@ -275,43 +272,6 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     },
   });
 
-  // Bulk update assignment for all active schedules
-  const bulkUpdateAssignmentMutation = useMutation({
-    mutationFn: async ({ unitNumber, position }: { unitNumber?: string; position?: string }) => {
-      const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
-      
-      const updates = activeSchedules.map(schedule => ({
-        id: schedule.id,
-        unit_number: unitNumber || null,
-        position_name: position !== "none" ? position : null,
-      }));
-
-      // Update each schedule individually
-      for (const update of updates) {
-        const { error } = await supabase
-          .from("recurring_schedules")
-          .update({
-            unit_number: update.unit_number,
-            position_name: update.position_name
-          })
-          .eq("id", update.id);
-
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      toast.success("Assignment updated for all active schedules");
-      queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
-      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      setShowEditAssignment(false);
-      setBulkUnitNumber("");
-      setBulkAssignedPosition("none");
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to update assignments");
-    },
-  });
 
 // Enhanced add default assignment mutation with date range matching
 const addDefaultAssignmentMutation = useMutation({
@@ -486,12 +446,6 @@ const addDefaultAssignmentMutation = useMutation({
     });
   };
 
-  const handleBulkUpdateAssignment = () => {
-    bulkUpdateAssignmentMutation.mutate({
-      unitNumber: bulkUnitNumber || undefined,
-      position: bulkAssignedPosition !== "none" ? bulkAssignedPosition : undefined,
-    });
-  };
 
   const handleEndAllSchedules = () => {
     const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
@@ -603,9 +557,6 @@ const handleAddDefaultAssignment = () => {
     setUnitNumber("");
     setAssignedPosition("none");
     setEditingSchedule(null);
-    setShowEditAssignment(false);
-    setBulkUnitNumber("");
-    setBulkAssignedPosition("none");
   };
 
   const resetDefaultAssignmentForm = () => {
