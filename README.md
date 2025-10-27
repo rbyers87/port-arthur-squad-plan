@@ -380,3 +380,13 @@ This ensures that both new profiles (created via the Edge Function) and existing
 
 ## Current problems
 The "end this schedule" button does not delete the future schedules.  I have to go into supabase and manually delete the recurring schedule to build a new one in the app.
+
+## files function:
+
+OfficerProfileDialog.tsx - Handles officer profile information (name, email, rank, PTO balances, etc.)
+
+ScheduleManagementDialog.tsx - Simple dialog for creating recurring schedules
+
+OfficerSchedulerManager.tsx - The main component you showed first, which has comprehensive schedule management
+
+The key insight is that you want to add time-bound default assignments functionality to the OfficerSchedulerManager.tsx file, si
