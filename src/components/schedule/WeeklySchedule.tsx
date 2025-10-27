@@ -85,6 +85,38 @@ const useRemoveOfficerMutation = () => {
   });
 };
 
+// 3. THIRD: Helper components
+const ScheduleManagementDialog = ({ open, onOpenChange }: any) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Add Schedule</DialogTitle>
+        <DialogDescription>
+          This feature is not implemented yet.
+        </DialogDescription>
+      </DialogHeader>
+      <Button onClick={() => onOpenChange(false)}>Close</Button>
+    </DialogContent>
+  </Dialog>
+);
+
+const PTOAssignmentDialog = ({ open, onOpenChange, officer, shift, date }: any) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Assign PTO</DialogTitle>
+        <DialogDescription>
+          PTO assignment for {officer.name} on {date}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4">
+        <p>This feature is not fully implemented yet.</p>
+        <Button onClick={() => onOpenChange(false)}>Close</Button>
+      </div>
+    </DialogContent>
+  </Dialog>
+);
+
 // Add this interface
 interface WeeklyScheduleProps {
   userRole?: 'officer' | 'supervisor' | 'admin';
