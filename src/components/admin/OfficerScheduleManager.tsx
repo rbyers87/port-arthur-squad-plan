@@ -599,50 +599,40 @@ const handleAddDefaultAssignment = () => {
                 </h3>
             
 
-                {schedulesLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading schedules...</p>
-                ) : !schedules || schedules.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic">No regular schedule set</p>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Active Schedules Section */}
-                    {activeSchedules.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-green-700 dark:text-green-400">Active Schedules</h4>
-                        
-                        {/* Single End and Delete Buttons */}
-                        <div className="flex gap-2 mb-4">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowEditAssignment(true)}
-                            className="flex items-center gap-2"
-                          >
-                            <Edit className="h-4 w-4" />
-                            Edit Active Schedules Assignment
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleEndAllSchedules}
-                            disabled={endScheduleMutation.isPending}
-                            className="flex items-center gap-2"
-                          >
-                            <StopCircle className="h-4 w-4" />
-                            End Schedule
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDeleteAllSchedules}
-                            disabled={deleteScheduleMutation.isPending}
-                            className="flex items-center gap-2 text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Delete Schedule
-                          </Button>
-                        </div>
-
+              {schedulesLoading ? (
+                <p className="text-sm text-muted-foreground">Loading schedules...</p>
+              ) : !schedules || schedules.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic">No regular schedule set</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* Active Schedules Section */}
+                  {activeSchedules.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold text-green-700 dark:text-green-400">Active Schedules</h4>
+                      
+                      {/* Single End and Delete Buttons */}
+                      <div className="flex gap-2 mb-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleEndAllSchedules}
+                          disabled={endScheduleMutation.isPending}
+                          className="flex items-center gap-2"
+                        >
+                          <StopCircle className="h-4 w-4" />
+                          End Schedule
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDeleteAllSchedules}
+                          disabled={deleteScheduleMutation.isPending}
+                          className="flex items-center gap-2 text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete Schedule
+                        </Button>
+                      </div>
                         {activeSchedules.map((schedule) => {
                           return (
                             <div
@@ -904,7 +894,7 @@ const handleAddDefaultAssignment = () => {
               )}
 
               {/* Add New Schedule */}
-              {!showAddForm && !isEditing && !showEditAssignment ? (
+              {!showAddForm && !isEditing ? (
                 <Button
                   variant="outline"
                   className="w-full"
