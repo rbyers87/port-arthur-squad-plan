@@ -46,8 +46,6 @@ const WeeklySchedule = ({
 
   // ... the rest of your component remains exactly the same
 
-  const isAdminOrSupervisor = currentUser?.user_metadata?.role === 'admin' || currentUser?.user_metadata?.role === 'supervisor';
-
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
     queryKey: ["shift-types"],
@@ -633,11 +631,11 @@ const ScheduleCell = ({ officer, dateStr, isAdminOrSupervisor, onAssignPTO, onRe
   const isRegularDay = officer?.isRegularRecurringDay;
   const isExtraShift = isException && !isOff && !hasPTO && !isRegularDay;
 
-// FIXED: Proper Special Assignment detection (same as DailyScheduleView)
-const isSpecialAssignment = position && (
-  position.toLowerCase().includes('other') ||
-  (position && !predefinedPositions.includes(position))
-);
+  // FIXED: Proper Special Assignment detection (same as DailyScheduleView)
+  const isSpecialAssignment = position && (
+    position.toLowerCase().includes('other') ||
+    (position && !predefinedPositions.includes(position))
+  );
 
   // PTO Logic - Same as DailyScheduleView
   const isFullDayPTO = hasPTO && ptoData?.isFullShift;
@@ -709,15 +707,15 @@ const isSpecialAssignment = position && (
         </div>
       )}
 
-      {/* FIXED: Action buttons for admin/supervisor - Always visible */}
+      {/* FIXED: Action buttons for admin/supervisor - Always visible and properly styled */}
       {isAdminOrSupervisor && officer.shiftInfo && (
-        <div className="absolute top-1 right-1 flex gap-1 opacity-80 hover:opacity-100 transition-opacity">
+        <div className="absolute top-1 right-1 flex gap-1 opacity-100">
           {/* PENCIL ICON - Edit Assignment */}
           {!isOff && (
             <Button
               size="icon"
-              variant="ghost"
-              className="h-6 w-6 bg-background/80 hover:bg-background"
+              variant="secondary"
+              className="h-6 w-6 bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200 shadow-sm"
               onClick={(e) => {
                 e.stopPropagation();
                 onEditAssignment(officer, dateStr);
@@ -732,8 +730,8 @@ const isSpecialAssignment = position && (
           {isExtraShift && (
             <Button
               size="icon"
-              variant="ghost"
-              className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
+              variant="secondary"
+              className="h-6 w-6 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 shadow-sm"
               onClick={(e) => {
                 e.stopPropagation();
                 removeOfficerMutation.mutate(officer);
@@ -749,8 +747,8 @@ const isSpecialAssignment = position && (
           {!isOff && (
             <Button
               size="icon"
-              variant="ghost"
-              className="h-6 w-6 bg-background/80 hover:bg-background"
+              variant="secondary"
+              className="h-6 w-6 bg-green-100 hover:bg-green-200 text-green-700 border border-green-200 shadow-sm"
               onClick={(e) => {
                 e.stopPropagation();
                 onAssignPTO(officer.shiftInfo, dateStr, officer.officerId, officer.officerName);
@@ -764,8 +762,8 @@ const isSpecialAssignment = position && (
           {hasPTO && (
             <Button
               size="icon"
-              variant="ghost"
-              className="h-6 w-6 text-destructive bg-background/80 hover:bg-background"
+              variant="secondary"
+              className="h-6 w-6 bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-200 shadow-sm"
               onClick={(e) => {
                 e.stopPropagation();
                 onRemovePTO(officer.shiftInfo, dateStr, officer.officerId);
@@ -781,6 +779,7 @@ const isSpecialAssignment = position && (
     </div>
   );
 };
+
   // NEW: Excel-style weekly view with table layout
   const renderExcelStyleWeeklyView = () => {
     const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -876,7 +875,7 @@ const isSpecialAssignment = position && (
 
     // Calculate minimum staffing (you might want to make this dynamic)
     const minimumStaffing = {
-      MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 9, SAT: 9, SUN: 8
+      SUN: 8, MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 9, SAT: 9
     };
 
     return (
@@ -913,14 +912,14 @@ const isSpecialAssignment = position && (
       !officer.shiftInfo?.hasPTO
     ).length || 0;
     
-const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
-  const position = officer.shiftInfo?.position;
-  const isSpecialAssignment = position && (
-    position.toLowerCase().includes('other') ||
-    (position && !predefinedPositions.includes(position))
-  );
-  return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-}).length || 0;
+    const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(officer => {
+      const position = officer.shiftInfo?.position;
+      const isSpecialAssignment = position && (
+        position.toLowerCase().includes('other') ||
+        (position && !predefinedPositions.includes(position))
+      );
+      return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+    }).length || 0;
     
     const minimumOfficers = minimumStaffing[dayName as keyof typeof minimumStaffing];
     const minimumSupervisors = 1;
@@ -1087,34 +1086,35 @@ const officerCount = daySchedule?.categorizedOfficers?.regularOfficers.filter(of
             const isCurrentMonthDay = isSameMonth(day, currentMonth);
             const isToday = isSameDay(day, new Date());
             
-// Calculate staffing - ONLY FOR CURRENT MONTH DAYS
-// For padded days (previous/next month), don't show understaffing
-const ptoOfficers = daySchedule?.officers.filter((officer: any) => 
-  officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
-) || [];
+            // Calculate staffing - ONLY FOR CURRENT MONTH DAYS
+            // For padded days (previous/next month), don't show understaffing
+            const ptoOfficers = daySchedule?.officers.filter((officer: any) => 
+              officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
+            ) || [];
 
-const supervisorCount = isCurrentMonthDay ? 
-  (daySchedule?.categorizedOfficers?.supervisors.filter((officer: any) => 
-    !officer.shiftInfo?.hasPTO
-  ).length || 0) : 0;
+            const supervisorCount = isCurrentMonthDay ? 
+              (daySchedule?.categorizedOfficers?.supervisors.filter((officer: any) => 
+                !officer.shiftInfo?.hasPTO
+              ).length || 0) : 0;
 
-const officerCount = isCurrentMonthDay ? 
-  (daySchedule?.categorizedOfficers?.regularOfficers.filter((officer: any) => {
-    const position = officer.shiftInfo?.position;
-    const isSpecialAssignment = position && (
-      position.toLowerCase().includes('other') ||
-      (position && !predefinedPositions.includes(position))
-    );
-    return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
-  }).length || 0) : 0;
+            const officerCount = isCurrentMonthDay ? 
+              (daySchedule?.categorizedOfficers?.regularOfficers.filter((officer: any) => {
+                const position = officer.shiftInfo?.position;
+                const isSpecialAssignment = position && (
+                  position.toLowerCase().includes('other') ||
+                  (position && !predefinedPositions.includes(position))
+                );
+                return !officer.shiftInfo?.hasPTO && !isSpecialAssignment;
+              }).length || 0) : 0;
 
-const minimumOfficers = minimumStaffing[dayName];
-const minimumSupervisors = 1;
+            const minimumOfficers = minimumStaffing[dayName];
+            const minimumSupervisors = 1;
 
-// Only show understaffing for current month days
-const isOfficersUnderstaffed = isCurrentMonthDay && (officerCount < minimumOfficers);
-const isSupervisorsUnderstaffed = isCurrentMonthDay && (supervisorCount < minimumSupervisors);
-const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervisorsUnderstaffed);
+            // Only show understaffing for current month days
+            const isOfficersUnderstaffed = isCurrentMonthDay && (officerCount < minimumOfficers);
+            const isSupervisorsUnderstaffed = isCurrentMonthDay && (supervisorCount < minimumSupervisors);
+            const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervisorsUnderstaffed);
+
             return (
               <div
                 key={day.toISOString()}
@@ -1144,27 +1144,27 @@ const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervi
                   
                   {/* Staffing badges - SHOW FOR ALL DAYS */}
                   <div className="flex flex-col gap-1">
-{isUnderstaffed && (
-  <Badge variant="destructive" className="text-xs h-4">
-    Understaffed
-  </Badge>
-)}
-{ptoOfficers.length > 0 && (
-  <Badge variant="outline" className="text-xs h-4 bg-green-50 text-green-800 border-green-200">
-    {ptoOfficers.length} PTO
-  </Badge>
-)}
-{/* Show staffing counts for current month days only */}
-{isCurrentMonthDay && !isUnderstaffed && (
-  <div className="flex flex-col gap-1">
-    <Badge variant="outline" className="text-xs h-4">
-      {supervisorCount}/{minimumSupervisors} Sup
-    </Badge>
-    <Badge variant="outline" className="text-xs h-4">
-      {officerCount}/{minimumOfficers} Ofc
-    </Badge>
-  </div>
-)}
+                    {isUnderstaffed && (
+                      <Badge variant="destructive" className="text-xs h-4">
+                        Understaffed
+                      </Badge>
+                    )}
+                    {ptoOfficers.length > 0 && (
+                      <Badge variant="outline" className="text-xs h-4 bg-green-50 text-green-800 border-green-200">
+                        {ptoOfficers.length} PTO
+                      </Badge>
+                    )}
+                    {/* Show staffing counts for current month days only */}
+                    {isCurrentMonthDay && !isUnderstaffed && (
+                      <div className="flex flex-col gap-1">
+                        <Badge variant="outline" className="text-xs h-4">
+                          {supervisorCount}/{minimumSupervisors} Sup
+                        </Badge>
+                        <Badge variant="outline" className="text-xs h-4">
+                          {officerCount}/{minimumOfficers} Ofc
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
@@ -1193,15 +1193,15 @@ const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervi
                 
                 {/* Understaffing details - SHOW FOR ALL DAYS */}
                 {isUnderstaffed && (
-  <div className={`mt-1 text-[10px] space-y-0.5 text-red-600`}>
-    {isSupervisorsUnderstaffed && (
-      <div>Sup: {supervisorCount}/{minimumSupervisors}</div>
-    )}
-    {isOfficersUnderstaffed && (
-      <div>Ofc: {officerCount}/{minimumOfficers}</div>
-    )}
-  </div>
-)}
+                  <div className={`mt-1 text-[10px] space-y-0.5 text-red-600`}>
+                    {isSupervisorsUnderstaffed && (
+                      <div>Sup: {supervisorCount}/{minimumSupervisors}</div>
+                    )}
+                    {isOfficersUnderstaffed && (
+                      <div>Ofc: {officerCount}/{minimumOfficers}</div>
+                    )}
+                  </div>
+                )}
                 
                 {/* Month indicator for padding days */}
                 {!isCurrentMonthDay && (
@@ -1259,6 +1259,15 @@ const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervi
 
   return (
     <>
+      {/* TEMPORARY DEBUG - Remove after testing */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white p-3 rounded text-sm z-50 shadow-lg">
+          <div className="font-bold">WeeklySchedule Debug:</div>
+          <div>User Role: <strong>{userRole}</strong></div>
+          <div>Is Admin/Supervisor: <strong>{isAdminOrSupervisor ? 'YES ✅' : 'NO ❌'}</strong></div>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
