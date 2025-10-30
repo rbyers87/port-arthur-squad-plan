@@ -271,37 +271,37 @@ const removeOfficerMutation = useMutation({
     },
   });
 
-  // NEW: Fetch default assignments for all officers
-  const { data: allDefaultAssignments } = useQuery({
-    queryKey: ["all-default-assignments"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("officer_default_assignments")
-        .select("*")
-        .or(`end_date.is.null,end_date.gte.${new Date().toISOString().split('T')[0]}`)
-        .lte("start_date", new Date().toISOString().split('T')[0]);
+// NEW: Fetch default assignments for all officers
+const { data: allDefaultAssignments } = useQuery({
+  queryKey: ["all-default-assignments"],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("officer_default_assignments")
+      .select("*")
+      .or(`end_date.is.null,end_date.gte.${new Date().toISOString().split('T')[0]}`)
+      .lte("start_date", new Date().toISOString().split('T')[0]);
 
-      if (error) {
-        console.error("Error fetching default assignments:", error);
-        return [];
-      }
-      return data || [];
-    },
-    enabled: !!selectedShiftId,
-  });
+    if (error) {
+      console.error("Error fetching default assignments:", error);
+      return [];
+    }
+    return data || [];
+  },
+  enabled: !!selectedShiftId,
+});
 
-  // NEW: Helper function to get default assignment for an officer on a specific date
-  const getDefaultAssignment = (officerId: string, date: string) => {
-    if (!allDefaultAssignments) return null;
-    
-    const dateObj = parseISO(date);
-    
-    return allDefaultAssignments.find(da => 
-      da.officer_id === officerId &&
-      parseISO(da.start_date) <= dateObj &&
-      (!da.end_date || parseISO(da.end_date) >= dateObj)
-    );
-  };
+// NEW: Helper function to get default assignment for an officer on a specific date
+const getDefaultAssignment = (officerId: string, date: string) => {
+  if (!allDefaultAssignments) return null;
+  
+  const dateObj = parseISO(date);
+  
+  return allDefaultAssignments.find(da => 
+    da.officer_id === officerId &&
+    parseISO(da.start_date) <= dateObj &&
+    (!da.end_date || parseISO(da.end_date) >= dateObj)
+  );
+};
 
   // Set default shift type on load
   useEffect(() => {
