@@ -5,36 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";// In OfficerScheduleManager - Replace the defaultAssignments query with this:
-const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
-  queryKey: ["officer-default-assignments", officer.id],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from("officer_default_assignments")
-      .select("*")
-      .eq("officer_id", officer.id)
-      .order("start_date", { ascending: false });
-
-    if (error) throw error;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // FIX: Include assignments that are either ongoing OR end in the future
-    const active = data.filter(da => {
-      const endDate = da.end_date ? new Date(da.end_date) : null;
-      return !endDate || endDate >= today;
-    });
-    
-    const ended = data.filter(da => {
-      const endDate = da.end_date ? new Date(da.end_date) : null;
-      return endDate && endDate < today;
-    });
-    
-    return [...active, ...ended];
-  },
-  enabled: open,
-});
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar as CalendarIcon, Trash2, Plus, StopCircle, Building, MapPin, Edit, Settings } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
@@ -77,6 +48,12 @@ const daysOfWeek = [
 ];
 
 export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerScheduleManagerProps) => {
+  // FIX: Add proper null/undefined check for officer prop
+  if (!officer) {
+    console.error("OfficerScheduleManager: officer prop is undefined or null");
+    return null;
+  }
+
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
@@ -116,75 +93,75 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       }
     };
 
-    if (open) {
+    if (open && officer?.id) {
       fetchShiftPositions();
     }
-  }, [open]);
+  }, [open, officer?.id]);
 
-// In OfficerScheduleManager - Replace the schedules query with this:
-const { data: schedules, isLoading: schedulesLoading } = useQuery({
-  queryKey: ["officer-schedules", officer.id],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from("recurring_schedules")
-      .select(`
-        *,
-        shift_types(id, name, start_time, end_time)
-      `)
-      .eq("officer_id", officer.id)
-      .order("start_date", { ascending: false });
+  // Fetch officer's recurring schedules - FIXED: Include schedules with future end dates
+  const { data: schedules, isLoading: schedulesLoading } = useQuery({
+    queryKey: ["officer-schedules", officer.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("recurring_schedules")
+        .select(`
+          *,
+          shift_types(id, name, start_time, end_time)
+        `)
+        .eq("officer_id", officer.id)
+        .order("start_date", { ascending: false });
 
-    if (error) throw error;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // FIX: Include schedules that are either ongoing OR end in the future
-    const active = data.filter(s => {
-      const endDate = s.end_date ? new Date(s.end_date) : null;
-      return !endDate || endDate >= today;
-    });
-    
-    const ended = data.filter(s => {
-      const endDate = s.end_date ? new Date(s.end_date) : null;
-      return endDate && endDate < today;
-    });
-    
-    return [...active, ...ended];
-  },
-  enabled: open,
-});
+      if (error) throw error;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // FIX: Include schedules that are either ongoing OR end in the future
+      const active = data.filter(s => {
+        const endDate = s.end_date ? new Date(s.end_date) : null;
+        return !endDate || endDate >= today;
+      });
+      
+      const ended = data.filter(s => {
+        const endDate = s.end_date ? new Date(s.end_date) : null;
+        return endDate && endDate < today;
+      });
+      
+      return [...active, ...ended];
+    },
+    enabled: open,
+  });
 
-  // Fetch officer's default assignments
-const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
-  queryKey: ["officer-default-assignments", officer.id],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from("officer_default_assignments")
-      .select("*")
-      .eq("officer_id", officer.id)
-      .order("start_date", { ascending: false });
+  // Fetch officer's default assignments - FIXED: Include assignments with future end dates
+  const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
+    queryKey: ["officer-default-assignments", officer.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("officer_default_assignments")
+        .select("*")
+        .eq("officer_id", officer.id)
+        .order("start_date", { ascending: false });
 
-    if (error) throw error;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // FIX: Include assignments that are either ongoing OR end in the future
-    const active = data.filter(da => {
-      const endDate = da.end_date ? new Date(da.end_date) : null;
-      return !endDate || endDate >= today;
-    });
-    
-    const ended = data.filter(da => {
-      const endDate = da.end_date ? new Date(da.end_date) : null;
-      return endDate && endDate < today;
-    });
-    
-    return [...active, ...ended];
-  },
-  enabled: open,
-});
+      if (error) throw error;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // FIX: Include assignments that are either ongoing OR end in the future
+      const active = data.filter(da => {
+        const endDate = da.end_date ? new Date(da.end_date) : null;
+        return !endDate || endDate >= today;
+      });
+      
+      const ended = data.filter(da => {
+        const endDate = da.end_date ? new Date(da.end_date) : null;
+        return endDate && endDate < today;
+      });
+      
+      return [...active, ...ended];
+    },
+    enabled: open,
+  });
 
   // Fetch shift types
   const { data: shiftTypes } = useQuery({
@@ -876,6 +853,142 @@ const handleAddDefaultAssignment = () => {
                             className={cn(
                               "w-full justify-start text-left font-normal",
                               !startDate && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {startDate ? format(startDate, "PPP") : "Select date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={startDate}
+                            onSelect={(date) => date && setStartDate(date)}
+                            initialFocus
+                            className="pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>End Date (Optional)</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !endDate && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {endDate ? format(endDate, "PPP") : "Ongoing"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={endDate}
+                            onSelect={setEndDate}
+                            initialFocus
+                            disabled={(date) => date < startDate}
+                            className="pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      {endDate && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEndDate(undefined)}
+                          className="w-full"
+                        >
+                          Clear End Date
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditingSchedule(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleSaveEdit}
+                      disabled={updateScheduleMutation.isPending}
+                    >
+                      {updateScheduleMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Add New Schedule */}
+              {!showAddForm && !isEditing ? (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowAddForm(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New Work Schedule
+                </Button>
+              ) : showAddForm && (
+                <div className="border rounded-lg p-4 space-y-4">
+                  <h3 className="font-medium">Create Work Schedule</h3>
+                  
+                  <div className="space-y-2">
+                    <Label>Work Days (Select Multiple)</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {daysOfWeek.map((day) => (
+                        <div key={day.value} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`day-${day.value}`}
+                            checked={selectedDays.includes(day.value)}
+                            onCheckedChange={() => toggleDay(day.value)}
+                          />
+                          <Label
+                            htmlFor={`day-${day.value}`}
+                            className="text-sm font-normal cursor-pointer"
+                          >
+                            {day.label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Shift</Label>
+                    <Select value={shiftTypeId} onValueChange={setShiftTypeId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select shift" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {shiftTypes?.map((shift) => (
+                          <SelectItem key={shift.id} value={shift.id}>
+                            {shift.name} ({shift.start_time} - {shift.end_time})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Start Date *</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !startDate && "text-muted-foreground"
+                           
                             )}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
