@@ -36,7 +36,7 @@ const {
 } = useQuery({
   queryKey: ["understaffed-shifts-detection", selectedShiftId],
   queryFn: async () => {
-    console.log("🔍 Starting understaffed shift detection...");
+    console.log("🔍 VACANCIES - Starting understaffed shift detection...");
     
     // Get dates for the next 7 days
     const dates = [];
@@ -51,14 +51,14 @@ const {
       });
     }
 
-    console.log("📅 Checking dates:", dates, "for shift:", selectedShiftId);
+    console.log("📅 VACANCIES - Checking dates:", dates);
 
     try {
       const allUnderstaffedShifts = [];
 
       // Check each date in the next 7 days
       for (const { date, dayOfWeek } of dates) {
-        console.log(`\n📋 Checking date: ${date}, dayOfWeek: ${dayOfWeek}`);
+        console.log(`\n📋 VACANCIES - Checking date: ${date}, dayOfWeek: ${dayOfWeek}`);
 
         // Get all shift types or just the selected one
         let shiftTypesToCheck;
@@ -78,8 +78,6 @@ const {
           shiftTypesToCheck = data;
         }
 
-        console.log(`🔄 Checking ${shiftTypesToCheck?.length} shifts for ${date}`);
-
         // Get minimum staffing requirements for this day of week
         const { data: minimumStaffing, error: minError } = await supabase
           .from("minimum_staffing")
@@ -87,9 +85,7 @@ const {
           .eq("day_of_week", dayOfWeek);
         if (minError) throw minError;
 
-        console.log("📊 Minimum staffing requirements:", minimumStaffing);
-
-        // FIXED: Use the exact same query as DailyScheduleView
+        // FIXED: Use the EXACT same pattern as DailyScheduleView
         const { data: dailyScheduleData, error: dailyError } = await supabase
           .from("recurring_schedules")
           .select(`
@@ -115,30 +111,17 @@ const {
           throw dailyError;
         }
 
-        // CRITICAL FIX: Filter to only include schedules active for this specific date
-        const activeSchedules = dailyScheduleData?.filter(schedule => {
-          const scheduleStartDate = new Date(schedule.start_date);
-          const scheduleEndDate = schedule.end_date ? new Date(schedule.end_date) : null;
-          const currentDate = new Date(date);
-          
-          // Reset times for accurate date comparison
-          scheduleStartDate.setHours(0, 0, 0, 0);
-          currentDate.setHours(0, 0, 0, 0);
-          if (scheduleEndDate) scheduleEndDate.setHours(0, 0, 0, 0);
-          
-          const isAfterStart = currentDate >= scheduleStartDate;
-          const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
-          
-          const isActive = isAfterStart && isBeforeEnd;
-          
-          if (isActive && schedule.end_date) {
-            console.log(`✅ INCLUDING schedule with end date: ${schedule.profiles?.full_name} - ${schedule.shift_types?.name} (${schedule.start_date} to ${schedule.end_date})`);
-          }
-          
-          return isActive;
-        }) || [];
+        // DEBUG: What did we actually load?
+        console.log("🔍 VACANCIES - Recurring schedules for", date, ":", {
+          total: dailyScheduleData?.length || 0,
+          eveningShifts: dailyScheduleData?.filter(s => s.shift_types?.name === 'Evening Shift')?.length || 0,
+          eveningOfficers: dailyScheduleData
+            ?.filter(s => s.shift_types?.name === 'Evening Shift')
+            ?.map(s => s.profiles?.full_name) || []
+        });
 
-        console.log(`📝 Active schedules for ${date}: ${activeSchedules.length} (out of ${dailyScheduleData?.length} total)`);
+        // CRITICAL FIX: Use ALL data from query without additional filtering
+        const activeSchedules = dailyScheduleData || [];
 
         // Get schedule exceptions for this specific date
         const { data: exceptionsData, error: exceptionsError } = await supabase
@@ -169,24 +152,25 @@ const {
         const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
         const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
 
-        console.log(`📝 Total exceptions: ${exceptionsData?.length || 0} (PTO: ${ptoExceptions.length}, Working: ${workingExceptions.length})`);
-
         // Check each shift type for understaffing
         for (const shift of shiftTypesToCheck || []) {
           const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
           const minSupervisors = minStaff?.minimum_supervisors || 1;
           const minOfficers = minStaff?.minimum_officers || 2;
 
-          console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
-          console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
+          console.log(`🔍 VACANCIES - Checking ${shift.name}:`, {
+            minSupervisors,
+            minOfficers,
+            activeSchedulesForShift: activeSchedules.filter(s => s.shift_types?.id === shift.id).length
+          });
 
-          // Build the schedule using ACTIVE schedules only
+          // Build the schedule using ALL schedules from query
           const allAssignedOfficers = [];
 
-          // Process recurring officers from ACTIVE schedules
+          // Process recurring officers - use ALL data from query
           const recurringOfficers = activeSchedules.filter(r => r.shift_types?.id === shift.id);
 
-          console.log(`👥 Active recurring officers for ${shift.name}: ${recurringOfficers.length}`);
+          console.log(`👥 VACANCIES - ${shift.name} officers:`, recurringOfficers.map(r => r.profiles?.full_name));
 
           for (const recurringOfficer of recurringOfficers) {
             // Check if this officer has a working exception for today that overrides their position
@@ -210,8 +194,6 @@ const {
             // Use the position from the working exception if it exists, otherwise use recurring position
             const actualPosition = workingException?.position_name || recurringOfficer.position_name;
             const isSupervisor = actualPosition?.toLowerCase().includes('supervisor');
-
-            console.log(`✅ ${recurringOfficer.profiles?.full_name} - Position: ${actualPosition || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - ${workingException ? 'Exception Override' : 'Recurring'}`);
 
             allAssignedOfficers.push({
               officerId: recurringOfficer.officer_id,
@@ -243,8 +225,6 @@ const {
             }
 
             const isSupervisor = additionalOfficer.position_name?.toLowerCase().includes('supervisor');
-            
-            console.log(`✅ ${additionalOfficer.profiles?.full_name} - Position: ${additionalOfficer.position_name || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Added Shift`);
 
             allAssignedOfficers.push({
               officerId: additionalOfficer.officer_id,
@@ -259,25 +239,20 @@ const {
           const currentSupervisors = allAssignedOfficers.filter(o => o.isSupervisor).length;
           const currentOfficers = allAssignedOfficers.filter(o => !o.isSupervisor).length;
 
-          console.log(`👥 Final staffing for ${shift.name}: ${currentSupervisors} supervisors, ${currentOfficers} officers`);
-          console.log(`📋 All assigned officers:`, allAssignedOfficers.map(o => ({
-            name: o.name,
-            position: o.position,
-            isSupervisor: o.isSupervisor,
-            type: o.type
-          })));
+          console.log(`📊 VACANCIES - FINAL for ${shift.name}: ${currentSupervisors} supervisors, ${currentOfficers} officers`);
+          console.log(`👥 Assigned officers:`, allAssignedOfficers.map(o => o.name));
 
           const supervisorsUnderstaffed = currentSupervisors < minSupervisors;
           const officersUnderstaffed = currentOfficers < minOfficers;
           const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
 
           if (isUnderstaffed) {
-            console.log("🚨 UNDERSTAFFED SHIFT FOUND:", {
+            console.log("🚨 VACANCIES - UNDERSTAFFED SHIFT FOUND:", {
               date,
               shift: shift.name,
               supervisors: `${currentSupervisors}/${minSupervisors}`,
               officers: `${currentOfficers}/${minOfficers}`,
-              dayOfWeek
+              assignedOfficers: allAssignedOfficers.map(o => o.name)
             });
 
             const shiftData = {
@@ -306,15 +281,14 @@ const {
               }))
             };
 
-            console.log("📊 Storing understaffed shift data:", shiftData);
             allUnderstaffedShifts.push(shiftData);
           } else {
-            console.log("✅ Shift is properly staffed");
+            console.log(`✅ VACANCIES - ${shift.name} is properly staffed with ${allAssignedOfficers.length} officers`);
           }
         }
       }
 
-      console.log("🎯 Total understaffed shifts found:", allUnderstaffedShifts.length);
+      console.log("🎯 VACANCIES - Total understaffed shifts found:", allUnderstaffedShifts.length);
       return allUnderstaffedShifts;
 
     } catch (err) {
