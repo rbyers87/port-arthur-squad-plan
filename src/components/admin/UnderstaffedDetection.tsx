@@ -90,29 +90,14 @@ export const UnderstaffedDetection = () => {
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
 // Temporary debug query - remove all date filters
-const { data: dailyScheduleData, error: dailyError } = await supabase
-  .from("recurring_schedules")
-  .select(`
-    *,
-    profiles!inner (
-      id, 
-      full_name, 
-      badge_number, 
-      rank
-    ),
-    shift_types (
-      id, 
-      name, 
-      start_time, 
-      end_time
-    )
-  `)
-  .eq("day_of_week", dayOfWeek)
-  .eq("shift_type_id", shift.id);
+// Temporary: Remove all date filtering to see if we get all officers
+const recurringOfficers = dailyScheduleData
+  ?.filter(r => r.shift_types?.id === shift.id) || [];
 
-console.log(`🔍 DEBUG: ALL recurring schedules for day ${dayOfWeek}, shift ${shift.name}:`, 
-  dailyScheduleData?.map(s => s.profiles?.full_name));
+console.log(`🔍 DEBUG: All officers for ${shift.name} (no date filtering):`, 
+  recurringOfficers.map(r => r.profiles?.full_name));
 
+          
           if (dailyError) {
             console.error("❌ Recurring schedules error:", dailyError);
             throw dailyError;
