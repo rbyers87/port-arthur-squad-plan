@@ -89,24 +89,28 @@ export const UnderstaffedDetection = () => {
 
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-// Temporary debug query - remove all date filters
-// Test query without joins to see the raw data
-const { data: rawSchedules, error: rawError } = await supabase
+// In UnderstaffedDetection.tsx - USE THIS EXACT QUERY:
+const { data: dailyScheduleData, error: dailyError } = await supabase
   .from("recurring_schedules")
-  .select("*")
+  .select(`
+    *,
+    profiles!inner (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
   .eq("day_of_week", dayOfWeek)
-  .eq("shift_type_id", shift.id);
-
-console.log(`🔍 RAW SCHEDULES (no joins):`, {
-  count: rawSchedules?.length,
-  schedules: rawSchedules?.map(s => ({
-    officer_id: s.officer_id,
-    shift_type_id: s.shift_type_id,
-    day_of_week: s.day_of_week,
-    start_date: s.start_date,
-    end_date: s.end_date
-  }))
-});
+  .eq("shift_type_id", shift.id)  // ADD THIS - filter by current shift
+  // USE THE EXACT SAME FILTER AS DAILY SCHEDULE VIEW
+  .or(`end_date.is.null,end_date.gte.${date}`);
           
           if (dailyError) {
             console.error("❌ Recurring schedules error:", dailyError);
