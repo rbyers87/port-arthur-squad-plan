@@ -5,7 +5,36 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";// In OfficerScheduleManager - Replace the defaultAssignments query with this:
+const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
+  queryKey: ["officer-default-assignments", officer.id],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("officer_default_assignments")
+      .select("*")
+      .eq("officer_id", officer.id)
+      .order("start_date", { ascending: false });
+
+    if (error) throw error;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // FIX: Include assignments that are either ongoing OR end in the future
+    const active = data.filter(da => {
+      const endDate = da.end_date ? new Date(da.end_date) : null;
+      return !endDate || endDate >= today;
+    });
+    
+    const ended = data.filter(da => {
+      const endDate = da.end_date ? new Date(da.end_date) : null;
+      return endDate && endDate < today;
+    });
+    
+    return [...active, ...ended];
+  },
+  enabled: open,
+});
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar as CalendarIcon, Trash2, Plus, StopCircle, Building, MapPin, Edit, Settings } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
@@ -127,27 +156,35 @@ const { data: schedules, isLoading: schedulesLoading } = useQuery({
 });
 
   // Fetch officer's default assignments
-  const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
-    queryKey: ["officer-default-assignments", officer.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("officer_default_assignments")
-        .select("*")
-        .eq("officer_id", officer.id)
-        .order("start_date", { ascending: false });
+const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
+  queryKey: ["officer-default-assignments", officer.id],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("officer_default_assignments")
+      .select("*")
+      .eq("officer_id", officer.id)
+      .order("start_date", { ascending: false });
 
-      if (error) throw error;
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const active = data.filter(da => !da.end_date || new Date(da.end_date) >= today);
-      const ended = data.filter(da => da.end_date && new Date(da.end_date) < today);
-      
-      return [...active, ...ended];
-    },
-    enabled: open,
-  });
+    if (error) throw error;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // FIX: Include assignments that are either ongoing OR end in the future
+    const active = data.filter(da => {
+      const endDate = da.end_date ? new Date(da.end_date) : null;
+      return !endDate || endDate >= today;
+    });
+    
+    const ended = data.filter(da => {
+      const endDate = da.end_date ? new Date(da.end_date) : null;
+      return endDate && endDate < today;
+    });
+    
+    return [...active, ...ended];
+  },
+  enabled: open,
+});
 
   // Fetch shift types
   const { data: shiftTypes } = useQuery({
