@@ -90,7 +90,7 @@ export const UnderstaffedDetection = () => {
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
 // Get ALL schedule data for this date - using the same logic as DailyScheduleView
-// Temporary debug query - remove the date filters entirely
+// Fixed query - add shift filter
 const { data: dailyScheduleData, error: dailyError } = await supabase
   .from("recurring_schedules")
   .select(`
@@ -108,7 +108,10 @@ const { data: dailyScheduleData, error: dailyError } = await supabase
       end_time
     )
   `)
-  .eq("day_of_week", dayOfWeek);
+  .eq("day_of_week", dayOfWeek)
+  .eq("shift_type_id", shift.id)  // ADD THIS LINE - filter by current shift
+  .or(`end_date.is.null,end_date.gte.${date}`)
+  .lte("start_date", date);
 
           if (dailyError) {
             console.error("❌ Recurring schedules error:", dailyError);
