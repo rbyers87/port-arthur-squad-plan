@@ -89,26 +89,27 @@ export const UnderstaffedDetection = () => {
 
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-          // Get ALL schedule data for this date - using the same logic as DailyScheduleView
-          const { data: dailyScheduleData, error: dailyError } = await supabase
-            .from("recurring_schedules")
-            .select(`
-              *,
-              profiles!inner (
-                id, 
-                full_name, 
-                badge_number, 
-                rank
-              ),
-              shift_types (
-                id, 
-                name, 
-                start_time, 
-                end_time
-              )
-            `)
-            .eq("day_of_week", dayOfWeek)
-            .is("end_date", null);
+// Get ALL schedule data for this date - using the same logic as DailyScheduleView
+const { data: dailyScheduleData, error: dailyError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles!inner (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
+  .eq("day_of_week", dayOfWeek)
+  // FIX: Include schedules that are either ongoing OR end in the future/on this date
+  .or(`end_date.is.null,end_date.gte.${date}`);
 
           if (dailyError) {
             console.error("❌ Recurring schedules error:", dailyError);
