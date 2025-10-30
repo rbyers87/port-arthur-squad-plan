@@ -89,26 +89,30 @@ export const UnderstaffedDetection = () => {
 
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-          // Get ALL schedule data for this date - using the same logic as DailyScheduleView
-          const { data: dailyScheduleData, error: dailyError } = await supabase
-            .from("recurring_schedules")
-            .select(`
-              *,
-              profiles!inner (
-                id, 
-                full_name, 
-                badge_number, 
-                rank
-              ),
-              shift_types (
-                id, 
-                name, 
-                start_time, 
-                end_time
-              )
-            `)
-            .eq("day_of_week", dayOfWeek)
-            .is("end_date", null);
+// inside the for loop for each date
+const { data: dailyScheduleData, error: dailyError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles!inner (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
+  .eq("day_of_week", dayOfWeek)
+  // include schedules that either have no end_date OR end_date on/after this date
+  .or(`end_date.is.null,end_date.gte.${date}`)
+  // ensure the schedule has started on or before this date
+  .lte("start_date", date);
+
 
           if (dailyError) {
             console.error("❌ Recurring schedules error:", dailyError);
