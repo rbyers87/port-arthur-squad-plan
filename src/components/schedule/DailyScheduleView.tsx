@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, AlertTriangle, CheckCircle, Edit2, Save, X, Clock, Trash2, UserPlus, Download, Building, MapPin } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -116,33 +116,57 @@ export const DailyScheduleView = ({
       .eq("day_of_week", dayOfWeek);
     if (minError) throw minError;
 
-    // Get recurring schedules for this day of week
-// In DailyScheduleView.tsx - Replace the recurring schedules query with this:
-const { data: recurringData, error: recurringError } = await supabase
-  .from("recurring_schedules")
-  .select(`
-    *,
-    profiles!inner (
-      id, 
-      full_name, 
-      badge_number, 
-      rank
-    ),
-    shift_types (
-      id, 
-      name, 
-      start_time, 
-      end_time
-    )
-  `)
-  .eq("day_of_week", dayOfWeek)
-  // FIX: Include schedules that are either ongoing OR end in the future
-  .or(`end_date.is.null,end_date.gte.${dateStr}`);
+    // NEW: Get default assignments for all officers for this date
+    const { data: allDefaultAssignments, error: defaultAssignmentsError } = await supabase
+      .from("officer_default_assignments")
+      .select("*")
+      .or(`end_date.is.null,end_date.gte.${dateStr}`)
+      .lte("start_date", dateStr);
 
-if (recurringError) {
-  console.error("Recurring schedules error:", recurringError);
-  throw recurringError;
-}
+    if (defaultAssignmentsError) {
+      console.error("Default assignments error:", defaultAssignmentsError);
+      // Don't throw, just continue without default assignments
+    }
+
+    // NEW: Helper function to get default assignment for an officer
+    const getDefaultAssignment = (officerId: string) => {
+      if (!allDefaultAssignments) return null;
+      
+      const currentDate = parseISO(dateStr);
+      
+      return allDefaultAssignments.find(da => 
+        da.officer_id === officerId &&
+        parseISO(da.start_date) <= currentDate &&
+        (!da.end_date || parseISO(da.end_date) >= currentDate)
+      );
+    };
+
+    // Get recurring schedules for this day of week - FIXED: Include schedules with future end dates
+    const { data: recurringData, error: recurringError } = await supabase
+      .from("recurring_schedules")
+      .select(`
+        *,
+        profiles!inner (
+          id, 
+          full_name, 
+          badge_number, 
+          rank
+        ),
+        shift_types (
+          id, 
+          name, 
+          start_time, 
+          end_time
+        )
+      `)
+      .eq("day_of_week", dayOfWeek)
+      // FIX: Include schedules that are either ongoing OR end in the future
+      .or(`end_date.is.null,end_date.gte.${dateStr}`);
+
+    if (recurringError) {
+      console.error("Recurring schedules error:", recurringError);
+      throw recurringError;
+    }
 
     // Get schedule exceptions for this specific date
     const { data: exceptionsData, error: exceptionsError } = await supabase
@@ -203,7 +227,8 @@ if (recurringError) {
     console.log("📊 DEBUG: Data counts", {
       recurring: recurringData?.length,
       workingExceptions: workingExceptions.length,
-      ptoExceptions: ptoExceptions.length
+      ptoExceptions: ptoExceptions.length,
+      defaultAssignments: allDefaultAssignments?.length
     });
 
     // Build schedule by shift
@@ -228,6 +253,9 @@ if (recurringError) {
           const ptoException = ptoExceptions?.find(e => 
             e.officer_id === r.officer_id && e.shift_type_id === shift.id
           );
+
+          // NEW: Get default assignment for this officer
+          const defaultAssignment = getDefaultAssignment(r.officer_id);
 
           // FIXED: Calculate custom time for partial PTO
           let customTime = undefined;
@@ -257,8 +285,9 @@ if (recurringError) {
             name: workingException.profiles?.full_name || r.profiles?.full_name || "Unknown",
             badge: workingException.profiles?.badge_number || r.profiles?.badge_number,
             rank: workingException.profiles?.rank || r.profiles?.rank,
-            position: workingException.position_name || r.position_name,
-            unitNumber: workingException.unit_number || r.unit_number,
+            // APPLY DEFAULT ASSIGNMENT: Use working exception first, then recurring, then default
+            position: workingException.position_name || r.position_name || defaultAssignment?.position_name,
+            unitNumber: workingException.unit_number || r.unit_number || defaultAssignment?.unit_number,
             notes: workingException.notes,
             type: "recurring" as const, // Still mark as recurring since it's their regular shift
             originalScheduleId: r.id,
@@ -279,8 +308,9 @@ if (recurringError) {
             name: r.profiles?.full_name || "Unknown",
             badge: r.profiles?.badge_number,
             rank: r.profiles?.rank,
-            position: r.position_name,
-            unitNumber: r.unit_number,
+            // APPLY DEFAULT ASSIGNMENT: Use recurring first, then default
+            position: r.position_name || defaultAssignment?.position_name,
+            unitNumber: r.unit_number || defaultAssignment?.unit_number,
             notes: null,
             type: "recurring" as const,
             originalScheduleId: r.id,
@@ -323,6 +353,9 @@ if (recurringError) {
             p.officer_id === e.officer_id && p.shift_type_id === shift.id
           );
 
+          // NEW: Get default assignment for exception officers too
+          const defaultAssignment = getDefaultAssignment(e.officer_id);
+
           // FIXED: Calculate custom time for partial PTO
           let customTime = undefined;
           if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
@@ -350,8 +383,9 @@ if (recurringError) {
             name: e.profiles?.full_name || "Unknown",
             badge: e.profiles?.badge_number,
             rank: e.profiles?.rank,
-            position: e.position_name,
-            unitNumber: e.unit_number,
+            // APPLY DEFAULT ASSIGNMENT: Use exception first, then default
+            position: e.position_name || defaultAssignment?.position_name,
+            unitNumber: e.unit_number || defaultAssignment?.unit_number,
             notes: e.notes,
             type: isRegularRecurring ? "recurring" : "exception" as const,
             originalScheduleId: null,
@@ -376,7 +410,9 @@ if (recurringError) {
       console.log(`👥 Final officers for ${shift.name}:`, allOfficers.length, allOfficers.map(o => ({
         name: o.name,
         type: o.type,
-        isExtraShift: o.isExtraShift
+        isExtraShift: o.isExtraShift,
+        position: o.position,
+        hasDefault: !!getDefaultAssignment(o.officerId)
       })));
 
       // Get PTO records for this shift
