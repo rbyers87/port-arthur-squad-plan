@@ -118,6 +118,19 @@ const { data: dailyScheduleData, error: dailyError } = await supabase
             throw dailyError;
           }
 
+          console.log(`🔍 Looking for recurring schedules:`, {
+  dayOfWeek: dayOfWeek,
+  shiftId: shift.id,
+  shiftName: shift.name,
+  date: date,
+  queryResults: dailyScheduleData?.map(s => ({
+    name: s.profiles?.full_name,
+    shift: s.shift_types?.name,
+    start_date: s.start_date,
+    end_date: s.end_date
+  }))
+});
+
           // Get schedule exceptions for this specific date
           const { data: exceptionsData, error: exceptionsError } = await supabase
             .from("schedule_exceptions")
