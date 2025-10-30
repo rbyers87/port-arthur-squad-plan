@@ -89,36 +89,31 @@ export const UnderstaffedDetection = () => {
 
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-// In UnderstaffedDetection.tsx - USE THIS EXACT QUERY:
-// Temporary: No date filters at all
-const { data: debugData, error: debugError } = await supabase
-  .from("recurring_schedules")
-  .select(`
-    *,
-    profiles!inner (
-      id, 
-      full_name, 
-      badge_number, 
-      rank
-    ),
-    shift_types (
-      id, 
-      name, 
-      start_time, 
-      end_time
-    )
-  `)
-  .eq("day_of_week", dayOfWeek)
-  .eq("shift_type_id", shift.id);
+          // Get ALL schedule data for this date - using the same logic as DailyScheduleView
+          const { data: dailyScheduleData, error: dailyError } = await supabase
+            .from("recurring_schedules")
+            .select(`
+              *,
+              profiles!inner (
+                id, 
+                full_name, 
+                badge_number, 
+                rank
+              ),
+              shift_types (
+                id, 
+                name, 
+                start_time, 
+                end_time
+              )
+            `)
+            .eq("day_of_week", dayOfWeek)
+            .is("end_date", null);
 
-console.log(`🔍 ALL SCHEDULES (no date filters):`, 
-  debugData?.map(r => ({
-    name: r.profiles?.full_name,
-    start_date: r.start_date,
-    end_date: r.end_date,
-    dateBeingChecked: date
-  })));
-
+          if (dailyError) {
+            console.error("❌ Recurring schedules error:", dailyError);
+            throw dailyError;
+          }
 
           // Get schedule exceptions for this specific date
           const { data: exceptionsData, error: exceptionsError } = await supabase
