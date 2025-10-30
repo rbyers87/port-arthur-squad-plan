@@ -271,6 +271,38 @@ const removeOfficerMutation = useMutation({
     },
   });
 
+  // NEW: Fetch default assignments for all officers
+  const { data: allDefaultAssignments } = useQuery({
+    queryKey: ["all-default-assignments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("officer_default_assignments")
+        .select("*")
+        .or(`end_date.is.null,end_date.gte.${new Date().toISOString().split('T')[0]}`)
+        .lte("start_date", new Date().toISOString().split('T')[0]);
+
+      if (error) {
+        console.error("Error fetching default assignments:", error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: !!selectedShiftId,
+  });
+
+  // NEW: Helper function to get default assignment for an officer on a specific date
+  const getDefaultAssignment = (officerId: string, date: string) => {
+    if (!allDefaultAssignments) return null;
+    
+    const dateObj = parseISO(date);
+    
+    return allDefaultAssignments.find(da => 
+      da.officer_id === officerId &&
+      parseISO(da.start_date) <= dateObj &&
+      (!da.end_date || parseISO(da.end_date) >= dateObj)
+    );
+  };
+
   // Set default shift type on load
   useEffect(() => {
     if (shiftTypes && shiftTypes.length > 0 && !selectedShiftId) {
@@ -321,7 +353,7 @@ const removeOfficerMutation = useMutation({
     return { supervisors, regularOfficers };
   };
 
-  // Main schedule query - FIXED WITH SEPARATE QUERIES
+  // Main schedule query - FIXED WITH DEFAULT ASSIGNMENTS
   const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
     queryKey: ["schedule", currentWeekStart.toISOString(), currentMonth.toISOString(), activeView, selectedShiftId],
     queryFn: async () => {
@@ -332,33 +364,32 @@ const removeOfficerMutation = useMutation({
         format(date, "yyyy-MM-dd")
       );
 
-      // Get recurring schedules
-// In WeeklySchedule.tsx - Replace the recurring schedules query with this:
-const { data: recurringData, error: recurringError } = await supabase
-  .from("recurring_schedules")
-  .select(`
-    *,
-    profiles (
-      id, 
-      full_name, 
-      badge_number, 
-      rank
-    ),
-    shift_types (
-      id, 
-      name, 
-      start_time, 
-      end_time
-    )
-  `)
-  .eq("shift_type_id", selectedShiftId)
-  // FIX: Remove the .is("end_date", null) filter to get all active schedules
-  .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
+      // Get recurring schedules - FIXED: Include schedules with future end dates
+      const { data: recurringData, error: recurringError } = await supabase
+        .from("recurring_schedules")
+        .select(`
+          *,
+          profiles (
+            id, 
+            full_name, 
+            badge_number, 
+            rank
+          ),
+          shift_types (
+            id, 
+            name, 
+            start_time, 
+            end_time
+          )
+        `)
+        .eq("shift_type_id", selectedShiftId)
+        // FIX: Remove strict null filter to include schedules with future end dates
+        .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
 
-if (recurringError) {
-  console.error("Recurring schedules error:", recurringError);
-  throw recurringError;
-}
+      if (recurringError) {
+        console.error("Recurring schedules error:", recurringError);
+        throw recurringError;
+      }
 
       // Get schedule exceptions for the week - SEPARATE QUERIES TO AVOID RELATIONSHIP CONFLICTS
       const { data: exceptionsData, error: exceptionsError } = await supabase
@@ -422,7 +453,7 @@ if (recurringError) {
         scheduleByDateAndOfficer[date] = {};
       });
 
-      // Process recurring schedules
+      // Process recurring schedules WITH DEFAULT ASSIGNMENTS
       recurringData?.forEach(recurring => {
         dates.forEach(date => {
           const currentDate = parseISO(date);
@@ -449,6 +480,9 @@ if (recurringError) {
                 e.is_off
               );
 
+              // NEW: Get default assignment for this officer/date
+              const defaultAssignment = getDefaultAssignment(recurring.officer_id, date);
+
               if (!scheduleByDateAndOfficer[date][recurring.officer_id]) {
                 scheduleByDateAndOfficer[date][recurring.officer_id] = {
                   officerId: recurring.officer_id,
@@ -460,7 +494,9 @@ if (recurringError) {
                   shiftInfo: {
                     type: recurring.shift_types?.name,
                     time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
-                    position: recurring.position_name,
+                    // APPLY DEFAULT ASSIGNMENT: Use recurring assignment first, then default
+                    position: recurring.position_name || defaultAssignment?.position_name,
+                    unitNumber: recurring.unit_number || defaultAssignment?.unit_number,
                     scheduleId: recurring.id,
                     scheduleType: "recurring" as const,
                     shift: recurring.shift_types,
@@ -494,6 +530,9 @@ if (recurringError) {
           e.is_off
         );
 
+        // NEW: Get default assignment for exception officers too
+        const defaultAssignment = getDefaultAssignment(exception.officer_id, exception.date);
+
         scheduleByDateAndOfficer[exception.date][exception.officer_id] = {
           officerId: exception.officer_id,
           officerName: exception.profiles?.full_name || "Unknown",
@@ -506,7 +545,9 @@ if (recurringError) {
             time: exception.custom_start_time && exception.custom_end_time
               ? `${exception.custom_start_time} - ${exception.custom_end_time}`
               : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`,
-            position: exception.position_name,
+            // APPLY DEFAULT ASSIGNMENT: Use exception assignment first, then default
+            position: exception.position_name || defaultAssignment?.position_name,
+            unitNumber: exception.unit_number || defaultAssignment?.unit_number,
             scheduleId: exception.id,
             scheduleType: "exception" as const,
             shift: exception.shift_types,
