@@ -89,31 +89,33 @@ const {
 
         console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-        // FIXED: Get ALL schedule data for this date - including schedules with future end dates
-        const { data: dailyScheduleData, error: dailyError } = await supabase
-          .from("recurring_schedules")
-          .select(`
-            *,
-            profiles!inner (
-              id, 
-              full_name, 
-              badge_number, 
-              rank
-            ),
-            shift_types (
-              id, 
-              name, 
-              start_time, 
-              end_time
-            )
-          `)
-          .eq("day_of_week", dayOfWeek)
-          .or(`end_date.is.null,end_date.gte.${date}`);
+// FIXED: Get ALL schedule data for this date - including schedules with future end dates
+const { data: dailyScheduleData, error: dailyError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles!inner (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
+  .eq("day_of_week", dayOfWeek)
+  // FIX: Use proper Supabase filter syntax for date ranges
+  .lte('start_date', date)  // start_date should be less than or equal to the target date
+  .or(`end_date.is.null,end_date.gte.${date}`); // end_date should be null OR greater than/equal to target date
 
-        if (dailyError) {
-          console.error("❌ Recurring schedules error:", dailyError);
-          throw dailyError;
-        }
+if (dailyError) {
+  console.error("❌ Recurring schedules error:", dailyError);
+  throw dailyError;
+}
 
         console.log(`📝 Total recurring schedules loaded: ${dailyScheduleData?.length || 0}`);
 
