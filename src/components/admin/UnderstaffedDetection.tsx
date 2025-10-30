@@ -111,11 +111,16 @@ const { data: dailyScheduleData, error: dailyError } = await supabase
   // FIX: Include schedules that are either ongoing OR end in the future/on this date
   .or(`end_date.is.null,end_date.gte.${date}`);
 
-          if (dailyError) {
-            console.error("❌ Recurring schedules error:", dailyError);
-            throw dailyError;
-          }
+if (dailyError) {
+  console.error("❌ Recurring schedules error:", dailyError);
+  throw dailyError;
+}
 
+// Add debug logging to see what we got
+console.log(`📊 Recurring schedules loaded: ${dailyScheduleData?.length || 0} total`);
+console.log(`   - With end_date: ${dailyScheduleData?.filter(s => s.end_date)?.length || 0}`);
+console.log(`   - Without end_date: ${dailyScheduleData?.filter(s => !s.end_date)?.length || 0}`);
+          
           // Get schedule exceptions for this specific date
           const { data: exceptionsData, error: exceptionsError } = await supabase
             .from("schedule_exceptions")
