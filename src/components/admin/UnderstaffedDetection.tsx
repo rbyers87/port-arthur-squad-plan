@@ -28,83 +28,47 @@ export const UnderstaffedDetection = () => {
     },
   });
 
-const { 
-  data: understaffedShifts, 
-  isLoading, 
-  error,
-  refetch
-} = useQuery({
-  queryKey: ["understaffed-shifts-detection", selectedShiftId],
-  queryFn: async () => {
-    console.log("🔍 VACANCIES - Starting understaffed shift detection...");
-    
-    // Get dates for the next 7 days
-    const dates = [];
-    const today = new Date();
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      dates.push({
-        date: date.toISOString().split('T')[0],
-        dayOfWeek: date.getDay()
-      });
-    }
+// In your UnderstaffedDetection component, find this query:
+const { data: dailyScheduleData, error: dailyError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles!inner (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
+  .eq("day_of_week", dayOfWeek)
+  .is("end_date", null); // ← CHANGE THIS LINE
 
-    console.log("📅 VACANCIES - Checking dates:", dates);
-
-    try {
-      const allUnderstaffedShifts = [];
-
-      // Check each date in the next 7 days
-      for (const { date, dayOfWeek } of dates) {
-        console.log(`\n📋 VACANCIES - Checking date: ${date}, dayOfWeek: ${dayOfWeek}`);
-
-        // Get all shift types or just the selected one
-        let shiftTypesToCheck;
-        if (selectedShiftId === "all") {
-          const { data, error: shiftError } = await supabase
-            .from("shift_types")
-            .select("*")
-            .order("start_time");
-          if (shiftError) throw shiftError;
-          shiftTypesToCheck = data;
-        } else {
-          const { data, error: shiftError } = await supabase
-            .from("shift_types")
-            .select("*")
-            .eq("id", selectedShiftId);
-          if (shiftError) throw shiftError;
-          shiftTypesToCheck = data;
-        }
-
-        // Get minimum staffing requirements for this day of week
-        const { data: minimumStaffing, error: minError } = await supabase
-          .from("minimum_staffing")
-          .select("minimum_officers, minimum_supervisors, shift_type_id")
-          .eq("day_of_week", dayOfWeek);
-        if (minError) throw minError;
-
-        // FIXED: Use the EXACT same pattern as DailyScheduleView
-        const { data: dailyScheduleData, error: dailyError } = await supabase
-          .from("recurring_schedules")
-          .select(`
-            *,
-            profiles!inner (
-              id, 
-              full_name, 
-              badge_number, 
-              rank
-            ),
-            shift_types (
-              id, 
-              name, 
-              start_time, 
-              end_time
-            )
-          `)
-          .eq("day_of_week", dayOfWeek)
-          .or(`end_date.is.null,end_date.gte.${date}`);
+// Change it to:
+const { data: dailyScheduleData, error: dailyError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles!inner (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
+  .eq("day_of_week", dayOfWeek)
+  .or(`end_date.is.null,end_date.gte.${date}`); // ← TO THIS
 
         if (dailyError) {
           console.error("❌ Recurring schedules error:", dailyError);
