@@ -333,30 +333,32 @@ const removeOfficerMutation = useMutation({
       );
 
       // Get recurring schedules
-      const { data: recurringData, error: recurringError } = await supabase
-        .from("recurring_schedules")
-        .select(`
-          *,
-          profiles (
-            id, 
-            full_name, 
-            badge_number, 
-            rank
-          ),
-          shift_types (
-            id, 
-            name, 
-            start_time, 
-            end_time
-          )
-        `)
-        .eq("shift_type_id", selectedShiftId)
-        .is("end_date", null);
+// In WeeklySchedule.tsx - Replace the recurring schedules query with this:
+const { data: recurringData, error: recurringError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
+  .eq("shift_type_id", selectedShiftId)
+  // FIX: Remove the .is("end_date", null) filter to get all active schedules
+  .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
 
-      if (recurringError) {
-        console.error("Recurring schedules error:", recurringError);
-        throw recurringError;
-      }
+if (recurringError) {
+  console.error("Recurring schedules error:", recurringError);
+  throw recurringError;
+}
 
       // Get schedule exceptions for the week - SEPARATE QUERIES TO AVOID RELATIONSHIP CONFLICTS
       const { data: exceptionsData, error: exceptionsError } = await supabase
