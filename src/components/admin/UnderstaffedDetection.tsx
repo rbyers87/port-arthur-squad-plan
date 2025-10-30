@@ -116,10 +116,20 @@ if (dailyError) {
   throw dailyError;
 }
 
-// Add debug logging to see what we got
-console.log(`📊 Recurring schedules loaded: ${dailyScheduleData?.length || 0} total`);
-console.log(`   - With end_date: ${dailyScheduleData?.filter(s => s.end_date)?.length || 0}`);
-console.log(`   - Without end_date: ${dailyScheduleData?.filter(s => !s.end_date)?.length || 0}`);
+// ADD THIS DEBUG BLOCK HERE:
+console.log(`📊 RAW QUERY RESULTS for ${date}:`, {
+  totalRecords: dailyScheduleData?.length || 0,
+  recordsWithEndDate: dailyScheduleData?.filter(s => s.end_date)?.length || 0,
+  recordsWithoutEndDate: dailyScheduleData?.filter(s => !s.end_date)?.length || 0,
+  eveningShiftRecords: dailyScheduleData?.filter(s => s.shift_types?.id === shift.id)?.length || 0,
+  allShiftIds: [...new Set(dailyScheduleData?.map(s => s.shift_types?.id))],
+  sampleRecords: dailyScheduleData?.slice(0, 3).map(s => ({
+    officer: s.profiles?.full_name,
+    shift: s.shift_types?.name,
+    end_date: s.end_date,
+    day_of_week: s.day_of_week
+  }))
+});
           
           // Get schedule exceptions for this specific date
           const { data: exceptionsData, error: exceptionsError } = await supabase
