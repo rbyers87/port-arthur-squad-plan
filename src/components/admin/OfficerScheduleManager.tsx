@@ -92,31 +92,39 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     }
   }, [open]);
 
-  // Fetch officer's recurring schedules
-  const { data: schedules, isLoading: schedulesLoading } = useQuery({
-    queryKey: ["officer-schedules", officer.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("recurring_schedules")
-        .select(`
-          *,
-          shift_types(id, name, start_time, end_time)
-        `)
-        .eq("officer_id", officer.id)
-        .order("start_date", { ascending: false });
+// In OfficerScheduleManager - Replace the schedules query with this:
+const { data: schedules, isLoading: schedulesLoading } = useQuery({
+  queryKey: ["officer-schedules", officer.id],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("recurring_schedules")
+      .select(`
+        *,
+        shift_types(id, name, start_time, end_time)
+      `)
+      .eq("officer_id", officer.id)
+      .order("start_date", { ascending: false });
 
-      if (error) throw error;
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const active = data.filter(s => !s.end_date || new Date(s.end_date) >= today);
-      const ended = data.filter(s => s.end_date && new Date(s.end_date) < today);
-      
-      return [...active, ...ended];
-    },
-    enabled: open,
-  });
+    if (error) throw error;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // FIX: Include schedules that are either ongoing OR end in the future
+    const active = data.filter(s => {
+      const endDate = s.end_date ? new Date(s.end_date) : null;
+      return !endDate || endDate >= today;
+    });
+    
+    const ended = data.filter(s => {
+      const endDate = s.end_date ? new Date(s.end_date) : null;
+      return endDate && endDate < today;
+    });
+    
+    return [...active, ...ended];
+  },
+  enabled: open,
+});
 
   // Fetch officer's default assignments
   const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
