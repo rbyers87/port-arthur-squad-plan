@@ -89,6 +89,7 @@ export const UnderstaffedDetection = () => {
 
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
+
 // Get ALL schedule data for this date - using the same logic as DailyScheduleView
 const { data: dailyScheduleData, error: dailyError } = await supabase
   .from("recurring_schedules")
@@ -108,7 +109,6 @@ const { data: dailyScheduleData, error: dailyError } = await supabase
     )
   `)
   .eq("day_of_week", dayOfWeek)
-  // FIX: Include schedules that are either ongoing OR end in the future/on this date
   .or(`end_date.is.null,end_date.gte.${date}`);
 
 if (dailyError) {
@@ -116,19 +116,11 @@ if (dailyError) {
   throw dailyError;
 }
 
-// ADD THIS DEBUG BLOCK HERE:
 console.log(`📊 RAW QUERY RESULTS for ${date}:`, {
   totalRecords: dailyScheduleData?.length || 0,
   recordsWithEndDate: dailyScheduleData?.filter(s => s.end_date)?.length || 0,
   recordsWithoutEndDate: dailyScheduleData?.filter(s => !s.end_date)?.length || 0,
-  eveningShiftRecords: dailyScheduleData?.filter(s => s.shift_types?.id === shift.id)?.length || 0,
-  allShiftIds: [...new Set(dailyScheduleData?.map(s => s.shift_types?.id))],
-  sampleRecords: dailyScheduleData?.slice(0, 3).map(s => ({
-    officer: s.profiles?.full_name,
-    shift: s.shift_types?.name,
-    end_date: s.end_date,
-    day_of_week: s.day_of_week
-  }))
+  allShiftIds: [...new Set(dailyScheduleData?.map(s => s.shift_types?.id))]
 });
           
           // Get schedule exceptions for this specific date
