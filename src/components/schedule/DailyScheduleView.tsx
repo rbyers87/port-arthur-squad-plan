@@ -117,30 +117,32 @@ export const DailyScheduleView = ({
     if (minError) throw minError;
 
     // Get recurring schedules for this day of week
-    const { data: recurringData, error: recurringError } = await supabase
-      .from("recurring_schedules")
-      .select(`
-        *,
-        profiles!inner (
-          id, 
-          full_name, 
-          badge_number, 
-          rank
-        ),
-        shift_types (
-          id, 
-          name, 
-          start_time, 
-          end_time
-        )
-      `)
-      .eq("day_of_week", dayOfWeek)
-      .is("end_date", null);
+// In DailyScheduleView.tsx - Replace the recurring schedules query with this:
+const { data: recurringData, error: recurringError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles!inner (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
+  .eq("day_of_week", dayOfWeek)
+  // FIX: Include schedules that are either ongoing OR end in the future
+  .or(`end_date.is.null,end_date.gte.${dateStr}`);
 
-    if (recurringError) {
-      console.error("Recurring schedules error:", recurringError);
-      throw recurringError;
-    }
+if (recurringError) {
+  console.error("Recurring schedules error:", recurringError);
+  throw recurringError;
+}
 
     // Get schedule exceptions for this specific date
     const { data: exceptionsData, error: exceptionsError } = await supabase
