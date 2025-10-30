@@ -89,35 +89,56 @@ const {
 
         console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-// FIXED: Get ALL schedule data for this date - including schedules with future end dates
-const { data: dailyScheduleData, error: dailyError } = await supabase
-  .from("recurring_schedules")
-  .select(`
-    *,
-    profiles!inner (
-      id, 
-      full_name, 
-      badge_number, 
-      rank
-    ),
-    shift_types (
-      id, 
-      name, 
-      start_time, 
-      end_time
-    )
-  `)
-  .eq("day_of_week", dayOfWeek)
-  // FIX: Use proper Supabase filter syntax for date ranges
-  .lte('start_date', date)  // start_date should be less than or equal to the target date
-  .or(`end_date.is.null,end_date.gte.${date}`); // end_date should be null OR greater than/equal to target date
+        // FIXED: Use the exact same query as DailyScheduleView
+        const { data: dailyScheduleData, error: dailyError } = await supabase
+          .from("recurring_schedules")
+          .select(`
+            *,
+            profiles!inner (
+              id, 
+              full_name, 
+              badge_number, 
+              rank
+            ),
+            shift_types (
+              id, 
+              name, 
+              start_time, 
+              end_time
+            )
+          `)
+          .eq("day_of_week", dayOfWeek)
+          .or(`end_date.is.null,end_date.gte.${date}`);
 
-if (dailyError) {
-  console.error("❌ Recurring schedules error:", dailyError);
-  throw dailyError;
-}
+        if (dailyError) {
+          console.error("❌ Recurring schedules error:", dailyError);
+          throw dailyError;
+        }
 
-        console.log(`📝 Total recurring schedules loaded: ${dailyScheduleData?.length || 0}`);
+        // CRITICAL FIX: Filter to only include schedules active for this specific date
+        const activeSchedules = dailyScheduleData?.filter(schedule => {
+          const scheduleStartDate = new Date(schedule.start_date);
+          const scheduleEndDate = schedule.end_date ? new Date(schedule.end_date) : null;
+          const currentDate = new Date(date);
+          
+          // Reset times for accurate date comparison
+          scheduleStartDate.setHours(0, 0, 0, 0);
+          currentDate.setHours(0, 0, 0, 0);
+          if (scheduleEndDate) scheduleEndDate.setHours(0, 0, 0, 0);
+          
+          const isAfterStart = currentDate >= scheduleStartDate;
+          const isBeforeEnd = !scheduleEndDate || currentDate <= scheduleEndDate;
+          
+          const isActive = isAfterStart && isBeforeEnd;
+          
+          if (isActive && schedule.end_date) {
+            console.log(`✅ INCLUDING schedule with end date: ${schedule.profiles?.full_name} - ${schedule.shift_types?.name} (${schedule.start_date} to ${schedule.end_date})`);
+          }
+          
+          return isActive;
+        }) || [];
+
+        console.log(`📝 Active schedules for ${date}: ${activeSchedules.length} (out of ${dailyScheduleData?.length} total)`);
 
         // Get schedule exceptions for this specific date
         const { data: exceptionsData, error: exceptionsError } = await supabase
@@ -159,29 +180,13 @@ if (dailyError) {
           console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
           console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
 
-          // Build the schedule exactly like DailyScheduleView does
+          // Build the schedule using ACTIVE schedules only
           const allAssignedOfficers = [];
 
-          // ENHANCED FIX: Process recurring officers with proper date range validation
-          const recurringOfficers = dailyScheduleData
-            ?.filter(r => {
-              // Check if this recurring schedule applies to the current date
-              const scheduleStartDate = new Date(r.start_date);
-              const scheduleEndDate = r.end_date ? new Date(r.end_date) : null;
-              const currentDateObj = new Date(date);
-              
-              // Reset times for accurate date comparison
-              scheduleStartDate.setHours(0, 0, 0, 0);
-              currentDateObj.setHours(0, 0, 0, 0);
-              if (scheduleEndDate) scheduleEndDate.setHours(0, 0, 0, 0);
-              
-              const isAfterStart = currentDateObj >= scheduleStartDate;
-              const isBeforeEnd = !scheduleEndDate || currentDateObj <= scheduleEndDate;
-              
-              return r.shift_types?.id === shift.id && isAfterStart && isBeforeEnd;
-            }) || [];
+          // Process recurring officers from ACTIVE schedules
+          const recurringOfficers = activeSchedules.filter(r => r.shift_types?.id === shift.id);
 
-          console.log(`📋 Recurring officers after date filtering: ${recurringOfficers.length}`);
+          console.log(`👥 Active recurring officers for ${shift.name}: ${recurringOfficers.length}`);
 
           for (const recurringOfficer of recurringOfficers) {
             // Check if this officer has a working exception for today that overrides their position
@@ -221,7 +226,7 @@ if (dailyError) {
           const additionalOfficers = workingExceptions
             ?.filter(e => 
               e.shift_types?.id === shift.id &&
-              !dailyScheduleData?.some(r => r.officer_id === e.officer_id)
+              !activeSchedules?.some(r => r.officer_id === e.officer_id)
             ) || [];
 
           for (const additionalOfficer of additionalOfficers) {
@@ -254,7 +259,7 @@ if (dailyError) {
           const currentSupervisors = allAssignedOfficers.filter(o => o.isSupervisor).length;
           const currentOfficers = allAssignedOfficers.filter(o => !o.isSupervisor).length;
 
-          console.log(`👥 Final staffing: ${currentSupervisors} supervisors, ${currentOfficers} officers`);
+          console.log(`👥 Final staffing for ${shift.name}: ${currentSupervisors} supervisors, ${currentOfficers} officers`);
           console.log(`📋 All assigned officers:`, allAssignedOfficers.map(o => ({
             name: o.name,
             position: o.position,
