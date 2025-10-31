@@ -311,7 +311,7 @@ const addDefaultAssignmentMutation = useMutation({
       })
       .eq("officer_id", officer.id)
       .or(`end_date.is.null,end_date.gte.${date}`); // ← TO THIS
-      .lt("start_date", data.start); // That started before the new assignment
+     // .lt("start_date", data.start); // That started before the new assignment
 
     if (endPreviousError) {
       console.error("Failed to end previous assignments:", endPreviousError);
