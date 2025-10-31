@@ -442,7 +442,7 @@ export const OfficersManagement = ({ userId, isAdminOrSupervisor }: OfficersMana
             .eq("officer_id", selectedOfficerId)
             .eq("day_of_week", dayOfWeek)
             .or(`end_date.is.null,end_date.gte.${date}`); // ← TO THIS
-            .single();
+          //  .single();
 
           if (!recurringError && recurringSchedule?.shift_type_id) {
             shiftTypeId = recurringSchedule.shift_type_id;
