@@ -94,13 +94,24 @@ const { data: stats } = useQuery({
       .order("start_time");
     if (shiftError) throw shiftError;
 
-    // Count active officers by shift
-    const shiftBreakdown: { [key: string]: number } = {};
-    let totalActiveOfficers = 0;
+    // Enhanced staffing breakdown
+    const staffingBreakdown: { 
+      [key: string]: { 
+        officers: number; 
+        supervisors: number; 
+        total: number;
+        minRequired?: { officers: number; supervisors: number };
+      } 
+    } = {};
 
-    // Initialize shift breakdown with all shifts
+    // Initialize staffing breakdown with all shifts
     shiftTypes?.forEach(shift => {
-      shiftBreakdown[shift.name] = 0;
+      staffingBreakdown[shift.name] = { 
+        officers: 0, 
+        supervisors: 0, 
+        total: 0,
+        minRequired: getMinimumStaffing(shift.name) // Add minimum staffing requirements
+      };
     });
 
     // Get recurring schedules for today
@@ -110,7 +121,8 @@ const { data: stats } = useQuery({
         *,
         profiles!inner (
           id, 
-          full_name
+          full_name,
+          rank
         ),
         shift_types (
           id, 
@@ -122,7 +134,6 @@ const { data: stats } = useQuery({
 
     if (recurringError) {
       console.error("Error fetching recurring schedules:", recurringError);
-      // Don't throw, continue with exceptions data
     }
 
     // Get schedule exceptions for today
@@ -132,7 +143,8 @@ const { data: stats } = useQuery({
         *,
         profiles!inner (
           id, 
-          full_name
+          full_name,
+          rank
         ),
         shift_types (
           id, 
@@ -144,26 +156,40 @@ const { data: stats } = useQuery({
 
     if (exceptionsError) {
       console.error("Error fetching exceptions:", exceptionsError);
-      // Don't throw, use whatever data we have
     }
+
+    // Helper function to categorize officer type
+    const isSupervisor = (rank: string) => {
+      return rank && ['Sergeant', 'Lieutenant', 'Captain', 'Chief', 'Deputy Chief'].includes(rank);
+    };
 
     // Count officers from recurring schedules
     recurringData?.forEach(schedule => {
-      if (schedule.shift_types?.name) {
-        shiftBreakdown[schedule.shift_types.name]++;
-        totalActiveOfficers++;
+      if (schedule.shift_types?.name && schedule.profiles) {
+        const shiftName = schedule.shift_types.name;
+        if (isSupervisor(schedule.profiles.rank)) {
+          staffingBreakdown[shiftName].supervisors++;
+        } else {
+          staffingBreakdown[shiftName].officers++;
+        }
+        staffingBreakdown[shiftName].total++;
       }
     });
 
-    // Count officers from working exceptions (excluding PTO)
+    // Count officers from working exceptions
     exceptionsData?.forEach(exception => {
-      if (exception.shift_types?.name) {
-        shiftBreakdown[exception.shift_types.name]++;
-        totalActiveOfficers++;
+      if (exception.shift_types?.name && exception.profiles) {
+        const shiftName = exception.shift_types.name;
+        if (isSupervisor(exception.profiles.rank)) {
+          staffingBreakdown[shiftName].supervisors++;
+        } else {
+          staffingBreakdown[shiftName].officers++;
+        }
+        staffingBreakdown[shiftName].total++;
       }
     });
 
-    // Count open vacancies
+    // Count open vacancies - FIXED: Using vacancy_alerts table
     const { count: openVacancies, error: vacanciesError } = await supabase
       .from("vacancy_alerts")
       .select("*", { count: "exact", head: true })
@@ -171,17 +197,38 @@ const { data: stats } = useQuery({
 
     if (vacanciesError) {
       console.error("Error fetching vacancies:", vacanciesError);
+      // Try alternative table name if vacancy_alerts doesn't exist
+      const { count: altVacancies } = await supabase
+        .from("vacancies")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "open");
+      return { 
+        staffingBreakdown, 
+        openVacancies: altVacancies || 0 
+      };
     }
 
     return { 
-      activeOfficers: totalActiveOfficers, 
-      openVacancies: openVacancies || 0,
-      shiftBreakdown 
+      staffingBreakdown, 
+      openVacancies: openVacancies || 0 
     };
   },
   enabled: isAdminOrSupervisor,
-  refetchInterval: 30000, // Refetch every 30 seconds
+  refetchInterval: 30000,
 });
+
+// Helper function for minimum staffing requirements
+const getMinimumStaffing = (shiftName: string) => {
+  const requirements: { [key: string]: { officers: number; supervisors: number } } = {
+    'Day Shift': { officers: 8, supervisors: 2 },
+    'Evening Shift': { officers: 9, supervisors: 2 },
+    'Night Shift': { officers: 7, supervisors: 1 },
+    'First Watch': { officers: 8, supervisors: 2 },
+    'Second Watch': { officers: 9, supervisors: 2 },
+    'Third Watch': { officers: 7, supervisors: 1 },
+  };
+  return requirements[shiftName] || { officers: 8, supervisors: 1 };
+};
 
   useEffect(() => {
     // Check authentication
@@ -353,155 +400,207 @@ const { data: stats } = useQuery({
           <p className="text-muted-foreground">Manage your schedule and view upcoming shifts</p>
         </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">My Schedule</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">View</div>
-              <p className="text-xs text-muted-foreground">Check your upcoming shifts</p>
-            </CardContent>
-          </Card>
+{/* Quick Stats */}
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+  <Card>
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardTitle className="text-sm font-medium">My Schedule</CardTitle>
+      <Calendar className="h-4 w-4 text-muted-foreground" />
+    </CardHeader>
+    <CardContent>
+      <div className="text-2xl font-bold">View</div>
+      <p className="text-xs text-muted-foreground">Check your upcoming shifts</p>
+    </CardContent>
+  </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">PTO Balance</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Vacation:</span>
-                  <span className="font-semibold">{profile?.vacation_hours || 0}h</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Sick:</span>
-                  <span className="font-semibold">{profile?.sick_hours || 0}h</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Comp:</span>
-                  <span className="font-semibold">{profile?.comp_hours || 0}h</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Holiday:</span>
-                  <span className="font-semibold">{profile?.holiday_hours || 0}h</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {isAdminOrSupervisor && (
-            <>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Officers</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats?.activeOfficers ?? "--"}</div>
-                  <div className="space-y-1 mt-2">
-                    {stats?.shiftBreakdown && Object.entries(stats.shiftBreakdown).map(([shiftName, count]) => (
-                      <div key={shiftName} className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">{shiftName}:</span>
-                        <span className="font-semibold">{count}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">On duty today by shift</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Vacancies</CardTitle>
-                  <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats?.openVacancies ?? "--"}</div>
-                  <p className="text-xs text-muted-foreground">Open positions</p>
-                </CardContent>
-              </Card>
-            </>
-          )}
+  <Card>
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardTitle className="text-sm font-medium">PTO Balance</CardTitle>
+      <Clock className="h-4 w-4 text-muted-foreground" />
+    </CardHeader>
+    <CardContent>
+      <div className="space-y-1">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Vacation:</span>
+          <span className="font-semibold">{profile?.vacation_hours || 0}h</span>
         </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Sick:</span>
+          <span className="font-semibold">{profile?.sick_hours || 0}h</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Comp:</span>
+          <span className="font-semibold">{profile?.comp_hours || 0}h</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Holiday:</span>
+          <span className="font-semibold">{profile?.holiday_hours || 0}h</span>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
 
-        {/* Main Content */}
-        {isAdminOrSupervisor ? (
-          <Tabs defaultValue="daily" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-7">
-              <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
-              <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
-              <TabsTrigger value="officers">Officers</TabsTrigger>
-              <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
-              <TabsTrigger value="staff">Staff</TabsTrigger>
-              <TabsTrigger value="requests">Time Off</TabsTrigger>
-              <TabsTrigger value="pto">PTO</TabsTrigger>
-            </TabsList>
+  {isAdminOrSupervisor && (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">Vacancies</CardTitle>
+        <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{stats?.openVacancies ?? "--"}</div>
+        <p className="text-xs text-muted-foreground">Open positions needing coverage</p>
+      </CardContent>
+    </Card>
+  )}
+</div>
 
-            <TabsContent value="daily" className="space-y-6">
-              <DailyScheduleManagement isAdminOrSupervisor={isAdminOrSupervisor} />
-            </TabsContent>
-
-            <TabsContent value="schedule" className="space-y-6">
-              <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-            </TabsContent>
-
-            <TabsContent value="officers" className="space-y-6">
-              <OfficersManagement 
-                userId={user!.id} 
-                isAdminOrSupervisor={isAdminOrSupervisor} 
-              />
-            </TabsContent>
-
-            <TabsContent value="vacancies" className="space-y-6">
-              <VacancyManagement />
-            </TabsContent>
-
-            <TabsContent value="staff" className="space-y-6">
-              <StaffManagement />
-            </TabsContent>
-
-            <TabsContent value="requests" className="space-y-6">
-              <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
-            </TabsContent>
-
-            <TabsContent value="pto" className="space-y-6">
-              <PTOManagement />
-            </TabsContent>
-          </Tabs>
-        ) : (
-          <Tabs defaultValue="daily" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
-              <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
-              <TabsTrigger value="vacancies">Vacancy Alerts</TabsTrigger>
-              <TabsTrigger value="requests">Time Off</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="daily" className="space-y-6">
-              <DailyScheduleView 
-                selectedDate={new Date()} 
-                isAdminOrSupervisor={false} 
-                userRole="officer" 
-              />
-            </TabsContent>
-
-            <TabsContent value="schedule" className="space-y-6">
-              <WeeklySchedule userId={user!.id} isAdminOrSupervisor={false} />
-            </TabsContent>
-
-            <TabsContent value="vacancies" className="space-y-6">
-              <VacancyAlerts userId={user!.id} isAdminOrSupervisor={false} />
-            </TabsContent>
-
-            <TabsContent value="requests" className="space-y-6">
-              <TimeOffRequests userId={user!.id} isAdminOrSupervisor={false} />
-            </TabsContent>
-          </Tabs>
+{/* Enhanced Staffing Overview - Only for Admin/Supervisor */}
+{isAdminOrSupervisor && (
+  <Card className="mb-8">
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <Users className="h-5 w-5" />
+        Today's Staffing Overview
+      </CardTitle>
+      <CardDescription>
+        Current officer and supervisor coverage by shift
+      </CardDescription>
+    </CardHeader>
+    <CardContent>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {stats?.staffingBreakdown && Object.entries(stats.staffingBreakdown).map(([shiftName, data]) => (
+          <div key={shiftName} className="border rounded-lg p-4">
+            <h3 className="font-semibold text-lg mb-3">{shiftName}</h3>
+            
+            {/* Supervisors */}
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-muted-foreground">Supervisors:</span>
+              <div className="flex items-center gap-2">
+                <Badge 
+                  variant={data.supervisors >= (data.minRequired?.supervisors || 1) ? "default" : "destructive"}
+                  className="text-xs"
+                >
+                  {data.supervisors} / {data.minRequired?.supervisors || 1}
+                </Badge>
+              </div>
+            </div>
+            
+            {/* Officers */}
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-sm text-muted-foreground">Officers:</span>
+              <div className="flex items-center gap-2">
+                <Badge 
+                  variant={data.officers >= (data.minRequired?.officers || 8) ? "default" : "destructive"}
+                  className="text-xs"
+                >
+                  {data.officers} / {data.minRequired?.officers || 8}
+                </Badge>
+              </div>
+            </div>
+            
+            {/* Total and Status */}
+            <div className="flex justify-between items-center pt-2 border-t">
+              <span className="text-sm font-medium">Total:</span>
+              <span className="text-sm font-bold">{data.total}</span>
+            </div>
+            
+            {/* Status Indicator */}
+            <div className="mt-2">
+              {data.supervisors >= (data.minRequired?.supervisors || 1) && 
+               data.officers >= (data.minRequired?.officers || 8) ? (
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  Fully Staffed
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                  Understaffed
+                </Badge>
+              )}
+            </div>
+          </div>
+        ))}
+        
+        {/* Fallback if no data */}
+        {(!stats?.staffingBreakdown || Object.keys(stats.staffingBreakdown).length === 0) && (
+          <div className="col-span-full text-center py-8 text-muted-foreground">
+            <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p>No staffing data available for today</p>
+          </div>
         )}
+      </div>
+    </CardContent>
+  </Card>
+)}
+
+{/* Main Content */}
+{isAdminOrSupervisor ? (
+  <Tabs defaultValue="daily" className="space-y-6">
+    <TabsList className="grid w-full grid-cols-6">
+      <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
+      <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
+      <TabsTrigger value="officers">Officers</TabsTrigger>
+      <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
+      <TabsTrigger value="staff">Staff</TabsTrigger>
+      <TabsTrigger value="requests">Time Off</TabsTrigger>
+    </TabsList>
+
+    <TabsContent value="daily" className="space-y-6">
+      <DailyScheduleManagement isAdminOrSupervisor={isAdminOrSupervisor} />
+    </TabsContent>
+
+    <TabsContent value="schedule" className="space-y-6">
+      <WeeklySchedule userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+    </TabsContent>
+
+    <TabsContent value="officers" className="space-y-6">
+      <OfficersManagement 
+        userId={user!.id} 
+        isAdminOrSupervisor={isAdminOrSupervisor} 
+      />
+    </TabsContent>
+
+    <TabsContent value="vacancies" className="space-y-6">
+      <VacancyManagement />
+    </TabsContent>
+
+    <TabsContent value="staff" className="space-y-6">
+      <StaffManagement />
+    </TabsContent>
+
+    <TabsContent value="requests" className="space-y-6">
+      <TimeOffRequests userId={user!.id} isAdminOrSupervisor={isAdminOrSupervisor} />
+    </TabsContent>
+  </Tabs>
+) : (
+  <Tabs defaultValue="daily" className="space-y-6">
+    <TabsList className="grid w-full grid-cols-4">
+      <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
+      <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
+      <TabsTrigger value="vacancies">Vacancy Alerts</TabsTrigger>
+      <TabsTrigger value="requests">Time Off</TabsTrigger>
+    </TabsList>
+
+    <TabsContent value="daily" className="space-y-6">
+      <DailyScheduleView 
+        selectedDate={new Date()} 
+        isAdminOrSupervisor={false} 
+        userRole="officer" 
+      />
+    </TabsContent>
+
+    <TabsContent value="schedule" className="space-y-6">
+      <WeeklySchedule userId={user!.id} isAdminOrSupervisor={false} />
+    </TabsContent>
+
+    <TabsContent value="vacancies" className="space-y-6">
+      <VacancyAlerts userId={user!.id} isAdminOrSupervisor={false} />
+    </TabsContent>
+
+    <TabsContent value="requests" className="space-y-6">
+      <TimeOffRequests userId={user!.id} isAdminOrSupervisor={false} />
+    </TabsContent>
+  </Tabs>
+)}
       </main>
     </div>
   );
