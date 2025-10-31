@@ -107,8 +107,8 @@ export const UnderstaffedDetection = () => {
                 end_time
               )
             `)
-            .eq("day_of_week", dayOfWeek)
-            .is("end_date", null);
+              .eq("day_of_week", dayOfWeek)
+              .or(`end_date.is.null,end_date.gte.${date}`); // ← TO THIS
 
           if (dailyError) {
             console.error("❌ Recurring schedules error:", dailyError);
