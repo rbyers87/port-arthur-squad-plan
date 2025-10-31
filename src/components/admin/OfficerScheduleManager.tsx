@@ -310,7 +310,7 @@ const addDefaultAssignmentMutation = useMutation({
         end_date: data.start // End previous assignments the day before new one starts
       })
       .eq("officer_id", officer.id)
-      .or(`end_date.is.null,end_date.gte.${date}`); // ← TO THIS
+     .or(`end_date.is.null,end_date.gte.${data.start}`);
      // .lt("start_date", data.start); // That started before the new assignment
 
     if (endPreviousError) {
@@ -927,7 +927,7 @@ const handleAddDefaultAssignment = () => {
                 </div>
               )}
 
-              {/* Add New Schedule */}
+                           {/* Unified Schedule Form - Handles Both Add and Edit */}
               {!showAddForm && !isEditing ? (
                 <Button
                   variant="outline"
@@ -937,9 +937,11 @@ const handleAddDefaultAssignment = () => {
                   <Plus className="h-4 w-4 mr-2" />
                   Add New Work Schedule
                 </Button>
-              ) : showAddForm && (
+              ) : (showAddForm || isEditing) && (
                 <div className="border rounded-lg p-4 space-y-4">
-                  <h3 className="font-medium">Create Work Schedule</h3>
+                  <h3 className="font-medium">
+                    {isEditing ? "Edit Schedule" : "Create Work Schedule"}
+                  </h3>
                   
                   <div className="space-y-2">
                     <Label>Work Days (Select Multiple)</Label>
@@ -960,6 +962,11 @@ const handleAddDefaultAssignment = () => {
                         </div>
                       ))}
                     </div>
+                    {isEditing && (
+                      <p className="text-xs text-muted-foreground">
+                        Note: When editing, you can only select one day for this schedule entry
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -988,7 +995,6 @@ const handleAddDefaultAssignment = () => {
                             className={cn(
                               "w-full justify-start text-left font-normal",
                               !startDate && "text-muted-foreground"
-                           
                             )}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
@@ -1046,23 +1052,25 @@ const handleAddDefaultAssignment = () => {
                     </div>
                   </div>
 
-                                    <div className="flex gap-2">
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
-                      onClick={() => setEditingSchedule(null)}
+                      onClick={resetForm}
                     >
                       Cancel
                     </Button>
                     <Button
-                      onClick={handleSaveEdit}
-                      disabled={updateScheduleMutation.isPending}
+                      onClick={isEditing ? handleSaveEdit : handleAddSchedule}
+                      disabled={isEditing ? updateScheduleMutation.isPending : addScheduleMutation.isPending}
                     >
-                      {updateScheduleMutation.isPending ? "Saving..." : "Save Changes"}
+                      {isEditing 
+                        ? (updateScheduleMutation.isPending ? "Saving..." : "Save Changes")
+                        : (addScheduleMutation.isPending ? "Creating..." : "Create Schedule")
+                      }
                     </Button>
                   </div>
                 </div>
               )}
-
             </TabsContent>
 
             {/* Default Assignments Tab */}
