@@ -90,12 +90,12 @@ export const UnderstaffedDetection = () => {
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
           // Get ALL schedule data for this date - using the same logic as DailyScheduleView
-          // Temporary: Check all recurring schedules for this day/shift
-const { data: allRecurring, error: allError } = await supabase
+          // Test without inner joins
+const { data: testData, error: testError } = await supabase
   .from("recurring_schedules")
   .select(`
     *,
-    profiles!inner (
+    profiles (
       id, 
       full_name, 
       badge_number, 
@@ -111,12 +111,16 @@ const { data: allRecurring, error: allError } = await supabase
   .eq("day_of_week", dayOfWeek)
   .eq("shift_type_id", shift.id);
 
-console.log(`🔍 ALL RECURRING SCHEDULES (no date filters):`, 
-  allRecurring?.map(r => ({
-    name: r.profiles?.full_name,
-    start_date: r.start_date,
+console.log(`🔍 TEST WITHOUT INNER JOINS:`, {
+  count: testData?.length,
+  results: testData?.map(r => ({
+    officer_id: r.officer_id,
+    officer_name: r.profiles?.full_name,
+    shift_type_id: r.shift_type_id,
+    shift_name: r.shift_types?.name,
     end_date: r.end_date
-  })));
+  }))
+});
 
           if (dailyError) {
             console.error("❌ Recurring schedules error:", dailyError);
