@@ -81,98 +81,107 @@ const Dashboard = () => {
     },
   });
 
-  const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats"],
-    queryFn: async () => {
-      const today = new Date().toISOString().split("T")[0];
-      const dayOfWeek = new Date().getDay();
-        
-      // Get all shift types first
-      const { data: shiftTypes, error: shiftError } = await supabase
-        .from("shift_types")
-        .select("*")
-        .order("start_time");
-      if (shiftError) throw shiftError;
+const { data: stats } = useQuery({
+  queryKey: ["dashboard-stats"],
+  queryFn: async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const dayOfWeek = new Date().getDay();
+      
+    // Get all shift types first
+    const { data: shiftTypes, error: shiftError } = await supabase
+      .from("shift_types")
+      .select("*")
+      .order("start_time");
+    if (shiftError) throw shiftError;
 
-      // Count active officers by shift
-      const shiftBreakdown: { [key: string]: number } = {};
-      let totalActiveOfficers = 0;
+    // Count active officers by shift
+    const shiftBreakdown: { [key: string]: number } = {};
+    let totalActiveOfficers = 0;
 
-      // Get recurring schedules for today
-      const { data: recurringData, error: recurringError } = await supabase
-        .from("recurring_schedules")
-        .select(`
-          *,
-          profiles!inner (
-            id, 
-            full_name
-          ),
-          shift_types (
-            id, 
-            name
-          )
-        `)
-          .eq("day_of_week", dayOfWeek)
-          .or(`end_date.is.null,end_date.gte.${date}`); // ← TO THIS
+    // Initialize shift breakdown with all shifts
+    shiftTypes?.forEach(shift => {
+      shiftBreakdown[shift.name] = 0;
+    });
 
-      if (recurringError) throw recurringError;
+    // Get recurring schedules for today
+    const { data: recurringData, error: recurringError } = await supabase
+      .from("recurring_schedules")
+      .select(`
+        *,
+        profiles!inner (
+          id, 
+          full_name
+        ),
+        shift_types (
+          id, 
+          name
+        )
+      `)
+      .eq("day_of_week", dayOfWeek)
+      .or(`end_date.is.null,end_date.gte.${today}`);
 
-      // Get schedule exceptions for today
-      const { data: exceptionsData, error: exceptionsError } = await supabase
-        .from("schedule_exceptions")
-        .select(`
-          *,
-          profiles!inner (
-            id, 
-            full_name
-          ),
-          shift_types (
-            id, 
-            name
-          )
-        `)
-        .eq("date", today);
+    if (recurringError) {
+      console.error("Error fetching recurring schedules:", recurringError);
+      // Don't throw, continue with exceptions data
+    }
 
-      if (exceptionsError) throw exceptionsError;
+    // Get schedule exceptions for today
+    const { data: exceptionsData, error: exceptionsError } = await supabase
+      .from("schedule_exceptions")
+      .select(`
+        *,
+        profiles!inner (
+          id, 
+          full_name
+        ),
+        shift_types (
+          id, 
+          name
+        )
+      `)
+      .eq("date", today)
+      .eq("is_off", false); // Only count working exceptions, not PTO
 
-      // Initialize shift breakdown with all shifts
-      shiftTypes?.forEach(shift => {
-        shiftBreakdown[shift.name] = 0;
-      });
+    if (exceptionsError) {
+      console.error("Error fetching exceptions:", exceptionsError);
+      // Don't throw, use whatever data we have
+    }
 
-      // Count officers from recurring schedules
-      recurringData?.forEach(schedule => {
-        if (schedule.shift_types?.name) {
-          shiftBreakdown[schedule.shift_types.name]++;
-          totalActiveOfficers++;
-        }
-      });
+    // Count officers from recurring schedules
+    recurringData?.forEach(schedule => {
+      if (schedule.shift_types?.name) {
+        shiftBreakdown[schedule.shift_types.name]++;
+        totalActiveOfficers++;
+      }
+    });
 
-      // Count officers from working exceptions (excluding PTO)
-      exceptionsData
-        ?.filter(exception => !exception.is_off)
-        .forEach(exception => {
-          if (exception.shift_types?.name) {
-            shiftBreakdown[exception.shift_types.name]++;
-            totalActiveOfficers++;
-          }
-        });
+    // Count officers from working exceptions (excluding PTO)
+    exceptionsData?.forEach(exception => {
+      if (exception.shift_types?.name) {
+        shiftBreakdown[exception.shift_types.name]++;
+        totalActiveOfficers++;
+      }
+    });
 
-      // Count open vacancies
-      const { count: openVacancies } = await supabase
-        .from("vacancy_alerts")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "open");
+    // Count open vacancies
+    const { count: openVacancies, error: vacanciesError } = await supabase
+      .from("vacancy_alerts")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "open");
 
-      return { 
-        activeOfficers: totalActiveOfficers, 
-        openVacancies: openVacancies || 0,
-        shiftBreakdown 
-      };
-    },
-    enabled: isAdminOrSupervisor,
-    refetchInterval: 30000, // Refetch every 30 seconds
-  });
+    if (vacanciesError) {
+      console.error("Error fetching vacancies:", vacanciesError);
+    }
+
+    return { 
+      activeOfficers: totalActiveOfficers, 
+      openVacancies: openVacancies || 0,
+      shiftBreakdown 
+    };
+  },
+  enabled: isAdminOrSupervisor,
+  refetchInterval: 30000, // Refetch every 30 seconds
+});
 
   useEffect(() => {
     // Check authentication
