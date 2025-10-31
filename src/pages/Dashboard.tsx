@@ -416,13 +416,18 @@ const Dashboard = () => {
           <p className="text-muted-foreground">Manage your schedule and view upcoming shifts</p>
         </div>
 
-        {/* Enhanced Staffing Overview - Only for Admin/Supervisor */}
+{/* Enhanced Staffing Overview - Only for Admin/Supervisor */}
 {isAdminOrSupervisor && (
   <Card className="mb-8">
     <CardHeader>
       <CardTitle className="flex items-center gap-2">
         <Users className="h-5 w-5" />
-        Today's Staffing Overview
+        Staffing Overview - {new Date().toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        })}
       </CardTitle>
       <CardDescription>
         Current officer and supervisor coverage by shift
