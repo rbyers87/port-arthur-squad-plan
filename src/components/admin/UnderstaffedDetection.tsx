@@ -171,12 +171,16 @@ if (dailyError) {
             const allAssignedOfficers = [];
 
             // Process recurring officers - check if they have working exceptions that override their position
-// Temporary: No end date filtering at all
 const recurringOfficers = dailyScheduleData
   ?.filter(r => r.shift_types?.id === shift.id) || [];
 
-console.log(`🔍 ALL RECURRING OFFICERS (no end date filter):`, 
-  recurringOfficers.map(r => r.profiles?.full_name));
+console.log(`🔍 Recurring officers for ${shift.name}:`, 
+  recurringOfficers.length,
+  recurringOfficers.map(r => ({
+    name: r.profiles?.full_name,
+    end_date: r.end_date
+  }))
+);
 
             for (const recurringOfficer of recurringOfficers) {
               // Check if this officer has a working exception for today that overrides their position
