@@ -17,6 +17,7 @@ interface DailyScheduleManagementProps {
 export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleManagementProps) => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const { data: shiftTypes } = useQuery({
     queryKey: ["shift-types"],
@@ -29,6 +30,13 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleMa
       return data;
     },
   });
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setSelectedDate(date);
+      setIsCalendarOpen(false); // Close the calendar when a date is selected
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -50,7 +58,7 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleMa
                   ))}
                 </SelectContent>
               </Select>
-              <Popover>
+              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="gap-2">
                     <CalendarIcon className="h-4 w-4" />
@@ -61,7 +69,7 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleMa
                   <Calendar
                     mode="single"
                     selected={selectedDate}
-                    onSelect={(date) => date && setSelectedDate(date)}
+                    onSelect={handleDateSelect}
                     initialFocus
                   />
                 </PopoverContent>
@@ -78,12 +86,12 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleMa
       </Card>
 
       <DailyScheduleView 
-  selectedDate={selectedDate} 
-  filterShiftId={selectedShiftId} 
-  key={`${selectedDate.toISOString()}-${selectedShiftId}`}
-  isAdminOrSupervisor={isAdminOrSupervisor}
-  userRole={isAdminOrSupervisor ? "admin" : "officer"} // Add this line
-/>
+        selectedDate={selectedDate} 
+        filterShiftId={selectedShiftId} 
+        key={`${selectedDate.toISOString()}-${selectedShiftId}`}
+        isAdminOrSupervisor={isAdminOrSupervisor}
+        userRole={isAdminOrSupervisor ? "admin" : "officer"}
+      />
     </div>
   );
 };
