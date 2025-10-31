@@ -509,6 +509,7 @@ const Dashboard = () => {
       <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
       <TabsTrigger value="staff">Staff</TabsTrigger>
       <TabsTrigger value="requests">Time Off</TabsTrigger>
+      <TabsTrigger value="pto">PTO</TabsTrigger>
     </TabsList>
 
     <TabsContent value="daily" className="space-y-6">
