@@ -89,13 +89,12 @@ export const UnderstaffedDetection = () => {
 
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-          // Get ALL schedule data for this date - using the same logic as DailyScheduleView
-          // Test without inner joins
-const { data: testData, error: testError } = await supabase
+          // In UnderstaffedDetection.tsx - use EXACT same query as DailyScheduleView
+const { data: dailyScheduleData, error: dailyError } = await supabase
   .from("recurring_schedules")
   .select(`
     *,
-    profiles (
+    profiles!inner (
       id, 
       full_name, 
       badge_number, 
@@ -109,19 +108,21 @@ const { data: testData, error: testError } = await supabase
     )
   `)
   .eq("day_of_week", dayOfWeek)
-  .eq("shift_type_id", shift.id);
+  // USE EXACT SAME FILTER AS DAILY SCHEDULE VIEW
+  .or(`end_date.is.null,end_date.gte.${date}`);
 
-console.log(`🔍 TEST WITHOUT INNER JOINS:`, {
-  count: testData?.length,
-  results: testData?.map(r => ({
-    officer_id: r.officer_id,
-    officer_name: r.profiles?.full_name,
-    shift_type_id: r.shift_type_id,
-    shift_name: r.shift_types?.name,
+console.log(`🔍 UNDERSTAFFED WITH DAILY SCHEDULE QUERY:`, {
+  count: dailyScheduleData?.length,
+  allShifts: dailyScheduleData?.map(r => ({
+    name: r.profiles?.full_name,
+    shift: r.shift_types?.name,
     end_date: r.end_date
+  })),
+  eveningShiftOnly: dailyScheduleData?.filter(r => r.shift_types?.id === shift.id).map(r => ({
+    name: r.profiles?.full_name,
+    shift: r.shift_types?.name
   }))
 });
-
           if (dailyError) {
             console.error("❌ Recurring schedules error:", dailyError);
             throw dailyError;
