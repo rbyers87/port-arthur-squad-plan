@@ -1063,40 +1063,7 @@ const handleAddDefaultAssignment = () => {
                 </div>
               )}
 
-              {/* Add New Schedule */}
-              {!showAddForm && !isEditing ? (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setShowAddForm(true)}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New Work Schedule
-                </Button>
-              ) : showAddForm && (
-                <div className="border rounded-lg p-4 space-y-4">
-                  <h3 className="font-medium">Create Work Schedule</h3>
-                  
-                  <div className="space-y-2">
-                    <Label>Work Days (Select Multiple)</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {daysOfWeek.map((day) => (
-                        <div key={day.value} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`day-${day.value}`}
-                            checked={selectedDays.includes(day.value)}
-                            onCheckedChange={() => toggleDay(day.value)}
-                          />
-                          <Label
-                            htmlFor={`day-${day.value}`}
-                            className="text-sm font-normal cursor-pointer"
-                          >
-                            {day.label}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+
 
                   <div className="space-y-2">
                     <Label>Shift</Label>
