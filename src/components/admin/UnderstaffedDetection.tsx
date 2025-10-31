@@ -108,16 +108,17 @@ const { data: dailyScheduleData, error: dailyError } = await supabase
     )
   `)
   .eq("day_of_week", dayOfWeek)
-  // THIS IS THE CRITICAL FIX - Use EXACT same filter as DailyScheduleView
+  // ⚠️ THIS IS THE CRITICAL FIX - MUST match DailyScheduleView exactly! ⚠️
   .or(`end_date.is.null,end_date.gte.${date}`);
 
-console.log(`🔍 UNDERSTAFFED DETECTION QUERY for ${date}:`, {
-  count: dailyScheduleData?.length,
-  allShifts: dailyScheduleData?.map(r => ({
+console.log(`🔍 UNDERSTAFFED DETECTION - Query for ${date}, dayOfWeek ${dayOfWeek}:`, {
+  totalCount: dailyScheduleData?.length,
+  officers: dailyScheduleData?.map(r => ({
     name: r.profiles?.full_name,
     shift: r.shift_types?.name,
+    start_date: r.start_date,
     end_date: r.end_date,
-    start_date: r.start_date
+    day_of_week: r.day_of_week
   }))
 });
 
