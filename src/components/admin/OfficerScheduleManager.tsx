@@ -310,7 +310,7 @@ const addDefaultAssignmentMutation = useMutation({
         end_date: data.start // End previous assignments the day before new one starts
       })
       .eq("officer_id", officer.id)
-      .is("end_date", null) // Only active assignments (no end date)
+      .or(`end_date.is.null,end_date.gte.${date}`); // ← TO THIS
       .lt("start_date", data.start); // That started before the new assignment
 
     if (endPreviousError) {
