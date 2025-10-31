@@ -110,7 +110,7 @@ const { data: stats } = useQuery({
         officers: 0, 
         supervisors: 0, 
         total: 0,
-        minRequired: getMinimumStaffing(shift.name) // Add minimum staffing requirements
+        minRequired: getMinimumStaffing(shift.name)
       };
     });
 
@@ -119,7 +119,7 @@ const { data: stats } = useQuery({
       .from("recurring_schedules")
       .select(`
         *,
-        profiles!inner (
+        profiles!recurring_schedules_officer_id_fkey (
           id, 
           full_name,
           rank
@@ -136,12 +136,12 @@ const { data: stats } = useQuery({
       console.error("Error fetching recurring schedules:", recurringError);
     }
 
-    // Get schedule exceptions for today
+    // Get schedule exceptions for today - FIXED: Specify exact relationship
     const { data: exceptionsData, error: exceptionsError } = await supabase
       .from("schedule_exceptions")
       .select(`
         *,
-        profiles!inner (
+        profiles!schedule_exceptions_officer_id_fkey (
           id, 
           full_name,
           rank
@@ -152,7 +152,7 @@ const { data: stats } = useQuery({
         )
       `)
       .eq("date", today)
-      .eq("is_off", false); // Only count working exceptions, not PTO
+      .eq("is_off", false);
 
     if (exceptionsError) {
       console.error("Error fetching exceptions:", exceptionsError);
@@ -160,7 +160,7 @@ const { data: stats } = useQuery({
 
     // Helper function to categorize officer type
     const isSupervisor = (rank: string) => {
-      return rank && ['Sergeant', 'Lieutenant', 'Captain', 'Chief', 'Deputy Chief'].includes(rank);
+      return rank && ['Sergeant', 'Lieutenant', 'Captain', 'Chief', 'Deputy Chief', 'Commander'].includes(rank);
     };
 
     // Count officers from recurring schedules
@@ -189,7 +189,7 @@ const { data: stats } = useQuery({
       }
     });
 
-    // Count open vacancies - FIXED: Using vacancy_alerts table
+    // Count open vacancies
     const { count: openVacancies, error: vacanciesError } = await supabase
       .from("vacancy_alerts")
       .select("*", { count: "exact", head: true })
@@ -226,10 +226,12 @@ const getMinimumStaffing = (shiftName: string) => {
     'First Watch': { officers: 8, supervisors: 2 },
     'Second Watch': { officers: 9, supervisors: 2 },
     'Third Watch': { officers: 7, supervisors: 1 },
+    'Shift 1': { officers: 8, supervisors: 2 },
+    'Shift 2': { officers: 9, supervisors: 2 },
+    'Shift 3': { officers: 7, supervisors: 1 },
   };
   return requirements[shiftName] || { officers: 8, supervisors: 1 };
 };
-
   useEffect(() => {
     // Check authentication
     supabase.auth.getSession().then(({ data: { session } }) => {
