@@ -108,25 +108,23 @@ const { data: dailyScheduleData, error: dailyError } = await supabase
     )
   `)
   .eq("day_of_week", dayOfWeek)
-  // USE EXACT SAME FILTER AS DAILY SCHEDULE VIEW
+  // THIS IS THE CRITICAL FIX - Use EXACT same filter as DailyScheduleView
   .or(`end_date.is.null,end_date.gte.${date}`);
 
-console.log(`🔍 UNDERSTAFFED WITH DAILY SCHEDULE QUERY:`, {
+console.log(`🔍 UNDERSTAFFED DETECTION QUERY for ${date}:`, {
   count: dailyScheduleData?.length,
   allShifts: dailyScheduleData?.map(r => ({
     name: r.profiles?.full_name,
     shift: r.shift_types?.name,
-    end_date: r.end_date
-  })),
-  eveningShiftOnly: dailyScheduleData?.filter(r => r.shift_types?.id === shift.id).map(r => ({
-    name: r.profiles?.full_name,
-    shift: r.shift_types?.name
+    end_date: r.end_date,
+    start_date: r.start_date
   }))
 });
-          if (dailyError) {
-            console.error("❌ Recurring schedules error:", dailyError);
-            throw dailyError;
-          }
+
+if (dailyError) {
+  console.error("❌ Recurring schedules error:", dailyError);
+  throw dailyError;
+}
 
           // Get schedule exceptions for this specific date
           const { data: exceptionsData, error: exceptionsError } = await supabase
