@@ -109,7 +109,7 @@ const { data: dailyScheduleData, error: dailyError } = await supabase
   `)
   .eq("day_of_week", dayOfWeek)
   // ⚠️ THIS IS THE CRITICAL FIX - MUST match DailyScheduleView exactly! ⚠️
-  .or(`end_date.is.null,end_date.gte.${date}`);
+  .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
 
 console.log(`🔍 UNDERSTAFFED DETECTION - Query for ${date}, dayOfWeek ${dayOfWeek}:`, {
   totalCount: dailyScheduleData?.length,
