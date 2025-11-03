@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { PREDEFINED_POSITIONS } from "@/constants/positions";
 import { ScheduleCell } from "./ScheduleCell";
 import { useWeeklyScheduleMutations } from "@/hooks/useWeeklyScheduleMutations";
+import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { 
   getLastName, 
   categorizeAndSortOfficers,
@@ -1016,25 +1017,24 @@ const WeeklySchedule = ({
 
           {/* PTO Assignment Dialog - Import from your existing component */}
           {selectedSchedule && (
-            <Dialog open={ptoDialogOpen} onOpenChange={(open) => {
-              setPtoDialogOpen(open);
-              if (!open) {
-                queryClient.invalidateQueries({ queryKey });
-              }
-            }}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Assign PTO</DialogTitle>
-                  <DialogDescription>
-                    PTO assignment for {selectedSchedule.officerName} on {selectedSchedule.date}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <p>Import your PTOAssignmentDialog component here</p>
-                  <Button onClick={() => setPtoDialogOpen(false)}>Close</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <PTOAssignmentDialog
+              open={ptoDialogOpen}
+              onOpenChange={(open) => {
+                setPtoDialogOpen(open);
+                if (!open) {
+                  queryClient.invalidateQueries({ queryKey });
+                }
+              }}
+              officer={{
+                officerId: selectedSchedule.officerId,
+                name: selectedSchedule.officerName,
+                scheduleId: selectedSchedule.scheduleId,
+                type: selectedSchedule.type,
+                ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
+              }}
+              shift={selectedSchedule.shift}
+              date={selectedSchedule.date}
+            />
           )}
         </>
       )}
