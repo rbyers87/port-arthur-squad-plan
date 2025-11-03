@@ -101,6 +101,33 @@ const WeeklySchedule = ({
     );
   };
 
+  // Function to fetch service credits for multiple officers
+  const fetchServiceCredits = async (officerIds: string[]) => {
+    if (!officerIds.length) return new Map();
+    
+    const serviceCredits = new Map();
+    
+    // Fetch service credits for each officer
+    for (const officerId of officerIds) {
+      try {
+        const { data, error } = await supabase
+          .rpc('get_service_credit', { profile_id: officerId });
+        
+        if (error) {
+          console.error(`Error fetching service credit for officer ${officerId}:`, error);
+          serviceCredits.set(officerId, 0);
+        } else {
+          serviceCredits.set(officerId, data || 0);
+        }
+      } catch (error) {
+        console.error(`Error fetching service credit for officer ${officerId}:`, error);
+        serviceCredits.set(officerId, 0);
+      }
+    }
+    
+    return serviceCredits;
+  };
+
   // Set default shift type on load
   useEffect(() => {
     if (shiftTypes && shiftTypes.length > 0 && !selectedShiftId) {
@@ -121,7 +148,7 @@ const WeeklySchedule = ({
     navigate(`/daily-schedule?date=${dateStr}&shift=${selectedShiftId}`);
   };
 
-  // Main schedule query - UPDATED to include service_credit
+  // Main schedule query - UPDATED to fetch service credits
   const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
     queryKey,
     queryFn: async () => {
@@ -137,7 +164,7 @@ const WeeklySchedule = ({
         .from("recurring_schedules")
         .select(`
           *,
-          profiles (id, full_name, badge_number, rank, service_credit),
+          profiles (id, full_name, badge_number, rank, hire_date),
           shift_types (id, name, start_time, end_time)
         `)
         .eq("shift_type_id", selectedShiftId)
@@ -155,13 +182,13 @@ const WeeklySchedule = ({
 
       if (exceptionsError) throw exceptionsError;
 
-      // Get officer profiles separately - UPDATED to include service_credit
+      // Get officer profiles separately
       const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
       let officerProfiles = [];
       if (officerIds.length > 0) {
         const { data: profilesData } = await supabase
           .from("profiles")
-          .select("id, full_name, badge_number, rank, service_credit")
+          .select("id, full_name, badge_number, rank, hire_date")
           .in("id", officerIds);
         officerProfiles = profilesData || [];
       }
@@ -176,6 +203,14 @@ const WeeklySchedule = ({
           .in("id", shiftTypeIds);
         exceptionShiftTypes = shiftTypesData || [];
       }
+
+      // Fetch service credits for all officers involved
+      const allOfficerIds = [
+        ...(recurringData?.map(r => r.officer_id) || []),
+        ...officerIds
+      ];
+      const uniqueOfficerIds = [...new Set(allOfficerIds)];
+      const serviceCredits = await fetchServiceCredits(uniqueOfficerIds);
 
       // Combine exception data
       const combinedExceptions = exceptionsData?.map(exception => ({
@@ -222,7 +257,7 @@ const WeeklySchedule = ({
                   officerName: recurring.profiles?.full_name || "Unknown",
                   badgeNumber: recurring.profiles?.badge_number,
                   rank: recurring.profiles?.rank,
-                  service_credit: recurring.profiles?.service_credit || 0, // ADDED
+                  service_credit: serviceCredits.get(recurring.officer_id) || 0,
                   date,
                   dayOfWeek,
                   isRegularRecurringDay: true,
@@ -269,7 +304,7 @@ const WeeklySchedule = ({
           officerName: exception.profiles?.full_name || "Unknown",
           badgeNumber: exception.profiles?.badge_number,
           rank: exception.profiles?.rank,
-          service_credit: exception.profiles?.service_credit || 0, // ADDED
+          service_credit: serviceCredits.get(exception.officer_id) || 0,
           date: exception.date,
           dayOfWeek: parseISO(exception.date).getDay(),
           isRegularRecurringDay: isRegularDay,
@@ -309,7 +344,7 @@ const WeeklySchedule = ({
             officerName: ptoException.profiles?.full_name || "Unknown",
             badgeNumber: ptoException.profiles?.badge_number,
             rank: ptoException.profiles?.rank,
-            service_credit: ptoException.profiles?.service_credit || 0, // ADDED
+            service_credit: serviceCredits.get(ptoException.officer_id) || 0,
             date: ptoException.date,
             dayOfWeek: parseISO(ptoException.date).getDay(),
             shiftInfo: {
