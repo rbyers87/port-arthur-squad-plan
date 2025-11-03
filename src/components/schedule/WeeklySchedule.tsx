@@ -618,7 +618,7 @@ const WeeklySchedule = ({
       <div className="border rounded-lg overflow-hidden">
         <div className="grid grid-cols-9 bg-muted/50 border-b">
           <div className="p-2 font-semibold border-r">Empl#</div>
-          <div className="p-2 font-semibold border-r">SUPERVISORS</div>
+          <div className="p-2 font-semibold border-r">COUNT</div>
           {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => {
             const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
             const { supervisorCount, officerCount } = daySchedule 
@@ -649,7 +649,7 @@ const WeeklySchedule = ({
         <div className="border-b">
           <div className="grid grid-cols-9 border-b">
             <div className="p-2 border-r"></div>
-            <div className="p-2 border-r text-sm font-medium">COUNT</div>
+            <div className="p-2 border-r text-sm font-medium">SUPERVISORS</div>
             {weekDays.map(({ dateStr }) => {
               const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
               const supervisorCount = daySchedule?.categorizedOfficers?.supervisors?.filter(officer => 
