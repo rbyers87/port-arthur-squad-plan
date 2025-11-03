@@ -687,23 +687,28 @@ const WeeklySchedule = ({
             </div>
           ))}
 
-          {/* SEPARATION ROW WITH OFFICER COUNT */}
-          <div className="grid grid-cols-9 border-b bg-muted/30">
-            <div className="p-2 border-r"></div>
-            <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
-            {weekDays.map(({ dateStr }) => {
-              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-              const officerCount = daySchedule?.categorizedOfficers?.officers?.filter(officer => 
-                !officer.shiftInfo?.hasPTO
-              ).length || 0;
-              
-              return (
-                <div key={dateStr} className="p-2 text-center border-r text-sm font-medium">
-                  {officerCount}
-                </div>
-              );
-            })}
-          </div>
+{/* SEPARATION ROW WITH OFFICER COUNT (EXCLUDING PPOS) */}
+<div className="grid grid-cols-9 border-b bg-muted/30">
+  <div className="p-2 border-r"></div>
+  <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
+  {weekDays.map(({ dateStr }) => {
+    const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+    
+    // Count only non-PPO officers
+    const officerCount = daySchedule?.officers?.filter(officer => {
+      const isOfficer = officerCategories.get(officer.officerId) === 'officer';
+      const isNotPPO = officer.rank?.toLowerCase() !== 'probationary';
+      const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !officer.shiftInfo.hasPTO;
+      return isOfficer && isNotPPO && isScheduled;
+    }).length || 0;
+    
+    return (
+      <div key={dateStr} className="p-2 text-center border-r text-sm font-medium">
+        {officerCount}
+      </div>
+    );
+  })}
+</div>
         </div>
 
         {/* REGULAR OFFICERS SECTION */}
