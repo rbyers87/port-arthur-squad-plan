@@ -661,21 +661,27 @@ const WeeklySchedule = ({
   })}
 </div>
 
-        <div className="border-b">
-          <div className="grid grid-cols-9 border-b">
-            <div className="p-2 border-r"></div>
-            <div className="p-2 border-r text-sm font-medium">SUPERVISORS</div>
-            {weekDays.map(({ dateStr }) => {
-              const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-              const supervisorCount = daySchedule?.categorizedOfficers?.supervisors?.filter(officer => 
-                !officer.shiftInfo?.hasPTO
-              ).length || 0;
-              
-              return (
-                <div key={dateStr} className="p-2 text-center border-r text-sm">{supervisorCount}</div>
-              );
-            })}
-          </div>
+       {/* SUPERVISOR COUNT ROW */}
+<div className="grid grid-cols-9 border-b">
+  <div className="p-2 border-r"></div>
+  <div className="p-2 border-r text-sm font-medium">COUNT</div>
+  {weekDays.map(({ dateStr }) => {
+    const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+    
+    // Count supervisors, excluding only full-day PTO
+    const supervisorCount = daySchedule?.officers?.filter(officer => {
+      const isSupervisor = officerCategories.get(officer.officerId) === 'supervisor';
+      // Only exclude if they have full-day PTO
+      const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+      const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
+      return isSupervisor && isScheduled;
+    }).length || 0;
+    
+    return (
+      <div key={dateStr} className="p-2 text-center border-r text-sm">{supervisorCount}</div>
+    );
+  })}
+</div>
 
           {supervisors.map((officer) => (
             <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-muted/30">
