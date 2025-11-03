@@ -14,6 +14,9 @@ import { toast } from "sonner";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { usePDFExport } from "@/hooks/usePDFExport";
+import { OfficerSection } from "./OfficerSection";
+import { useScheduleMutations } from "@/hooks/useScheduleMutations";
+import { PREDEFINED_POSITIONS, RANK_ORDER } from "@/constants/positions";
 
 interface DailyScheduleViewProps {
   selectedDate: Date;
@@ -68,37 +71,26 @@ export const DailyScheduleView = ({
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const dayOfWeek = selectedDate.getDay();
 
-  const predefinedPositions = [
-    "Supervisor",
-    "District 1",
-    "District 2", 
-    "District 3",
-    "District 4",
-    "District 5",
-    "District 5/6",
-    "District 6",
-    "District 7/8",
-    "District 9",
-    "Other (Custom)",
-  ];
-
-  // Add rank order for sorting supervisors only
-  const rankOrder = {
-    'Chief': 1,
-    'Deputy Chief': 2,
-    'Lieutenant': 3,
-    'Sergeant': 4,
-    'Officer': 5
-  };
+  // Use centralized constants
+  const predefinedPositions = PREDEFINED_POSITIONS;
 
   // Function to sort supervisors by rank ONLY
   const sortSupervisorsByRank = (supervisors: any[]) => {
     return supervisors.sort((a, b) => {
       const rankA = a.rank || 'Officer';
       const rankB = b.rank || 'Officer';
-      return (rankOrder[rankA as keyof typeof rankOrder] || 99) - (rankOrder[rankB as keyof typeof rankOrder] || 99);
+      return (RANK_ORDER[rankA as keyof typeof RANK_ORDER] || 99) - (RANK_ORDER[rankB as keyof typeof RANK_ORDER] || 99);
     });
   };
+
+  // Use centralized mutation hook
+  const {
+    updateScheduleMutation,
+    updatePTODetailsMutation,
+    removeOfficerMutation,
+    addOfficerMutation,
+    removePTOMutation
+  } = useScheduleMutations(dateStr);
 
   const { data: scheduleData, isLoading } = useQuery({
   queryKey: ["daily-schedule", dateStr],
@@ -444,7 +436,7 @@ export const DailyScheduleView = ({
       const specialAssignmentOfficers = allOfficers.filter(o => {
         const position = o.position?.toLowerCase() || '';
         return position.includes('other') || 
-               (o.position && !predefinedPositions.includes(o.position));
+               (o.position && !PREDEFINED_POSITIONS.includes(o.position));
       }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
       const regularOfficers = allOfficers.filter(o => 
@@ -482,294 +474,6 @@ export const DailyScheduleView = ({
   },
 });
 
-  const updatePositionMutation = useMutation({
-  mutationFn: async ({ 
-    scheduleId, 
-    type, 
-    positionName, 
-    date, 
-    officerId, 
-    shiftTypeId, 
-    currentPosition,
-    unitNumber,
-    notes
-  }: { 
-    scheduleId: string; 
-    type: "recurring" | "exception";
-    positionName: string;
-    date?: string;
-    officerId?: string;
-    shiftTypeId?: string;
-    currentPosition?: string;
-    unitNumber?: string;
-    notes?: string;
-  }) => {
-    if (type === "recurring") {
-      // For recurring officers, always update via exceptions table to preserve changes
-      // but they will still be displayed as "recurring" type
-      const { data: existingExceptions, error: checkError } = await supabase
-        .from("schedule_exceptions")
-        .select("id, position_name, unit_number, notes")
-        .eq("officer_id", officerId)
-        .eq("date", dateStr)
-        .eq("shift_type_id", shiftTypeId)
-        .eq("is_off", false);
-
-      if (checkError) throw checkError;
-
-      if (existingExceptions && existingExceptions.length > 0) {
-        // Update existing exception
-        const { error } = await supabase
-          .from("schedule_exceptions")
-          .update({ 
-            position_name: positionName,
-            unit_number: unitNumber,
-            notes: notes
-          })
-          .eq("id", existingExceptions[0].id);
-        
-        if (error) throw error;
-      } else {
-        // Create new exception to store the changes, but officer remains "recurring" type
-        const { error } = await supabase
-          .from("schedule_exceptions")
-          .insert({
-            officer_id: officerId,
-            date: dateStr,
-            shift_type_id: shiftTypeId,
-            is_off: false,
-            position_name: positionName,
-            unit_number: unitNumber,
-            notes: notes,
-            custom_start_time: null,
-            custom_end_time: null
-          });
-        
-        if (error) throw error;
-      }
-    } else {
-      // For exception officers (manually added), just update them
-      const { error } = await supabase
-        .from("schedule_exceptions")
-        .update({ 
-          position_name: positionName,
-          unit_number: unitNumber,
-          notes: notes
-        })
-        .eq("id", scheduleId);
-        
-      if (error) throw error;
-    }
-  },
-  onSuccess: () => {
-    toast.success("Position updated");
-    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-    
-    setEditingSchedule(null);
-    setEditPosition("");
-    setCustomPosition("");
-    setEditingUnitNumber(null);
-    setEditUnitValue("");
-    setEditingNotes(null);
-    setEditNotesValue("");
-  },
-  onError: (error: any) => {
-    toast.error(error.message || "Failed to update position");
-  },
-});
-  
-  // NEW: Mutation for updating PTO details
-  const updatePTODetailsMutation = useMutation({
-    mutationFn: async ({ 
-      ptoId, 
-      unitNumber, 
-      notes 
-    }: { 
-      ptoId: string; 
-      unitNumber?: string; 
-      notes?: string; 
-    }) => {
-      const { error } = await supabase
-        .from("schedule_exceptions")
-        .update({ 
-          unit_number: unitNumber,
-          notes: notes
-        })
-        .eq("id", ptoId);
-        
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("PTO details updated");
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      setEditingUnitNumber(null);
-      setEditUnitValue("");
-      setEditingNotes(null);
-      setEditNotesValue("");
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to update PTO details");
-    },
-  });
-
-  const removeOfficerMutation = useMutation({
-    mutationFn: async (officer: any) => {
-      if (officer.type === "exception") {
-        const { error } = await supabase
-          .from("schedule_exceptions")
-          .delete()
-          .eq("id", officer.scheduleId);
-
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      toast.success("Officer removed from daily schedule");
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to remove officer");
-    },
-  });
-
-  const addOfficerMutation = useMutation({
-  mutationFn: async ({ officerId, shiftId, position, unitNumber, notes }: { officerId: string; shiftId: string; position: string; unitNumber?: string; notes?: string }) => {
-    // First, check ALL exceptions for this officer/date/shift (including duplicates)
-    const { data: existingExceptions, error: checkError } = await supabase
-      .from("schedule_exceptions")
-      .select("id, position_name, unit_number, notes, is_off")
-      .eq("officer_id", officerId)
-      .eq("date", dateStr)
-      .eq("shift_type_id", shiftId)
-      .eq("is_off", false);
-
-    if (checkError) throw checkError;
-
-    if (existingExceptions && existingExceptions.length > 0) {
-      // If multiple duplicates exist, update the first one and delete others
-      if (existingExceptions.length > 1) {
-        // Keep the first record, delete the rest
-        const recordsToDelete = existingExceptions.slice(1);
-        
-        for (const record of recordsToDelete) {
-          const { error: deleteError } = await supabase
-            .from("schedule_exceptions")
-            .delete()
-            .eq("id", record.id);
-          
-          if (deleteError) throw deleteError;
-        }
-      }
-      
-      // Update the remaining record
-      const { error } = await supabase
-        .from("schedule_exceptions")
-        .update({
-          position_name: position,
-          unit_number: unitNumber,
-          notes: notes,
-          custom_start_time: null,
-          custom_end_time: null
-        })
-        .eq("id", existingExceptions[0].id);
-      
-      if (error) throw error;
-    } else {
-      // Insert new exception
-      const { error } = await supabase
-        .from("schedule_exceptions")
-        .insert({
-          officer_id: officerId,
-          date: dateStr,
-          shift_type_id: shiftId,
-          is_off: false,
-          position_name: position,
-          unit_number: unitNumber,
-          notes: notes,
-          custom_start_time: null,
-          custom_end_time: null
-        });
-      
-      if (error) throw error;
-    }
-  },
-  onSuccess: () => {
-    toast.success("Officer added to schedule");
-    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-    setAddOfficerDialogOpen(false);
-  },
-  onError: (error: any) => {
-    toast.error(error.message || "Failed to add officer");
-  },
-});
-
-  const removePTOMutation = useMutation({
-    mutationFn: async (ptoRecord: any) => {
-      const calculateHours = (start: string, end: string) => {
-        const [startHour, startMin] = start.split(":").map(Number);
-        const [endHour, endMin] = end.split(":").map(Number);
-        const startMinutes = startHour * 60 + startMin;
-        const endMinutes = endHour * 60 + endMin;
-        return (endMinutes - startMinutes) / 60;
-      };
-
-      const hoursUsed = calculateHours(ptoRecord.startTime, ptoRecord.endTime);
-
-      const PTO_TYPES = [
-        { value: "vacation", label: "Vacation", column: "vacation_hours" },
-        { value: "holiday", label: "Holiday", column: "holiday_hours" },
-        { value: "sick", label: "Sick", column: "sick_hours" },
-        { value: "comp", label: "Comp", column: "comp_hours" },
-      ];
-
-      const ptoColumn = PTO_TYPES.find((t) => t.value === ptoRecord.ptoType)?.column;
-      if (ptoColumn) {
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", ptoRecord.officerId)
-          .single();
-
-        if (profileError) throw profileError;
-
-        const currentBalance = profile[ptoColumn as keyof typeof profile] as number;
-        
-        const { error: restoreError } = await supabase
-          .from("profiles")
-          .update({
-            [ptoColumn]: currentBalance + hoursUsed,
-          })
-          .eq("id", ptoRecord.officerId);
-
-        if (restoreError) throw restoreError;
-      }
-
-      const { error: deleteError } = await supabase
-        .from("schedule_exceptions")
-        .delete()
-        .eq("id", ptoRecord.id);
-
-      if (deleteError) throw deleteError;
-
-      await supabase
-        .from("schedule_exceptions")
-        .delete()
-        .eq("officer_id", ptoRecord.officerId)
-        .eq("date", dateStr)
-        .eq("shift_type_id", ptoRecord.shiftTypeId)
-        .eq("is_off", false);
-    },
-    onSuccess: () => {
-      toast.success("PTO removed and balance restored");
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to remove PTO");
-    },
-  });
-
   const handleSavePosition = (officer: any) => {
     const finalPosition = editPosition === "Other (Custom)" ? customPosition : editPosition;
     if (!finalPosition) {
@@ -777,7 +481,7 @@ export const DailyScheduleView = ({
       return;
     }
 
-    updatePositionMutation.mutate({ 
+    updateScheduleMutation.mutate({ 
       scheduleId: officer.scheduleId, 
       type: officer.type,
       positionName: finalPosition,
@@ -791,7 +495,7 @@ export const DailyScheduleView = ({
   };
 
   const handleSaveUnitNumber = (officer: any) => {
-    updatePositionMutation.mutate({ 
+    updateScheduleMutation.mutate({ 
       scheduleId: officer.scheduleId, 
       type: officer.type,
       positionName: officer.position,
@@ -805,7 +509,7 @@ export const DailyScheduleView = ({
   };
 
   const handleSaveNotes = (officer: any) => {
-    updatePositionMutation.mutate({ 
+    updateScheduleMutation.mutate({ 
       scheduleId: officer.scheduleId, 
       type: officer.type,
       positionName: officer.position,
@@ -840,7 +544,7 @@ export const DailyScheduleView = ({
     
     setEditingSchedule(`${officer.scheduleId}-${officer.type}`);
     
-    const isCustomPosition = officer.position && !predefinedPositions.includes(officer.position);
+    const isCustomPosition = officer.position && !PREDEFINED_POSITIONS.includes(officer.position);
     
     if (isCustomPosition) {
       setEditPosition("Other (Custom)");
@@ -931,265 +635,6 @@ export const DailyScheduleView = ({
     }
   };
 
-  const renderOfficerSection = (title: string, officers: any[], minCount: number, currentCount: number, isUnderstaffed: boolean) => (
-  <div className="space-y-2">
-    <div className="flex items-center justify-between border-b pb-2">
-      <h4 className="font-semibold text-sm">{title}</h4>
-      <Badge variant={isUnderstaffed ? "destructive" : "outline"}>
-        {currentCount} / {minCount}
-      </Badge>
-    </div>
-    {officers.length === 0 ? (
-      <p className="text-sm text-muted-foreground italic">No {title.toLowerCase()} scheduled</p>
-    ) : (
-      officers
-        .map((officer) => {
-          // Skip officers with full-day PTO - they should only appear in PTO section
-          if (officer.hasPTO && officer.ptoData?.isFullShift) {
-            return null;
-          }
-          
-          return (
-            <div
-              key={`${officer.scheduleId}-${officer.type}`}
-              className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
-            >
-             {/* Officer Info - Left Side */}
-<div className="flex-1 min-w-0">
-  <div className="flex items-center gap-3 mb-1">
-    <div>
-      <p className="font-medium truncate">{officer.name}</p>
-      <p className="text-xs text-muted-foreground">
-  {officer.rank || 'Officer'} • Badge #{officer.badge}
-  {(officer.type === "exception" || officer.isExtraShift) && (
-    <span className="ml-2 text-orange-600 font-medium">(Extra Shift)</span>
-  )}
-</p>
-    </div>
-  </div>
-  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-    {officer.customTime && (
-      <Badge variant="secondary" className="text-xs">
-        {officer.customTime}
-      </Badge>
-    )}
-    {officer.type === "recurring" && (
-      <Badge variant="secondary" className="text-xs">
-        Regular
-      </Badge>
-    )}
-    {officer.type === "exception" && (
-      <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-        Extra Shift
-      </Badge>
-    )}
-                  {/* Show partial PTO indicator */}
-                  {officer.hasPTO && !officer.ptoData?.isFullShift && (
-                    <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
-                      Partial PTO
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              {/* Unit & Notes - Middle Section */}
-              <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
-                {/* Unit Number */}
-                <div className="text-center min-w-16">
-                  <Label htmlFor={`unit-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
-                    Unit
-                  </Label>
-                  {canEdit && editingUnitNumber === `${officer.scheduleId}-${officer.type}` ? (
-                    <div className="flex items-center gap-1">
-                      <Input
-                        id={`unit-${officer.scheduleId}`}
-                        placeholder="Unit #"
-                        value={editUnitValue}
-                        onChange={(e) => setEditUnitValue(e.target.value)}
-                        className="w-16 h-8 text-sm"
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => handleSaveUnitNumber(officer)}
-                        disabled={updatePositionMutation.isPending}
-                        className="h-8 w-8"
-                      >
-                        <Save className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditingUnitNumber(null);
-                          setEditUnitValue("");
-                        }}
-                        className="h-8 w-8"
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <Badge 
-                      variant={officer.unitNumber ? "default" : "outline"} 
-                      className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
-                      onClick={() => canEdit && handleEditUnitClick(officer)}
-                    >
-                      {officer.unitNumber || (canEdit ? "Add" : "-")}
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Notes/Assignments */}
-                <div className="text-center min-w-24 flex-1">
-                  <Label htmlFor={`notes-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
-                    Notes
-                  </Label>
-                  {canEdit && editingNotes === `${officer.scheduleId}-${officer.type}` ? (
-                    <div className="flex items-center gap-1">
-                      <Input
-                        id={`notes-${officer.scheduleId}`}
-                        placeholder="Notes..."
-                        value={editNotesValue}
-                        onChange={(e) => setEditNotesValue(e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => handleSaveNotes(officer)}
-                        disabled={updatePositionMutation.isPending}
-                        className="h-8 w-8"
-                      >
-                        <Save className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditingNotes(null);
-                          setEditNotesValue("");
-                        }}
-                        className="h-8 w-8"
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div 
-                      className={`text-xs p-2 rounded border border-dashed border-muted-foreground/30 ${canEdit ? 'cursor-pointer hover:bg-muted' : ''} transition-colors min-h-8 flex items-center justify-center`}
-                      onClick={() => canEdit && handleEditNotesClick(officer)}
-                    >
-                      {officer.notes || (canEdit ? "Add notes" : "-")}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Position & Actions - Right Side */}
-              <div className="flex items-center gap-2 shrink-0">
-                {/* Position Display/Edit */}
-                {canEdit && editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
-                  <div className="flex items-center gap-2">
-                    <div className="space-y-2">
-                      <Select value={editPosition} onValueChange={setEditPosition}>
-                        <SelectTrigger className="w-32">
-                          <SelectValue placeholder="Select position" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {predefinedPositions.map((pos) => (
-                            <SelectItem key={pos} value={pos}>
-                              {pos}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {editPosition === "Other (Custom)" && (
-                        <Input
-                          placeholder="Custom position"
-                          value={customPosition}
-                          onChange={(e) => setCustomPosition(e.target.value)}
-                          className="w-32"
-                        />
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleSavePosition(officer)}
-                      disabled={updatePositionMutation.isPending}
-                    >
-                      <Save className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setEditingSchedule(null);
-                        setEditPosition("");
-                        setCustomPosition("");
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="text-right min-w-24">
-                    <Badge variant="secondary" className="mb-1 w-full justify-center">
-                      {officer.position || "No Position"}
-                    </Badge>
-                    {canEdit && (
-                      <div className="flex gap-1 justify-center">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleEditClick(officer)}
-                          title="Edit Position"
-                          className="h-6 w-6"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setSelectedOfficer({
-                              officerId: officer.officerId,
-                              name: officer.name,
-                              scheduleId: officer.scheduleId,
-                              type: officer.type,
-                            });
-                            setSelectedShift(officer.shift);
-                            setPtoDialogOpen(true);
-                          }}
-                          title="Assign PTO"
-                          className="h-6 w-6"
-                        >
-                          <Clock className="h-3 w-3" />
-                        </Button>
-                        {/* DELETE BUTTON - Only show for exception officers (added shifts) */}
-                        {officer.type === "exception" && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removeOfficerMutation.mutate(officer)}
-                            disabled={removeOfficerMutation.isPending}
-                            title="Remove Added Shift"
-                            className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })
-        .filter(Boolean) // This removes any null values from the array
-    )}
-  </div>
-);
-
   if (isLoading) {
     return (
       <Card>
@@ -1266,255 +711,132 @@ export const DailyScheduleView = ({
                 </div>
               </div>
 
-              {renderOfficerSection("Supervisors", shiftData.supervisors, shiftData.minSupervisors, shiftData.currentSupervisors, supervisorsUnderstaffed)}
-              {renderOfficerSection("Officers", shiftData.officers, shiftData.minOfficers, shiftData.currentOfficers, officersUnderstaffed)}
-              
-              {/* Special Assignment Section */}
-{shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
-  <div className="space-y-2">
-    <div className="flex items-center justify-between border-b pb-2">
-      <h4 className="font-semibold text-sm">Special Assignments</h4>
-      <Badge variant="outline">
-        {shiftData.specialAssignmentOfficers.length}
-      </Badge>
-    </div>
-    {shiftData.specialAssignmentOfficers.map((officer) => (
-      <div
-        key={`${officer.scheduleId}-${officer.type}`}
-        className="flex items-center justify-between p-3 bg-muted/50 rounded-md"
-      >
-        {/* Officer Info - Left Side */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-1">
-            <div>
-              <p className="font-medium truncate">{officer.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {officer.rank || 'Officer'} • Badge #{officer.badge}
-                {officer.type === "exception" && (
-                  <span className="ml-2 text-orange-600 font-medium">(Added Shift)</span>
-                )}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {officer.customTime && (
-              <Badge variant="secondary" className="text-xs">
-                {officer.customTime}
-              </Badge>
-            )}
-            {officer.type === "recurring" && (
-              <Badge variant="secondary" className="text-xs">
-                Regular
-              </Badge>
-            )}
-            {officer.type === "exception" && (
-              <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-                Extra Shift
-              </Badge>
-            )}
-            {/* Show partial PTO indicator */}
-            {officer.hasPTO && !officer.ptoData?.isFullShift && (
-              <Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
-                Partial PTO
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        {/* Unit & Notes - Middle Section */}
-        <div className="flex items-center gap-4 mx-4 min-w-0 flex-1">
-          {/* Unit Number */}
-          <div className="text-center min-w-16">
-            <Label htmlFor={`unit-special-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
-              Unit
-            </Label>
-            {canEdit && editingUnitNumber === `${officer.scheduleId}-${officer.type}` ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  id={`unit-special-${officer.scheduleId}`}
-                  placeholder="Unit #"
-                  value={editUnitValue}
-                  onChange={(e) => setEditUnitValue(e.target.value)}
-                  className="w-16 h-8 text-sm"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => handleSaveUnitNumber(officer)}
-                  disabled={updatePositionMutation.isPending}
-                  className="h-8 w-8"
-                >
-                  <Save className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setEditingUnitNumber(null);
-                    setEditUnitValue("");
-                  }}
-                  className="h-8 w-8"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ) : (
-              <Badge 
-                variant={officer.unitNumber ? "default" : "outline"} 
-                className={`w-16 ${canEdit ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
-                onClick={() => canEdit && handleEditUnitClick(officer)}
-              >
-                {officer.unitNumber || (canEdit ? "Add" : "-")}
-              </Badge>
-            )}
-          </div>
-
-          {/* Notes/Assignments */}
-          <div className="text-center min-w-24 flex-1">
-            <Label htmlFor={`notes-special-${officer.scheduleId}`} className="text-xs text-muted-foreground mb-1 block">
-              Notes
-            </Label>
-            {canEdit && editingNotes === `${officer.scheduleId}-${officer.type}` ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  id={`notes-special-${officer.scheduleId}`}
-                  placeholder="Notes..."
-                  value={editNotesValue}
-                  onChange={(e) => setEditNotesValue(e.target.value)}
-                  className="h-8 text-sm"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => handleSaveNotes(officer)}
-                  disabled={updatePositionMutation.isPending}
-                  className="h-8 w-8"
-                >
-                  <Save className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setEditingNotes(null);
-                    setEditNotesValue("");
-                  }}
-                  className="h-8 w-8"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ) : (
-              <div 
-                className={`text-xs p-2 rounded border border-dashed border-muted-foreground/30 ${canEdit ? 'cursor-pointer hover:bg-muted' : ''} transition-colors min-h-8 flex items-center justify-center`}
-                onClick={() => canEdit && handleEditNotesClick(officer)}
-              >
-                {officer.notes || (canEdit ? "Add notes" : "-")}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Position & Actions - Right Side */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Position Display/Edit */}
-          {canEdit && editingSchedule === `${officer.scheduleId}-${officer.type}` ? (
-            <div className="flex items-center gap-2">
-              <div className="space-y-2">
-                <Select value={editPosition} onValueChange={setEditPosition}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder="Select position" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {predefinedPositions.map((pos) => (
-                      <SelectItem key={pos} value={pos}>
-                        {pos}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {editPosition === "Other (Custom)" && (
-                  <Input
-                    placeholder="Custom position"
-                    value={customPosition}
-                    onChange={(e) => setCustomPosition(e.target.value)}
-                    className="w-32"
-                  />
-                )}
-              </div>
-              <Button
-                size="sm"
-                onClick={() => handleSavePosition(officer)}
-                disabled={updatePositionMutation.isPending}
-              >
-                <Save className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setEditingSchedule(null);
-                  setEditPosition("");
-                  setCustomPosition("");
+              {/* Use OfficerSection components */}
+              <OfficerSection
+                title="Supervisors"
+                officers={shiftData.supervisors}
+                minCount={shiftData.minSupervisors}
+                currentCount={shiftData.currentSupervisors}
+                isUnderstaffed={supervisorsUnderstaffed}
+                canEdit={canEdit}
+                onSavePosition={handleSavePosition}
+                onSaveUnitNumber={handleSaveUnitNumber}
+                onSaveNotes={handleSaveNotes}
+                onAssignPTO={(officer) => {
+                  setSelectedOfficer({
+                    officerId: officer.officerId,
+                    name: officer.name,
+                    scheduleId: officer.scheduleId,
+                    type: officer.type,
+                  });
+                  setSelectedShift(officer.shift);
+                  setPtoDialogOpen(true);
                 }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="text-right min-w-24">
-              <Badge variant="secondary" className="mb-1 w-full justify-center">
-                {officer.position || "Special Assignment"}
-              </Badge>
-              {canEdit && (
-                <div className="flex gap-1 justify-center">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleEditClick(officer)}
-                    title="Edit Position"
-                    className="h-6 w-6"
-                  >
-                    <Edit2 className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setSelectedOfficer({
-                        officerId: officer.officerId,
-                        name: officer.name,
-                        scheduleId: officer.scheduleId,
-                        type: officer.type,
-                      });
-                      setSelectedShift(officer.shift);
-                      setPtoDialogOpen(true);
-                    }}
-                    title="Assign PTO"
-                    className="h-6 w-6"
-                  >
-                    <Clock className="h-3 w-3" />
-                  </Button>
-                  {/* DELETE BUTTON for Special Assignment exception officers */}
-                  {officer.type === "exception" && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeOfficerMutation.mutate(officer)}
-                      disabled={removeOfficerMutation.isPending}
-                      title="Remove Added Shift"
-                      className="h-6 w-6 text-red-600 hover:text-red-800 hover:bg-red-100"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
+                onRemoveOfficer={removeOfficerMutation.mutate}
+                isUpdating={updateScheduleMutation.isPending}
+                editingSchedule={editingSchedule}
+                setEditingSchedule={setEditingSchedule}
+                editPosition={editPosition}
+                setEditPosition={setEditPosition}
+                customPosition={customPosition}
+                setCustomPosition={setCustomPosition}
+                editingUnitNumber={editingUnitNumber}
+                setEditingUnitNumber={setEditingUnitNumber}
+                editUnitValue={editUnitValue}
+                setEditUnitValue={setEditUnitValue}
+                editingNotes={editingNotes}
+                setEditingNotes={setEditingNotes}
+                editNotesValue={editNotesValue}
+                setEditNotesValue={setEditNotesValue}
+                onEditClick={handleEditClick}
+                onEditUnitClick={handleEditUnitClick}
+                onEditNotesClick={handleEditNotesClick}
+              />
+
+              <OfficerSection
+                title="Officers"
+                officers={shiftData.officers}
+                minCount={shiftData.minOfficers}
+                currentCount={shiftData.currentOfficers}
+                isUnderstaffed={officersUnderstaffed}
+                canEdit={canEdit}
+                onSavePosition={handleSavePosition}
+                onSaveUnitNumber={handleSaveUnitNumber}
+                onSaveNotes={handleSaveNotes}
+                onAssignPTO={(officer) => {
+                  setSelectedOfficer({
+                    officerId: officer.officerId,
+                    name: officer.name,
+                    scheduleId: officer.scheduleId,
+                    type: officer.type,
+                  });
+                  setSelectedShift(officer.shift);
+                  setPtoDialogOpen(true);
+                }}
+                onRemoveOfficer={removeOfficerMutation.mutate}
+                isUpdating={updateScheduleMutation.isPending}
+                editingSchedule={editingSchedule}
+                setEditingSchedule={setEditingSchedule}
+                editPosition={editPosition}
+                setEditPosition={setEditPosition}
+                customPosition={customPosition}
+                setCustomPosition={setCustomPosition}
+                editingUnitNumber={editingUnitNumber}
+                setEditingUnitNumber={setEditingUnitNumber}
+                editUnitValue={editUnitValue}
+                setEditUnitValue={setEditUnitValue}
+                editingNotes={editingNotes}
+                setEditingNotes={setEditingNotes}
+                editNotesValue={editNotesValue}
+                setEditNotesValue={setEditNotesValue}
+                onEditClick={handleEditClick}
+                onEditUnitClick={handleEditUnitClick}
+                onEditNotesClick={handleEditNotesClick}
+              />
+
+              {/* Special Assignment Section */}
+              {shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0 && (
+                <OfficerSection
+                  title="Special Assignments"
+                  officers={shiftData.specialAssignmentOfficers}
+                  minCount={0}
+                  currentCount={shiftData.specialAssignmentOfficers.length}
+                  isUnderstaffed={false}
+                  canEdit={canEdit}
+                  onSavePosition={handleSavePosition}
+                  onSaveUnitNumber={handleSaveUnitNumber}
+                  onSaveNotes={handleSaveNotes}
+                  onAssignPTO={(officer) => {
+                    setSelectedOfficer({
+                      officerId: officer.officerId,
+                      name: officer.name,
+                      scheduleId: officer.scheduleId,
+                      type: officer.type,
+                    });
+                    setSelectedShift(officer.shift);
+                    setPtoDialogOpen(true);
+                  }}
+                  onRemoveOfficer={removeOfficerMutation.mutate}
+                  isUpdating={updateScheduleMutation.isPending}
+                  editingSchedule={editingSchedule}
+                  setEditingSchedule={setEditingSchedule}
+                  editPosition={editPosition}
+                  setEditPosition={setEditPosition}
+                  customPosition={customPosition}
+                  setCustomPosition={setCustomPosition}
+                  editingUnitNumber={editingUnitNumber}
+                  setEditingUnitNumber={setEditingUnitNumber}
+                  editUnitValue={editUnitValue}
+                  setEditUnitValue={setEditUnitValue}
+                  editingNotes={editingNotes}
+                  setEditingNotes={setEditingNotes}
+                  editNotesValue={editNotesValue}
+                  setEditNotesValue={setEditNotesValue}
+                  onEditClick={handleEditClick}
+                  onEditUnitClick={handleEditUnitClick}
+                  onEditNotesClick={handleEditNotesClick}
+                />
               )}
-            </div>
-          )}
-        </div>
-      </div>
-    ))}
-  </div>
-)}
 
              {/* PTO Section - UPDATED WITH EDITABLE FIELDS */}
 {shiftData.ptoRecords && shiftData.ptoRecords.length > 0 && (
@@ -1746,19 +1068,7 @@ const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel, shift }: any) => {
     },
   });
 
-  const predefinedPositions = [
-    "Supervisor",
-    "District 1",
-    "District 2", 
-    "District 3",
-    "District 4",
-    "District 5",
-    "District 5/6",
-    "District 6",
-    "District 7/8",
-    "District 9",
-    "Other (Custom)",
-  ];
+  const predefinedPositions = PREDEFINED_POSITIONS;
 
   const addOfficerMutation = useMutation({
     mutationFn: async () => {
