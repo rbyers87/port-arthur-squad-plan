@@ -592,7 +592,7 @@ const WeeklySchedule = ({
           <div className="border-b">
             <div className="grid grid-cols-9 border-b">
               <div className="p-2 border-r"></div>
-              <div className="p-2 border-r text-sm font-medium">COUNT</div>
+              <div className="p-2 border-r text-sm font-medium">SUPERVISORS</div>
               {weekDays.map(({ dateStr }) => {
                 const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
                 const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
