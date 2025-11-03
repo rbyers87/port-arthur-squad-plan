@@ -318,6 +318,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
                 <SelectValue placeholder="Select rank" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="Probationary">Probationary</SelectItem>
                 <SelectItem value="Officer">Officer</SelectItem>
                 <SelectItem value="Sergeant">Sergeant</SelectItem>
                 <SelectItem value="Lieutenant">Lieutenant</SelectItem>
