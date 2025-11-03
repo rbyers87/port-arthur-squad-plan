@@ -587,6 +587,8 @@ const WeeklySchedule = ({
             })}
           </div>
 
+          // ... existing supervisors code ...
+
           <div className="border-b">
             <div className="grid grid-cols-9 border-b">
               <div className="p-2 border-r"></div>
@@ -627,6 +629,24 @@ const WeeklySchedule = ({
                 ))}
               </div>
             ))}
+
+            {/* SEPARATION ROW WITH OFFICER COUNT */}
+            <div className="grid grid-cols-9 border-b bg-muted/30">
+              <div className="p-2 border-r"></div>
+              <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
+              {weekDays.map(({ dateStr }) => {
+                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+                const officerCount = daySchedule?.categorizedOfficers?.officers.filter(officer => 
+                  !officer.shiftInfo?.hasPTO
+                ).length || 0;
+                
+                return (
+                  <div key={dateStr} className="p-2 text-center border-r text-sm font-medium">
+                    {officerCount}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div>
@@ -652,10 +672,6 @@ const WeeklySchedule = ({
               </div>
             ))}
           </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderMonthlyView = () => {
     const monthStart = startOfMonth(currentMonth);
