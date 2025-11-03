@@ -620,31 +620,46 @@ const WeeklySchedule = ({
           <div className="p-2 font-semibold border-r">Empl#</div>
           <div className="p-2 font-semibold border-r">COUNT</div>
           {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => {
-            const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-            const { supervisorCount, officerCount } = daySchedule 
-              ? calculateStaffingCounts(daySchedule.categorizedOfficers)
-              : { supervisorCount: 0, officerCount: 0 };
-            
-            const minimumOfficers = MINIMUM_STAFFING[dayName as keyof typeof MINIMUM_STAFFING];
-            const isOfficersUnderstaffed = officerCount < minimumOfficers;
-            const isSupervisorsUnderstaffed = supervisorCount < MINIMUM_SUPERVISORS;
+    const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+    
+    // Calculate counts excluding only full-day PTO
+    const supervisorCount = daySchedule?.officers?.filter(officer => {
+      const isSupervisor = officerCategories.get(officer.officerId) === 'supervisor';
+      // Only exclude if they have full-day PTO
+      const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+      const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
+      return isSupervisor && isScheduled;
+    }).length || 0;
 
-            return (
-              <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
-                <Button variant="ghost" size="sm" className="h-auto p-0 font-semibold hover:bg-transparent hover:underline" onClick={() => navigateToDailySchedule(dateStr)}>
-                  <div>{dayName}</div>
-                  <div className="text-xs text-muted-foreground mb-1">{formattedDate}</div>
-                </Button>
-                <Badge variant={isSupervisorsUnderstaffed ? "destructive" : "outline"} className="text-xs mb-1">
-                  {supervisorCount} / {MINIMUM_SUPERVISORS} Sup
-                </Badge>
-                <Badge variant={isOfficersUnderstaffed ? "destructive" : "outline"} className="text-xs">
-                  {officerCount} / {minimumOfficers} Ofc
-                </Badge>
-              </div>
-            );
-          })}
-        </div>
+    const officerCount = daySchedule?.officers?.filter(officer => {
+      const isOfficer = officerCategories.get(officer.officerId) === 'officer';
+      const isNotPPO = officer.rank?.toLowerCase() !== 'probationary';
+      // Only exclude if they have full-day PTO
+      const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+      const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
+      return isOfficer && isNotPPO && isScheduled;
+    }).length || 0;
+    
+    const minimumOfficers = MINIMUM_STAFFING[dayName as keyof typeof MINIMUM_STAFFING];
+    const isOfficersUnderstaffed = officerCount < minimumOfficers;
+    const isSupervisorsUnderstaffed = supervisorCount < MINIMUM_SUPERVISORS;
+
+    return (
+      <div key={dateStr} className={`p-2 text-center font-semibold border-r ${isToday ? 'bg-primary/10' : ''}`}>
+        <Button variant="ghost" size="sm" className="h-auto p-0 font-semibold hover:bg-transparent hover:underline" onClick={() => navigateToDailySchedule(dateStr)}>
+          <div>{dayName}</div>
+          <div className="text-xs text-muted-foreground mb-1">{formattedDate}</div>
+        </Button>
+        <Badge variant={isSupervisorsUnderstaffed ? "destructive" : "outline"} className="text-xs mb-1">
+          {supervisorCount} / {MINIMUM_SUPERVISORS} Sup
+        </Badge>
+        <Badge variant={isOfficersUnderstaffed ? "destructive" : "outline"} className="text-xs">
+          {officerCount} / {minimumOfficers} Ofc
+        </Badge>
+      </div>
+    );
+  })}
+</div>
 
         <div className="border-b">
           <div className="grid grid-cols-9 border-b">
@@ -694,11 +709,13 @@ const WeeklySchedule = ({
   {weekDays.map(({ dateStr }) => {
     const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
     
-    // Count only non-PPO officers
+    // Count only non-PPO officers, excluding only full-day PTO
     const officerCount = daySchedule?.officers?.filter(officer => {
       const isOfficer = officerCategories.get(officer.officerId) === 'officer';
       const isNotPPO = officer.rank?.toLowerCase() !== 'probationary';
-      const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !officer.shiftInfo.hasPTO;
+      // Only exclude if they have full-day PTO
+      const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+      const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
       return isOfficer && isNotPPO && isScheduled;
     }).length || 0;
     
@@ -739,24 +756,30 @@ const WeeklySchedule = ({
         {/* PPO SECTION */}
         {ppos.length > 0 && (
           <div className="border-t-2 border-blue-200">
-            {/* PPO COUNT ROW */}
-            <div className="grid grid-cols-9 border-b bg-blue-50">
-              <div className="p-2 border-r"></div>
-              <div className="p-2 border-r text-sm font-medium">PPO</div>
-              {weekDays.map(({ dateStr }) => {
-                const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-                const ppoCount = daySchedule?.officers?.filter(officer => 
-                  officer.rank?.toLowerCase() === 'probationary' && 
-                  !officer.shiftInfo?.hasPTO
-                ).length || 0;
-                
-                return (
-                  <div key={dateStr} className="p-2 text-center border-r text-sm font-medium">
-                    {ppoCount}
-                  </div>
-                );
-              })}
-            </div>
+{/* PPO COUNT ROW */}
+<div className="grid grid-cols-9 border-b bg-blue-50">
+  <div className="p-2 border-r"></div>
+  <div className="p-2 border-r text-sm font-medium">PPO</div>
+  {weekDays.map(({ dateStr }) => {
+    const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+    
+    // Count PPOs, excluding only full-day PTO
+    const ppoCount = daySchedule?.officers?.filter(officer => {
+      const isOfficer = officerCategories.get(officer.officerId) === 'officer';
+      const isPPO = officer.rank?.toLowerCase() === 'probationary';
+      // Only exclude if they have full-day PTO
+      const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+      const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
+      return isOfficer && isPPO && isScheduled;
+    }).length || 0;
+    
+    return (
+      <div key={dateStr} className="p-2 text-center border-r text-sm font-medium">
+        {ppoCount}
+      </div>
+    );
+  })}
+</div>
 
             {/* PPO OFFICERS */}
             {ppos.map((officer) => (
