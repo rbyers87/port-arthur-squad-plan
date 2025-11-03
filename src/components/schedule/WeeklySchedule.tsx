@@ -817,7 +817,7 @@ const WeeklySchedule = ({
           </div>
         )}
       </div>
-    </div>
+  
   );
 };
 
