@@ -18,6 +18,7 @@ const predefinedPositions = [
   "District 3",
   "District 4",
   "District 5",
+  "District 5/6",
   "District 6",
   "District 7/8",
   "District 9",
