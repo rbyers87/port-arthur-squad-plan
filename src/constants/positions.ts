@@ -18,7 +18,8 @@ export const RANK_ORDER = {
   'Deputy Chief': 2,
   'Lieutenant': 3,
   'Sergeant': 4,
-  'Officer': 5
+  'Officer': 5,
+  'Probationary': 6
 } as const;
 
 export const PTO_TYPES = [
