@@ -683,18 +683,18 @@ const WeeklySchedule = ({
               <div className="p-2 border-r"></div>
               <div className="p-2 border-r text-sm font-medium">OFFICERS</div>
               {weekDays.map(({ dateStr }) => {
-            const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-            // ADD NULL CHECKS HERE
-            const officerCount = daySchedule?.categorizedOfficers?.officers?.filter(officer => 
-              !officer.shiftInfo?.hasPTO
-                ).length || 0;
+  const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+  // USE THE SAME LOGIC AS SUPERVISOR COUNT
+  const officerCount = daySchedule?.categorizedOfficers?.officers?.filter(officer => 
+    !officer.shiftInfo?.hasPTO
+  ).length || 0;
   
-              return (
-            <div key={dateStr} className="p-2 text-center border-r text-sm font-medium">
-              {officerCount}
-          </div>
-          );
-          })}
+  return (
+    <div key={dateStr} className="p-2 text-center border-r text-sm font-medium">
+      {officerCount}
+    </div>
+  );
+})}
             </div>
           </div>
 
