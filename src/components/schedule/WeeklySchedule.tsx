@@ -121,7 +121,7 @@ const WeeklySchedule = ({
     navigate(`/daily-schedule?date=${dateStr}&shift=${selectedShiftId}`);
   };
 
-  // Main schedule query
+  // Main schedule query - UPDATED to include service_credit
   const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
     queryKey,
     queryFn: async () => {
@@ -137,7 +137,7 @@ const WeeklySchedule = ({
         .from("recurring_schedules")
         .select(`
           *,
-          profiles (id, full_name, badge_number, rank),
+          profiles (id, full_name, badge_number, rank, service_credit),
           shift_types (id, name, start_time, end_time)
         `)
         .eq("shift_type_id", selectedShiftId)
@@ -155,13 +155,13 @@ const WeeklySchedule = ({
 
       if (exceptionsError) throw exceptionsError;
 
-      // Get officer profiles separately
+      // Get officer profiles separately - UPDATED to include service_credit
       const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
       let officerProfiles = [];
       if (officerIds.length > 0) {
         const { data: profilesData } = await supabase
           .from("profiles")
-          .select("id, full_name, badge_number, rank")
+          .select("id, full_name, badge_number, rank, service_credit")
           .in("id", officerIds);
         officerProfiles = profilesData || [];
       }
@@ -222,6 +222,7 @@ const WeeklySchedule = ({
                   officerName: recurring.profiles?.full_name || "Unknown",
                   badgeNumber: recurring.profiles?.badge_number,
                   rank: recurring.profiles?.rank,
+                  service_credit: recurring.profiles?.service_credit || 0, // ADDED
                   date,
                   dayOfWeek,
                   isRegularRecurringDay: true,
@@ -268,6 +269,7 @@ const WeeklySchedule = ({
           officerName: exception.profiles?.full_name || "Unknown",
           badgeNumber: exception.profiles?.badge_number,
           rank: exception.profiles?.rank,
+          service_credit: exception.profiles?.service_credit || 0, // ADDED
           date: exception.date,
           dayOfWeek: parseISO(exception.date).getDay(),
           isRegularRecurringDay: isRegularDay,
@@ -307,6 +309,7 @@ const WeeklySchedule = ({
             officerName: ptoException.profiles?.full_name || "Unknown",
             badgeNumber: ptoException.profiles?.badge_number,
             rank: ptoException.profiles?.rank,
+            service_credit: ptoException.profiles?.service_credit || 0, // ADDED
             date: ptoException.date,
             dayOfWeek: parseISO(ptoException.date).getDay(),
             shiftInfo: {
@@ -472,7 +475,6 @@ const WeeklySchedule = ({
     }
   };
 
-  // Render functions continue in next part...
   const renderExcelStyleWeeklyView = () => {
     const weekDays = Array.from({ length: 7 }, (_, i) => {
       const date = addDays(currentWeekStart, i);
@@ -535,9 +537,22 @@ const WeeklySchedule = ({
       .filter(o => officerCategories.get(o.officerId) === 'supervisor')
       .sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
 
+    // UPDATED: Sort officers by service credit (highest first)
     const officers = Array.from(allOfficers.values())
       .filter(o => officerCategories.get(o.officerId) === 'officer')
-      .sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+      .sort((a, b) => {
+        // Get service credits (default to 0 if not available)
+        const aCredit = a.service_credit || 0;
+        const bCredit = b.service_credit || 0;
+        
+        // Sort highest service credit first (descending order)
+        if (bCredit !== aCredit) {
+          return bCredit - aCredit;
+        }
+        
+        // If service credits are equal, fall back to last name sorting
+        return getLastName(a.officerName).localeCompare(getLastName(b.officerName));
+      });
 
     return (
       <div className="space-y-4">
@@ -587,12 +602,10 @@ const WeeklySchedule = ({
             })}
           </div>
 
-          // ... existing supervisors code ...
-
           <div className="border-b">
             <div className="grid grid-cols-9 border-b">
               <div className="p-2 border-r"></div>
-              <div className="p-2 border-r text-sm font-medium">SUPERVISORS</div>
+              <div className="p-2 border-r text-sm font-medium">COUNT</div>
               {weekDays.map(({ dateStr }) => {
                 const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
                 const supervisorCount = daySchedule?.categorizedOfficers?.supervisors.filter(officer => 
@@ -672,6 +685,10 @@ const WeeklySchedule = ({
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderMonthlyView = () => {
     const monthStart = startOfMonth(currentMonth);
@@ -1058,4 +1075,4 @@ const WeeklySchedule = ({
   );
 };
 
-export default WeeklySchedule
+export default WeeklySchedule;
