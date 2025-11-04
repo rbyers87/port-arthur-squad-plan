@@ -107,6 +107,7 @@ const WeeklySchedule = ({
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
     from: startOfWeek(new Date(), { weekStartsOn: 0 }),
     to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4),
@@ -244,11 +245,7 @@ const handleExportPDF = async () => {
 
     const shiftName = shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Unknown Shift";
 
-    // ✅ Lazy-load your PDF export hook *only when the user actually exports*
-    const { useWeeklyPDFExport } = await import("@/hooks/useWeeklyPDFExport");
-    const { exportWeeklyPDF } = useWeeklyPDFExport();
-
-    // Run the export
+    // Run the export using the already-imported hook
     const result = await exportWeeklyPDF({
       startDate,
       endDate,
@@ -1500,7 +1497,14 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
     open={exportDialogOpen}
     onOpenChange={(open) => {
       setExportDialogOpen(open);
-      if (!open) setDateRange(undefined);
+      if (!open) {
+        setCalendarOpen(false);
+        // Reset to default 4-week range
+        setDateRange({
+          from: startOfWeek(new Date(), { weekStartsOn: 0 }),
+          to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4),
+        });
+      }
     }}
   >
     <DialogContent className="sm:max-w-md">
@@ -1517,7 +1521,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
       {/* Date Range Selector */}
       <div className="space-y-2">
         <Label htmlFor="date-range">Date Range</Label>
-        <Popover>
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
           <PopoverTrigger asChild>
             <Button
               id="date-range"
@@ -1535,13 +1539,19 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                 : "Pick a date range"}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
+          <PopoverContent className="w-auto p-0 bg-background z-50" align="start">
             <Calendar
               initialFocus
               mode="range"
               defaultMonth={dateRange?.from}
               selected={dateRange}
-              onSelect={setDateRange}
+              onSelect={(range) => {
+                setDateRange(range);
+                // Close popover when both dates are selected
+                if (range?.from && range?.to) {
+                  setCalendarOpen(false);
+                }
+              }}
               numberOfMonths={2}
             />
           </PopoverContent>
