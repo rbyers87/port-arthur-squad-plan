@@ -471,18 +471,26 @@ export const DailyScheduleView = ({ 
       const countedOfficers = regularOfficers.filter(o => !o.isPPO); // <<< PPO Exclusion Logic
       
 
-      return {
-        shift,
-        minSupervisors: minStaff?.minimum_supervisors || 1,
-        minOfficers: minStaff?.minimum_officers || 0,
-        currentSupervisors: supervisors.length,
-        currentOfficers: countedOfficers.length, // <<< Use the filtered count
-        supervisors,
-        officers: regularOfficers, // <<< Send all regular officers (including PPOs) for display
-        specialAssignmentOfficers,
-        ptoRecords: shiftPTORecords,
-      };
-    });
+// Filter out PTO, special assignments, and probationary from staffing counts
+const activeSupervisors = supervisors.filter(officer => 
+  !officer.hasPTO && officer.rank !== 'Probationary'
+);
+
+const activeOfficers = regularOfficers.filter(officer => 
+  !officer.hasPTO && officer.rank !== 'Probationary'
+);
+
+return {
+  shift,
+  minSupervisors: minStaff?.minimum_supervisors || 1,
+  minOfficers: minStaff?.minimum_officers || 0,
+  currentSupervisors: activeSupervisors.length,
+  currentOfficers: activeOfficers.length,
+  supervisors,
+  officers: regularOfficers,
+  specialAssignmentOfficers,
+  ptoRecords: shiftPTORecords,
+};
 
     const filteredSchedule = filterShiftId === "all" 
       ? scheduleByShift 
