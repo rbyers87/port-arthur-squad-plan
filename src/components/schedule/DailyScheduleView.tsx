@@ -473,32 +473,36 @@ for (const officer of allOfficers) {
         secondaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? partnerOfficer : officer;
       }
 
-      // Create combined officer entry
-      const combinedOfficer = {
-        ...primaryOfficer,
-        isCombinedPartnership: true,
-        partnerData: {
-          partnerOfficerId: secondaryOfficer.officerId,
-          partnerName: secondaryOfficer.name,
-          partnerBadge: secondaryOfficer.badge,
-          partnerRank: secondaryOfficer.rank,
-          partnerIsPPO: secondaryOfficer.isPPO,
-          partnerPosition: secondaryOfficer.position,
-          partnerUnitNumber: secondaryOfficer.unitNumber,
-          partnerScheduleId: secondaryOfficer.scheduleId,
-          partnerType: secondaryOfficer.type
-        },
-        // Use the primary officer's position and unit number, or combine if needed
-        position: primaryOfficer.position || secondaryOfficer.position,
-        unitNumber: primaryOfficer.unitNumber || secondaryOfficer.unitNumber,
-        // Combine notes if both have them
-        notes: primaryOfficer.notes || secondaryOfficer.notes ? 
-          `${primaryOfficer.notes || ''}${primaryOfficer.notes && secondaryOfficer.notes ? ' / ' : ''}${secondaryOfficer.notes || ''}`.trim() 
-          : null,
-        // Mark as partnership
-        isPartnership: true,
-        partnerOfficerId: secondaryOfficer.officerId
-      };
+
+// Create combined officer entry
+const combinedOfficer = {
+  ...primaryOfficer,
+  isCombinedPartnership: true,
+  partnerData: {
+    partnerOfficerId: secondaryOfficer.officerId,
+    partnerName: secondaryOfficer.name,
+    partnerBadge: secondaryOfficer.badge,
+    partnerRank: secondaryOfficer.rank,
+    partnerIsPPO: secondaryOfficer.isPPO,
+    partnerPosition: secondaryOfficer.position,
+    partnerUnitNumber: secondaryOfficer.unitNumber,
+    partnerScheduleId: secondaryOfficer.scheduleId,
+    partnerType: secondaryOfficer.type
+  },
+  // Preserve the partnerOfficerId in the main object for easy access
+  partnerOfficerId: secondaryOfficer.officerId,
+  // Also store the original partner ID for backup
+  originalPartnerOfficerId: secondaryOfficer.officerId,
+  // Use the primary officer's position and unit number, or combine if needed
+  position: primaryOfficer.position || secondaryOfficer.position,
+  unitNumber: primaryOfficer.unitNumber || secondaryOfficer.unitNumber,
+  // Combine notes if both have them
+  notes: primaryOfficer.notes || secondaryOfficer.notes ? 
+    `${primaryOfficer.notes || ''}${primaryOfficer.notes && secondaryOfficer.notes ? ' / ' : ''}${secondaryOfficer.notes || ''}`.trim() 
+    : null,
+  // Mark as partnership
+  isPartnership: true
+};
 
       processedOfficers.push(combinedOfficer);
       // Mark both officers as processed
