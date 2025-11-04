@@ -276,8 +276,6 @@ const scheduleByShift = shiftTypes?.map((shift) => {
         customTime = `${workingException.custom_start_time} - ${workingException.custom_end_time}`;
       }
 
-            
-
       // Use working exception data if it exists, otherwise use recurring data
       const finalData = workingException ? {
         scheduleId: workingException.id,
@@ -919,14 +917,14 @@ const scheduleByShift = shiftTypes?.map((shift) => {
         setAddOfficerDialogOpen(false);
         setSelectedShiftForAdd(null);
       }}
-              />
-          </DialogContent>
-      </Dialog>
+    />
+  </DialogContent>
+</Dialog>
     </Card>
   );
-} 
+};
 
-// Add Officer Form Component
+// Add Officer Form Component - NOW PROPERLY SEPARATED
 const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel, shift }: any) => {
   const [selectedOfficerId, setSelectedOfficerId] = useState("");
   const [position, setPosition] = useState("");
@@ -955,22 +953,131 @@ const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel, shift }: any) => {
       const finalPosition = position === "Other (Custom)" ? customPosition : position;
       
       if (!finalPosition) {
-        throw new Error("Please select or enter ");
+        throw new Error("Please select or enter a position");
       }
-      // ... (rest of the form logic)
-      throw new Error("Add Officer Form is incomplete in the provided code snippet.");
+      
+      // Check if officer already has a schedule exception for this date and shift
+      const { data: existingExceptions, error: checkError } = await supabase
+        .from("schedule_exceptions")
+        .select("id")
+        .eq("officer_id", selectedOfficerId)
+        .eq("date", date)
+        .eq("shift_type_id", shiftId);
+
+      if (checkError) throw checkError;
+      
+      if (existingExceptions && existingExceptions.length > 0) {
+        throw new Error("Officer already has a schedule for this date and shift");
+      }
+
+      // Create schedule exception
+      const { data, error } = await supabase
+        .from("schedule_exceptions")
+        .insert({
+          officer_id: selectedOfficerId,
+          date: date,
+          shift_type_id: shiftId,
+          position_name: finalPosition,
+          unit_number: unitNumber,
+          notes: notes,
+          is_off: false
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
+    onSuccess: () => {
+      toast.success("Officer added to schedule successfully");
+      onSuccess();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to add officer to schedule");
+    }
   });
-  
-  // NOTE: The rest of the AddOfficerForm component body was truncated in the request.
-  // Assuming the missing part is handled correctly.
-  
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOfficerId) {
+      toast.error("Please select an officer");
+      return;
+    }
+    addOfficerMutation.mutate();
+  };
+
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-red-500">
-        Warning: The body of AddOfficerForm was truncated. This form may not be fully functional.
-      </p>
-      {/* ... AddOfficerForm content placeholder ... */}
-    </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="officer">Select Officer</Label>
+        <Select value={selectedOfficerId} onValueChange={setSelectedOfficerId}>
+          <SelectTrigger>
+            <SelectValue placeholder="Choose an officer" />
+          </SelectTrigger>
+          <SelectContent>
+            {officers?.map((officer) => (
+              <SelectItem key={officer.id} value={officer.id}>
+                {officer.full_name} ({officer.badge_number})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="position">Position</Label>
+        <Select value={position} onValueChange={setPosition}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select position" />
+          </SelectTrigger>
+          <SelectContent>
+            {predefinedPositions.map((pos) => (
+              <SelectItem key={pos} value={pos}>
+                {pos}
+              </SelectItem>
+            ))}
+            <SelectItem value="Other (Custom)">Other (Custom)</SelectItem>
+          </SelectContent>
+        </Select>
+        
+        {position === "Other (Custom)" && (
+          <Input
+            placeholder="Enter custom position"
+            value={customPosition}
+            onChange={(e) => setCustomPosition(e.target.value)}
+            className="mt-2"
+          />
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="unitNumber">Unit Number (Optional)</Label>
+        <Input
+          id="unitNumber"
+          placeholder="Enter unit number"
+          value={unitNumber}
+          onChange={(e) => setUnitNumber(e.target.value)}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="notes">Notes (Optional)</Label>
+        <Input
+          id="notes"
+          placeholder="Enter notes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={addOfficerMutation.isPending}>
+          {addOfficerMutation.isPending ? "Adding..." : "Add Officer"}
+        </Button>
+      </div>
+    </form>
   );
 };
