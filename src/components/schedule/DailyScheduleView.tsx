@@ -677,12 +677,9 @@ const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
   console.log("🔄 Partnership change - Remove:", { 
     officer: officer.officerId, 
     officerName: officer.name,
-    partnerOfficerId: officer.partnerData?.partnerOfficerId,
-    partnerName: officer.partnerData?.partnerName,
-    scheduleId: officer.scheduleId,
-    type: officer.type,
-    date: officer.date,
-    dayOfWeek: officer.dayOfWeek
+    officerData: officer, // Log the entire officer object to see what's available
+    partnerData: officer.partnerData,
+    partnerOfficerId: officer.partnerOfficerId
   });
   
   if (!officer?.scheduleId || !officer?.officerId) {
@@ -690,13 +687,37 @@ const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
     return;
   }
 
-  // For removal, we need to ensure we have the partnerOfficerId from the existing partnership
-  const partnerIdToRemove = officer.partnerData?.partnerOfficerId || officer.partnerOfficerId;
-  
+  // Try multiple ways to find the partner officer ID
+  let partnerIdToRemove = null;
+
+  // Method 1: Check partnerData first
+  if (officer.partnerData?.partnerOfficerId) {
+    partnerIdToRemove = officer.partnerData.partnerOfficerId;
+    console.log("Found partner ID in partnerData:", partnerIdToRemove);
+  }
+  // Method 2: Check direct partnerOfficerId field
+  else if (officer.partnerOfficerId) {
+    partnerIdToRemove = officer.partnerOfficerId;
+    console.log("Found partner ID in partnerOfficerId field:", partnerIdToRemove);
+  }
+  // Method 3: If this is a combined partnership, check the original data
+  else if (officer.isCombinedPartnership && officer.originalPartnerOfficerId) {
+    partnerIdToRemove = officer.originalPartnerOfficerId;
+    console.log("Found partner ID in originalPartnerOfficerId:", partnerIdToRemove);
+  }
+  // Method 4: Try to find partner from the schedule data
+  else {
+    console.log("Searching for partner in schedule data...");
+    // This is a fallback - we might need to query the database to find the partner
+  }
+
   if (!partnerIdToRemove) {
-    toast.error("No partner officer ID found for removal");
+    console.error("❌ No partner officer ID found for removal. Officer data:", officer);
+    toast.error("Could not find partner information. Please refresh the page and try again.");
     return;
   }
+
+  console.log("✅ Removing partnership with partner ID:", partnerIdToRemove);
 
   updatePartnershipMutation.mutate({
     officer: {
