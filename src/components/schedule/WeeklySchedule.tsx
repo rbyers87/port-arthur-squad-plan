@@ -1652,15 +1652,16 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogContent>
       </Dialog>
 
-{/* PDF Export Dialog - ONLY RENDERS WHEN DIALOG IS OPEN */}
-      {exportDialogOpen && (
-        <Dialog open={exportDialogOpen} onOpenChange={(open) => {
-          setExportDialogOpen(open);
-          if (!open) {
-            setCalendarOpen(false);
-            setDateRange(undefined);
-          }
-        }}>
+{/* PDF Export Dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={(open) => {
+        setExportDialogOpen(open);
+        // Always reset calendar state when dialog closes
+        if (!open) {
+          setCalendarOpen(false);
+          // Optionally reset the date range
+          // setDateRange(undefined);
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
