@@ -1,4 +1,4 @@
-// components/schedule/WeeklySchedule.tsx - REFACTORED VERSION
+// components/schedule/WeeklySchedule.tsx - REFACTORED VERSION WITH PDF EXPORT
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -12,8 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, ChevronLeft, ChevronRight, Plus, Grid, Calendar as CalendarIcon } from "lucide-react";
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Grid, Download, CalendarRange } from "lucide-react";
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO, eachWeekOfInterval, addYears, subYears } from "date-fns";
 import { toast } from "sonner";
 import { PREDEFINED_POSITIONS } from "@/constants/positions";
 import { ScheduleCell } from "./ScheduleCell";
@@ -26,11 +28,223 @@ import {
   MINIMUM_STAFFING,
   MINIMUM_SUPERVISORS
 } from "@/utils/scheduleUtils";
+import { cn } from "@/lib/utils";
+import jsPDF from "jspdf";
 
 interface WeeklyScheduleProps {
   userRole?: 'officer' | 'supervisor' | 'admin';
   isAdminOrSupervisor?: boolean;
 }
+
+interface ExportOptions {
+  startDate: Date;
+  endDate: Date;
+  shiftName: string;
+  scheduleData: any[];
+}
+
+const useWeeklyPDFExport = () => {
+  const exportWeeklyPDF = async ({ startDate, endDate, shiftName, scheduleData }: ExportOptions) => {
+    try {
+      const pdf = new jsPDF("landscape", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      let yPosition = 20;
+
+      // Header
+      pdf.setFontSize(16);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(41, 128, 185);
+      pdf.text(`WEEKLY SCHEDULE - ${shiftName.toUpperCase()}`, pageWidth / 2, yPosition, { align: 'center' });
+      
+      yPosition += 8;
+      
+      pdf.setFontSize(10);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`Period: ${format(startDate, "MMM d, yyyy")} - ${format(endDate, "MMM d, yyyy")}`, pageWidth / 2, yPosition, { align: 'center' });
+      
+      yPosition += 15;
+
+      // Generate weekly views for each week in the range
+      const weeks = [];
+      let currentWeekStart = startOfWeek(startDate, { weekStartsOn: 0 });
+      
+      while (currentWeekStart <= endDate) {
+        const weekEnd = addDays(currentWeekStart, 6);
+        if (currentWeekStart <= endDate) {
+          weeks.push({ start: currentWeekStart, end: weekEnd });
+        }
+        currentWeekStart = addWeeks(currentWeekStart, 1);
+      }
+
+      for (const week of weeks) {
+        // Check if we need a new page
+        if (yPosition > pdf.internal.pageSize.getHeight() - 50) {
+          pdf.addPage();
+          yPosition = 20;
+        }
+
+        // Week header
+        pdf.setFontSize(12);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(`Week of ${format(week.start, "MMM d")} - ${format(week.end, "MMM d, yyyy")}`, 15, yPosition);
+        yPosition += 8;
+
+        // Create table for the week
+        const weekDays = Array.from({ length: 7 }, (_, i) => {
+          const date = addDays(week.start, i);
+          return {
+            date,
+            dateStr: format(date, "yyyy-MM-dd"),
+            dayName: format(date, "EEE").toUpperCase(),
+            formattedDate: format(date, "MMM d")
+          };
+        });
+
+        // Table headers
+        const colWidths = [25, 35]; // Badge and Name columns
+        const dayColWidth = (pageWidth - 60 - colWidths[0] - colWidths[1]) / 7;
+        
+        // Draw headers
+        let xPosition = 15;
+        pdf.setFillColor(41, 128, 185);
+        pdf.setFontSize(8);
+        pdf.setTextColor(255, 255, 255);
+
+        // Static headers
+        pdf.rect(xPosition, yPosition, colWidths[0], 8, 'F');
+        pdf.text("BADGE", xPosition + 2, yPosition + 5);
+        xPosition += colWidths[0];
+        
+        pdf.rect(xPosition, yPosition, colWidths[1], 8, 'F');
+        pdf.text("NAME", xPosition + 2, yPosition + 5);
+        xPosition += colWidths[1];
+
+        // Day headers
+        weekDays.forEach(day => {
+          pdf.rect(xPosition, yPosition, dayColWidth, 8, 'F');
+          pdf.text(day.dayName, xPosition + 2, yPosition + 3);
+          pdf.text(day.formattedDate, xPosition + 2, yPosition + 6);
+          xPosition += dayColWidth;
+        });
+
+        yPosition += 8;
+
+        // Get officers for this week
+        const allOfficers = new Map();
+        
+        scheduleData?.forEach(daySchedule => {
+          const scheduleDate = parseISO(daySchedule.date);
+          if (scheduleDate >= week.start && scheduleDate <= week.end) {
+            daySchedule.officers.forEach((officer: any) => {
+              if (!allOfficers.has(officer.officerId)) {
+                allOfficers.set(officer.officerId, {
+                  ...officer,
+                  weeklySchedule: {}
+                });
+              }
+              allOfficers.get(officer.officerId).weeklySchedule[daySchedule.date] = officer;
+            });
+          }
+        });
+
+        // Draw officer rows
+        pdf.setFontSize(7);
+        pdf.setTextColor(0, 0, 0);
+        
+        Array.from(allOfficers.values()).forEach((officer, index) => {
+          if (yPosition > pdf.internal.pageSize.getHeight() - 15) {
+            pdf.addPage();
+            yPosition = 20;
+            // Redraw headers on new page
+            xPosition = 15;
+            pdf.setFillColor(41, 128, 185);
+            pdf.setFontSize(8);
+            pdf.setTextColor(255, 255, 255);
+
+            pdf.rect(xPosition, yPosition, colWidths[0], 8, 'F');
+            pdf.text("BADGE", xPosition + 2, yPosition + 5);
+            xPosition += colWidths[0];
+            
+            pdf.rect(xPosition, yPosition, colWidths[1], 8, 'F');
+            pdf.text("NAME", xPosition + 2, yPosition + 5);
+            xPosition += colWidths[1];
+
+            weekDays.forEach(day => {
+              pdf.rect(xPosition, yPosition, dayColWidth, 8, 'F');
+              pdf.text(day.dayName, xPosition + 2, yPosition + 3);
+              pdf.text(day.formattedDate, xPosition + 2, yPosition + 6);
+              xPosition += dayColWidth;
+            });
+            yPosition += 8;
+          }
+
+          // Alternate row colors
+          if (index % 2 === 0) {
+            pdf.setFillColor(248, 249, 250);
+            pdf.rect(15, yPosition, pageWidth - 30, 6, 'F');
+          }
+
+          xPosition = 15;
+          
+          // Badge
+          pdf.text(officer.badgeNumber?.toString() || "", xPosition + 2, yPosition + 4);
+          xPosition += colWidths[0];
+          
+          // Name
+          pdf.text(getLastName(officer.officerName), xPosition + 2, yPosition + 4);
+          xPosition += colWidths[1];
+
+          // Daily assignments
+          weekDays.forEach(day => {
+            const dayOfficer = officer.weeklySchedule[day.dateStr];
+            let displayText = "";
+            let textColor = [0, 0, 0];
+
+            if (dayOfficer) {
+              if (dayOfficer.shiftInfo?.isOff) {
+                displayText = "OFF";
+                textColor = [100, 100, 100];
+              } else if (dayOfficer.shiftInfo?.hasPTO) {
+                displayText = "PTO";
+                textColor = [220, 38, 38];
+              } else if (dayOfficer.shiftInfo?.position) {
+                displayText = dayOfficer.shiftInfo.position.substring(0, 8);
+                textColor = [0, 100, 0];
+              } else {
+                displayText = "SCHED";
+                textColor = [0, 0, 150];
+              }
+            }
+
+            pdf.setTextColor(textColor[0], textColor[1], textColor[2]);
+            pdf.text(displayText, xPosition + 2, yPosition + 4);
+            xPosition += dayColWidth;
+          });
+
+          yPosition += 6;
+        });
+
+        yPosition += 10; // Space between weeks
+      }
+
+      // Footer
+      pdf.setFontSize(8);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`Generated on ${format(new Date(), "MMM d, yyyy 'at' h:mm a")}`, pageWidth / 2, pdf.internal.pageSize.getHeight() - 10, { align: 'center' });
+
+      const filename = `Weekly_Schedule_${shiftName.replace(/\s+/g, "_")}_${format(startDate, "yyyy-MM-dd")}_to_${format(endDate, "yyyy-MM-dd")}.pdf`;
+      pdf.save(filename);
+
+      return { success: true };
+    } catch (error) {
+      console.error("PDF export error:", error);
+      return { success: false, error };
+    }
+  };
+
+  return { exportWeeklyPDF };
+};
 
 const WeeklySchedule = ({ 
   userRole = 'officer', 
@@ -49,6 +263,11 @@ const WeeklySchedule = ({
   const [customPosition, setCustomPosition] = useState("");
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
+    from: startOfWeek(new Date(), { weekStartsOn: 0 }),
+    to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4) // Default 4 weeks
+  });
 
   // Use consolidated mutations hook
   const {
@@ -57,6 +276,8 @@ const WeeklySchedule = ({
     removePTOMutation,
     queryKey
   } = useWeeklyScheduleMutations(currentWeekStart, currentMonth, activeView, selectedShiftId);
+
+  const { exportWeeklyPDF } = useWeeklyPDFExport();
 
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
@@ -146,6 +367,253 @@ const WeeklySchedule = ({
   // Navigate to daily schedule
   const navigateToDailySchedule = (dateStr: string) => {
     navigate(`/daily-schedule?date=${dateStr}&shift=${selectedShiftId}`);
+  };
+
+  // Handle PDF export
+  const handleExportPDF = async () => {
+    if (!dateRange?.from || !dateRange?.to) {
+      toast.error("Please select a date range");
+      return;
+    }
+
+    if (!selectedShiftId) {
+      toast.error("Please select a shift");
+      return;
+    }
+
+    try {
+      toast.info("Generating PDF export...");
+      
+      // Fetch data for the selected date range
+      const startDate = dateRange.from;
+      const endDate = dateRange.to;
+      
+      const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date => 
+        format(date, "yyyy-MM-dd")
+      );
+
+      // Fetch schedule data for the date range
+      const { data: scheduleData, error } = await fetchScheduleDataForRange(startDate, endDate, dates);
+      
+      if (error) {
+        throw error;
+      }
+
+      const shiftName = shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Unknown Shift";
+      
+      const result = await exportWeeklyPDF({
+        startDate,
+        endDate,
+        shiftName,
+        scheduleData: scheduleData.dailySchedules || []
+      });
+
+      if (result.success) {
+        toast.success("PDF exported successfully");
+        setExportDialogOpen(false);
+      } else {
+        toast.error("Failed to export PDF");
+      }
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Error generating PDF export");
+    }
+  };
+
+  // Function to fetch schedule data for a date range
+  const fetchScheduleDataForRange = async (startDate: Date, endDate: Date, dates: string[]) => {
+    // Get recurring schedules
+    const { data: recurringData, error: recurringError } = await supabase
+      .from("recurring_schedules")
+      .select(`
+        *,
+        profiles:officer_id (
+          id, full_name, badge_number, rank, hire_date
+        ),
+        shift_types (
+          id, name, start_time, end_time
+        )
+      `)
+      .eq("shift_type_id", selectedShiftId)
+      .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
+
+    if (recurringError) throw recurringError;
+
+    // Get schedule exceptions
+    const { data: exceptionsData, error: exceptionsError } = await supabase
+      .from("schedule_exceptions")
+      .select("*")
+      .gte("date", startDate.toISOString().split('T')[0])
+      .lte("date", endDate.toISOString().split('T')[0])
+      .eq("shift_type_id", selectedShiftId);
+
+    if (exceptionsError) throw exceptionsError;
+
+    // Get officer profiles separately
+    const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
+    let officerProfiles = [];
+    if (officerIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, full_name, badge_number, rank, hire_date")
+        .in("id", officerIds);
+      officerProfiles = profilesData || [];
+    }
+
+    // Get shift types for exceptions
+    const shiftTypeIds = [...new Set(exceptionsData?.map(e => e.shift_type_id).filter(Boolean))];
+    let exceptionShiftTypes = [];
+    if (shiftTypeIds.length > 0) {
+      const { data: shiftTypesData } = await supabase
+        .from("shift_types")
+        .select("id, name, start_time, end_time")
+        .in("id", shiftTypeIds);
+      exceptionShiftTypes = shiftTypesData || [];
+    }
+
+    // Fetch service credits for all officers involved
+    const allOfficerIds = [
+      ...(recurringData?.map(r => r.officer_id) || []),
+      ...officerIds
+    ];
+    const uniqueOfficerIds = [...new Set(allOfficerIds)];
+    const serviceCredits = await fetchServiceCredits(uniqueOfficerIds);
+
+    // Combine exception data
+    const combinedExceptions = exceptionsData?.map(exception => ({
+      ...exception,
+      profiles: officerProfiles.find(p => p.id === exception.officer_id),
+      shift_types: exceptionShiftTypes.find(s => s.id === exception.shift_type_id)
+    })) || [];
+
+    // Build schedule structure (similar to main query but for the range)
+    const scheduleByDateAndOfficer: Record<string, Record<string, any>> = {};
+    dates.forEach(date => { scheduleByDateAndOfficer[date] = {}; });
+
+    // Process recurring schedules for the range
+    recurringData?.forEach(recurring => {
+      dates.forEach(date => {
+        const currentDate = parseISO(date);
+        const dayOfWeek = currentDate.getDay();
+        
+        if (recurring.day_of_week === dayOfWeek) {
+          const scheduleStartDate = parseISO(recurring.start_date);
+          const scheduleEndDate = recurring.end_date ? parseISO(recurring.end_date) : null;
+          
+          if (currentDate >= scheduleStartDate && (!scheduleEndDate || currentDate <= scheduleEndDate)) {
+            const exception = combinedExceptions?.find(e => 
+              e.officer_id === recurring.officer_id && e.date === date && !e.is_off
+            );
+            const ptoException = combinedExceptions?.find(e => 
+              e.officer_id === recurring.officer_id && e.date === date && e.is_off
+            );
+            const defaultAssignment = getDefaultAssignment(recurring.officer_id, date);
+
+            if (!scheduleByDateAndOfficer[date][recurring.officer_id]) {
+              scheduleByDateAndOfficer[date][recurring.officer_id] = {
+                officerId: recurring.officer_id,
+                officerName: recurring.profiles?.full_name || "Unknown",
+                badgeNumber: recurring.profiles?.badge_number,
+                rank: recurring.profiles?.rank,
+                service_credit: serviceCredits.get(recurring.officer_id) || 0,
+                date,
+                dayOfWeek,
+                isRegularRecurringDay: true,
+                shiftInfo: {
+                  type: recurring.shift_types?.name,
+                  time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
+                  position: recurring.position_name || defaultAssignment?.position_name,
+                  unitNumber: recurring.unit_number || defaultAssignment?.unit_number,
+                  scheduleId: recurring.id,
+                  scheduleType: "recurring" as const,
+                  shift: recurring.shift_types,
+                  isOff: false,
+                  hasPTO: !!ptoException,
+                  ptoData: ptoException ? {
+                    id: ptoException.id,
+                    ptoType: ptoException.reason,
+                    startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
+                    endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
+                    isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+                    shiftTypeId: ptoException.shift_type_id
+                  } : undefined
+                }
+              };
+            }
+          }
+        }
+      });
+    });
+
+    // Process working exceptions for the range
+    combinedExceptions?.filter(e => !e.is_off).forEach(exception => {
+      if (!scheduleByDateAndOfficer[exception.date]) {
+        scheduleByDateAndOfficer[exception.date] = {};
+      }
+
+      const ptoException = combinedExceptions?.find(e => 
+        e.officer_id === exception.officer_id && e.date === exception.date && e.is_off
+      );
+      const defaultAssignment = getDefaultAssignment(exception.officer_id, exception.date);
+
+      scheduleByDateAndOfficer[exception.date][exception.officer_id] = {
+        officerId: exception.officer_id,
+        officerName: exception.profiles?.full_name || "Unknown",
+        badgeNumber: exception.profiles?.badge_number,
+        rank: exception.profiles?.rank,
+        service_credit: serviceCredits.get(exception.officer_id) || 0,
+        date: exception.date,
+        dayOfWeek: parseISO(exception.date).getDay(),
+        isRegularRecurringDay: false,
+        shiftInfo: {
+          type: exception.shift_types?.name || "Custom",
+          time: exception.custom_start_time && exception.custom_end_time
+            ? `${exception.custom_start_time} - ${exception.custom_end_time}`
+            : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`,
+          position: exception.position_name || defaultAssignment?.position_name,
+          unitNumber: exception.unit_number || defaultAssignment?.unit_number,
+          scheduleId: exception.id,
+          scheduleType: "exception" as const,
+          shift: exception.shift_types,
+          isOff: false,
+          hasPTO: !!ptoException,
+          ptoData: ptoException ? {
+            id: ptoException.id,
+            ptoType: ptoException.reason,
+            startTime: ptoException.custom_start_time || exception.shift_types?.start_time,
+            endTime: ptoException.custom_end_time || exception.shift_types?.end_time,
+            isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+            shiftTypeId: ptoException.shift_type_id
+          } : undefined
+        }
+      };
+    });
+
+    // Convert to array format
+    const dailySchedules = dates.map(date => {
+      const officers = Object.values(scheduleByDateAndOfficer[date] || {});
+      const categorized = categorizeAndSortOfficers(officers);
+      const { supervisorCount, officerCount } = calculateStaffingCounts(categorized);
+
+      return {
+        date,
+        dayOfWeek: parseISO(date).getDay(),
+        officers,
+        categorizedOfficers: categorized,
+        staffing: {
+          supervisors: supervisorCount,
+          officers: officerCount,
+          total: supervisorCount + officerCount
+        }
+      };
+    });
+
+    return { 
+      dailySchedules, 
+      dates,
+      recurring: recurringData,
+      exceptions: combinedExceptions
+    };
   };
 
 // Main schedule query - UPDATED to fetch service credits
@@ -1017,26 +1485,32 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
               <Calendar className="h-5 w-5" />
               Schedule - {shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Select Shift"}
             </CardTitle>
-            {isAdminOrSupervisor && (
-              <div className="flex items-center gap-3">
-                <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
-                  <SelectTrigger className="w-64">
-                    <SelectValue placeholder="Select Shift" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {shiftTypes?.map((shift) => (
-                      <SelectItem key={shift.id} value={shift.id}>
-                        {shift.name} ({shift.start_time} - {shift.end_time})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button onClick={() => setDialogOpen(true)} size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Schedule
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {isAdminOrSupervisor && (
+                <>
+                  <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+                    <SelectTrigger className="w-64">
+                      <SelectValue placeholder="Select Shift" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {shiftTypes?.map((shift) => (
+                        <SelectItem key={shift.id} value={shift.id}>
+                          {shift.name} ({shift.start_time} - {shift.end_time})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={() => setDialogOpen(true)} size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Schedule
+                  </Button>
+                </>
+              )}
+              <Button onClick={() => setExportDialogOpen(true)} size="sm" variant="outline">
+                <Download className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
+            </div>
           </div>
           
           {!isAdminOrSupervisor && (
@@ -1165,6 +1639,89 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
             >
               {updatePositionMutation.isPending ? "Saving..." : "Save Assignment"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Export Dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-5 w-5" />
+              Export Schedule to PDF
+            </DialogTitle>
+            <DialogDescription>
+              Export recurring schedules and assignments for a specific time period.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="date-range">Date Range</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="date-range"
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !dateRange && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarRange className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, "LLL dd, y")} -{" "}
+                          {format(dateRange.to, "LLL dd, y")}
+                        </>
+                      ) : (
+                        format(dateRange.from, "LLL dd, y")
+                      )
+                    ) : (
+                      <span>Pick a date range</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="export-shift">Shift</Label>
+              <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select shift" />
+                </SelectTrigger>
+                <SelectContent>
+                  {shiftTypes?.map((shift) => (
+                    <SelectItem key={shift.id} value={shift.id}>
+                      {shift.name} ({shift.start_time} - {shift.end_time})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleExportPDF} disabled={!dateRange?.from || !dateRange?.to || !selectedShiftId}>
+                <Download className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
