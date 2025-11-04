@@ -120,6 +120,10 @@ const WeeklySchedule = ({
     queryKey,
   } = useWeeklyScheduleMutations(currentWeekStart, currentMonth, activeView, selectedShiftId);
 
+  useEffect(() => {
+  console.log("Export Dialog Open value:", exportDialogOpen);
+}, [exportDialogOpen]);
+
 
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
