@@ -276,6 +276,8 @@ const scheduleByShift = shiftTypes?.map((shift) => {
         customTime = `${workingException.custom_start_time} - ${workingException.custom_end_time}`;
       }
 
+            );
+
       // Use working exception data if it exists, otherwise use recurring data
       const finalData = workingException ? {
         scheduleId: workingException.id,
@@ -922,7 +924,7 @@ const scheduleByShift = shiftTypes?.map((shift) => {
       </Dialog>
     </Card>
   );
-}; // Add this line to close DailyScheduleView
+}; 
 
 // Add Officer Form Component
 const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel, shift }: any) => {
