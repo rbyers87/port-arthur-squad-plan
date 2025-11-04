@@ -83,13 +83,14 @@ export const DailyScheduleView = ({
     });
   };
 
-  // Use centralized mutation hook
+  // Use centralized mutation hook - NOW INCLUDES PARTNERSHIP MUTATION
   const {
     updateScheduleMutation,
     updatePTODetailsMutation,
     removeOfficerMutation,
     addOfficerMutation,
-    removePTOMutation
+    removePTOMutation,
+    updatePartnershipMutation // NEW: Added partnership mutation
   } = useScheduleMutations(dateStr);
 
   const { data: scheduleData, isLoading } = useQuery({
@@ -298,6 +299,9 @@ export const DailyScheduleView = ({
               endTime: ptoException.custom_end_time || shift.end_time,
               isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
             } : undefined,
+            // NEW: Partnership data
+            isPartnership: workingException.is_partnership || r.is_partnership,
+            partnerOfficerId: workingException.partner_officer_id || r.partner_officer_id,
             shift: shift,
             isExtraShift: false // This is their regular shift
           } : {
@@ -322,6 +326,9 @@ export const DailyScheduleView = ({
               endTime: ptoException.custom_end_time || shift.end_time,
               isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
             } : undefined,
+            // NEW: Partnership data
+            isPartnership: r.is_partnership,
+            partnerOfficerId: r.partner_officer_id,
             shift: shift,
             isExtraShift: false
           };
@@ -402,6 +409,9 @@ export const DailyScheduleView = ({
               endTime: ptoException.custom_end_time || shift.end_time,
               isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
             } : undefined,
+            // NEW: Partnership data
+            isPartnership: e.is_partnership,
+            partnerOfficerId: e.partner_officer_id,
             shift: shift,
             isExtraShift: !isRegularRecurring
           };
@@ -411,12 +421,32 @@ export const DailyScheduleView = ({
 
       const allOfficers = Array.from(allOfficersMap.values());
 
-      console.log(`👥 Final officers for ${shift.name}:`, allOfficers.length, allOfficers.map(o => ({
+      // NEW: Process partnerships to add partner data
+      const officersWithPartners = allOfficers.map(officer => {
+        if (officer.isPartnership && officer.partnerOfficerId) {
+          const partnerOfficer = allOfficers.find(o => o.officerId === officer.partnerOfficerId);
+          if (partnerOfficer) {
+            return {
+              ...officer,
+              partnerData: {
+                partnerOfficerId: partnerOfficer.officerId,
+                partnerName: partnerOfficer.name,
+                partnerBadge: partnerOfficer.badge,
+                partnerRank: partnerOfficer.rank
+              }
+            };
+          }
+        }
+        return officer;
+      });
+
+      console.log(`👥 Final officers for ${shift.name}:`, officersWithPartners.length, officersWithPartners.map(o => ({
         name: o.name,
         type: o.type,
         isExtraShift: o.isExtraShift,
         position: o.position,
         isPPO: o.isPPO, // Log the new PPO status
+        isPartnership: o.isPartnership, // Log partnership status
         hasDefault: !!getDefaultAssignment(o.officerId)
       })));
 
@@ -440,19 +470,19 @@ export const DailyScheduleView = ({
 
       // Categorize officers - ONLY SUPERVISORS GET SORTED BY RANK
       const supervisors = sortSupervisorsByRank(
-        allOfficers.filter(o => 
+        officersWithPartners.filter(o => 
           o.position?.toLowerCase().includes('supervisor')
         )
       );
 
-      const specialAssignmentOfficers = allOfficers.filter(o => {
+      const specialAssignmentOfficers = officersWithPartners.filter(o => {
         const position = o.position?.toLowerCase() || '';
         return position.includes('other') || 
                (o.position && !PREDEFINED_POSITIONS.includes(o.position));
       }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
       // Regular officers for display (includes PPOs)
-      const regularOfficers = allOfficers.filter(o => 
+      const regularOfficers = officersWithPartners.filter(o => 
         !o.position?.toLowerCase().includes('supervisor') && 
         !specialAssignmentOfficers.includes(o)
       ).sort((a, b) => {
@@ -490,7 +520,8 @@ export const DailyScheduleView = ({
         totalOfficers: regularOfficers.length,
         countedOfficers: countedOfficers.length,
         ppos: regularOfficers.filter(o => o.isPPO).length,
-        fullDayPTOs: allOfficers.filter(o => o.hasPTO && o.ptoData?.isFullShift).length
+        fullDayPTOs: officersWithPartners.filter(o => o.hasPTO && o.ptoData?.isFullShift).length,
+        partnerships: officersWithPartners.filter(o => o.isPartnership).length
       });
 
       return {
@@ -559,6 +590,15 @@ export const DailyScheduleView = ({
       currentPosition: officer.position,
       unitNumber: officer.unitNumber,
       notes: notes
+    });
+  };
+
+  // NEW: Partnership handler
+  const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
+    updatePartnershipMutation.mutate({
+      officer,
+      partnerOfficerId,
+      action: partnerOfficerId ? 'create' : 'remove'
     });
   };
 
@@ -732,6 +772,7 @@ export const DailyScheduleView = ({
                   setPtoDialogOpen(true);
                 }}
                 onRemoveOfficer={removeOfficerMutation.mutate}
+                onPartnershipChange={handlePartnershipChange} // NEW: Added partnership handler
                 isUpdating={updateScheduleMutation.isPending}
                 sectionType="regular"
               />
@@ -757,6 +798,7 @@ export const DailyScheduleView = ({
                   setPtoDialogOpen(true);
                 }}
                 onRemoveOfficer={removeOfficerMutation.mutate}
+                onPartnershipChange={handlePartnershipChange} // NEW: Added partnership handler
                 isUpdating={updateScheduleMutation.isPending}
                 sectionType="regular"
               />
@@ -784,6 +826,7 @@ export const DailyScheduleView = ({
                     setPtoDialogOpen(true);
                   }}
                   onRemoveOfficer={removeOfficerMutation.mutate}
+                  onPartnershipChange={handlePartnershipChange} // NEW: Added partnership handler
                   isUpdating={updateScheduleMutation.isPending}
                   sectionType="special"
                 />
