@@ -2,6 +2,7 @@
 import { Badge } from "@/components/ui/badge";
 import { OfficerCard } from "./OfficerCard";
 import { PTOCard } from "./PTOCard";
+import { PartnershipManager } from "./PartnershipManager"; // We'll create this
 
 interface OfficerSectionProps {
   title: string;
@@ -18,6 +19,7 @@ interface OfficerSectionProps {
   onRemoveOfficer?: (officer: any) => void;
   onEditPTO?: (ptoRecord: any) => void;
   onRemovePTO?: (ptoRecord: any) => void;
+  onPartnershipChange?: (officer: any, partnerOfficerId?: string) => void; // Add partnership handler
   isUpdating?: boolean;
   sectionType?: "regular" | "special" | "pto";
 }
@@ -37,6 +39,7 @@ export const OfficerSection = ({
   onRemoveOfficer,
   onEditPTO,
   onRemovePTO,
+  onPartnershipChange, // Add partnership handler
   isUpdating = false,
   sectionType = "regular"
 }: OfficerSectionProps) => {
@@ -87,6 +90,7 @@ export const OfficerSection = ({
               onSaveNotes={(off, notes) => onSaveNotes(off, notes)}
               onAssignPTO={onAssignPTO}
               onRemove={onRemoveOfficer}
+              onPartnershipChange={onPartnershipChange} // Pass partnership handler
               isUpdating={isUpdating}
               sectionType={sectionType}
             />
