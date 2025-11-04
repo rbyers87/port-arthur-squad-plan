@@ -66,18 +66,28 @@ export const isSpecialAssignment = (position: string | undefined): boolean => {
 };
 
 /**
- * Calculate staffing counts excluding PTO and special assignments
+ * Calculate staffing counts excluding full-day PTO, special assignments, and probationary officers
  */
 export const calculateStaffingCounts = (
   categorizedOfficers: { supervisors: any[]; regularOfficers: any[] }
 ) => {
   const supervisorCount = categorizedOfficers.supervisors.filter(
-    officer => !officer.shiftInfo?.hasPTO
+    officer => {
+      const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+      const isProbationary = officer.rank === 'Probationary';
+      return !hasFullDayPTO && !isProbationary;
+    }
   ).length;
 
   const officerCount = categorizedOfficers.regularOfficers.filter(officer => {
     const position = officer.shiftInfo?.position;
-    return !officer.shiftInfo?.hasPTO && !isSpecialAssignment(position);
+    const rank = officer.rank || officer.shiftInfo?.rank;
+    const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+    
+    // Exclude if: full-day PTO, special assignment, or probationary
+    return !hasFullDayPTO && 
+           !isSpecialAssignment(position) &&
+           rank !== 'Probationary';
   }).length;
 
   return { supervisorCount, officerCount };
