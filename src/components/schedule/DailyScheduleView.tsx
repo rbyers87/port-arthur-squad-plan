@@ -498,6 +498,7 @@ return {
 
     return filteredSchedule;
   },
+  }
 });
 
   // FIXED: Updated handlers to work with the new callback signatures
