@@ -1485,98 +1485,71 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogContent>
       </Dialog>
 
-{/* PDF Export Dialog - ONLY RENDERS WHEN DIALOG IS OPEN */}
-      {exportDialogOpen && (
-        <Dialog open={exportDialogOpen} onOpenChange={(open) => {
-          setExportDialogOpen(open);
-          if (!open) {
-            setCalendarOpen(false);
-            setDateRange(undefined);
-          }
-        }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Download className="h-5 w-5" />
-              Export Schedule to PDF
-            </DialogTitle>
-            <DialogDescription>
-              Export recurring schedules and assignments for a specific time period.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="date-range">Date Range</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="date-range"
-                    variant={"outline"}
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !dateRange && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarRange className="mr-2 h-4 w-4" />
-                    {dateRange?.from ? (
-                      dateRange.to ? (
-                        <>
-                          {format(dateRange.from, "LLL dd, y")} -{" "}
-                          {format(dateRange.to, "LLL dd, y")}
-                        </>
-                      ) : (
-                        format(dateRange.from, "LLL dd, y")
-                      )
-                    ) : (
-                      <span>Pick a date range</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    initialFocus
-                    mode="range"
-                    defaultMonth={dateRange?.from}
-                    selected={dateRange}
-                    onSelect={(range) => {
-                      setDateRange(range);
-                    }}
-                    numberOfMonths={2}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+{/* PDF Export Dialog - ONLY renders when explicitly opened */}
+{exportDialogOpen && (
+  <Dialog
+    open={exportDialogOpen}
+    onOpenChange={(open) => {
+      setExportDialogOpen(open);
+      if (!open) setDateRange(undefined);
+    }}
+  >
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <Download className="h-5 w-5" />
+          Export Schedule to PDF
+        </DialogTitle>
+        <DialogDescription>
+          Export recurring schedules and assignments for a specific time period.
+        </DialogDescription>
+      </DialogHeader>
 
-            <div className="space-y-2">
-              <Label htmlFor="export-shift">Shift</Label>
-              <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select shift" />
-                </SelectTrigger>
-                <SelectContent>
-                  {shiftTypes?.map((shift) => (
-                    <SelectItem key={shift.id} value={shift.id}>
-                      {shift.name} ({shift.start_time} - {shift.end_time})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <div className="space-y-2">
+        <Label htmlFor="date-range">Date Range</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              id="date-range"
+              variant="outline"
+              className={cn(
+                "w-full justify-start text-left font-normal",
+                !dateRange && "text-muted-foreground"
+              )}
+            >
+              <CalendarRange className="mr-2 h-4 w-4" />
+              {dateRange?.from
+                ? dateRange.to
+                  ? `${format(dateRange.from, "LLL dd, y")} - ${format(
+                      dateRange.to,
+                      "LLL dd, y"
+                    )}`
+                  : format(dateRange.from, "LLL dd, y")
+                : "Pick a date range"}
+            </Button>
+          </PopoverTrigger>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleExportPDF} disabled={!dateRange?.from || !dateRange?.to || !selectedShiftId}>
-                <Download className="h-4 w-4 mr-2" />
-                Export PDF
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-  )} 
+          {/* 👇 This calendar popover should only show when you click the date button */}
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange?.from}
+              selected={dateRange}
+              onSelect={setDateRange}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      <Button className="w-full mt-4" onClick={handleExportPDF}>
+        Export PDF
+      </Button>
+    </DialogContent>
+  </Dialog>
+)}
+
 
       {/* Schedule Management Dialog */}
       {isAdminOrSupervisor && (
