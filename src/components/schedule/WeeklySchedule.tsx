@@ -1,61 +1,107 @@
-// components/schedule/WeeklySchedule.tsx - REFACTORED VERSION WITH PDF EXPORT
+// src/components/schedule/WeeklySchedule.tsx
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Grid, Download, CalendarRange } from "lucide-react";
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO, eachWeekOfInterval, addYears, subYears } from "date-fns";
+
+import {
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Grid,
+  Download,
+  CalendarRange,
+} from "lucide-react";
+
+import {
+  format,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  addDays,
+  addWeeks,
+  subWeeks,
+  startOfMonth,
+  endOfMonth,
+  addMonths,
+  subMonths,
+  isSameDay,
+  isSameMonth,
+  parseISO,
+  eachWeekOfInterval,
+  addYears,
+  subYears,
+} from "date-fns";
+
 import { toast } from "sonner";
 import { PREDEFINED_POSITIONS } from "@/constants/positions";
 import { ScheduleCell } from "./ScheduleCell";
 import { useWeeklyScheduleMutations } from "@/hooks/useWeeklyScheduleMutations";
-import { useWeeklyPDFExport } from "@/hooks/useWeeklyPDFExport";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
-import { 
-  getLastName, 
+import {
+  getLastName,
   categorizeAndSortOfficers,
   calculateStaffingCounts,
   MINIMUM_STAFFING,
-  MINIMUM_SUPERVISORS
+  MINIMUM_SUPERVISORS,
 } from "@/utils/scheduleUtils";
 import { cn } from "@/lib/utils";
 
+// ✅ Import the extracted PDF hook (lazy load option explained below)
+import { useWeeklyPDFExport } from "@/hooks/useWeeklyPDFExport";
+
 interface WeeklyScheduleProps {
-  userRole?: 'officer' | 'supervisor' | 'admin';
+  userRole?: "officer" | "supervisor" | "admin";
   isAdminOrSupervisor?: boolean;
 }
 
-interface ExportOptions {
-  startDate: Date;
-  endDate: Date;
-  shiftName: string;
-  scheduleData: any[];
-}
-
-const WeeklySchedule = ({ 
-  userRole = 'officer', 
-  isAdminOrSupervisor = false 
+const WeeklySchedule = ({
+  userRole = "officer",
+  isAdminOrSupervisor = false,
 }: WeeklyScheduleProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  
-  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 0 }));
+
+  // PDF export hook
+  const { exportWeeklyPDF } = useWeeklyPDFExport();
+
+  // All your existing useState hooks here
+  const [currentWeekStart, setCurrentWeekStart] = useState(
+    startOfWeek(new Date(), { weekStartsOn: 0 })
+  );
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [activeView, setActiveView] = useState<"weekly" | "monthly">("weekly");
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingAssignment, setEditingAssignment] = useState<{ officer: any; dateStr: string } | null>(null);
+  const [editingAssignment, setEditingAssignment] = useState<{
+    officer: any;
+    dateStr: string;
+  } | null>(null);
   const [editPosition, setEditPosition] = useState("");
   const [customPosition, setCustomPosition] = useState("");
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
@@ -63,22 +109,16 @@ const WeeklySchedule = ({
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
     from: startOfWeek(new Date(), { weekStartsOn: 0 }),
-    to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4) // Default 4 weeks
+    to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4),
   });
 
-  // Use consolidated mutations hook
+  // Mutations for editing schedule, removing PTO, etc.
   const {
     updatePositionMutation,
     removeOfficerMutation,
     removePTOMutation,
-    queryKey
+    queryKey,
   } = useWeeklyScheduleMutations(currentWeekStart, currentMonth, activeView, selectedShiftId);
-
-  const handleExportPDF = async () => {
-  const { useWeeklyPDFExport } = await import("@/hooks/useWeeklyPDFExport");
-  const { exportWeeklyPDF } = useWeeklyPDFExport();
-  ...
-};
 
 
   // Get shift types
