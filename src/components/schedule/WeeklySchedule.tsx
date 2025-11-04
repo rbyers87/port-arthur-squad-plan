@@ -1,4 +1,4 @@
-// components/schedule/WeeklySchedule.tsx - FIXED VERSION
+// components/schedule/WeeklySchedule.tsx - REFACTORED VERSION WITH PDF EXPORT
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -264,7 +264,6 @@ const WeeklySchedule = ({
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
     from: startOfWeek(new Date(), { weekStartsOn: 0 }),
     to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4) // Default 4 weeks
@@ -370,7 +369,7 @@ const WeeklySchedule = ({
     navigate(`/daily-schedule?date=${dateStr}&shift=${selectedShiftId}`);
   };
 
-  // FIXED: Handle PDF export with proper error handling
+  // Handle PDF export
   const handleExportPDF = async () => {
     if (!dateRange?.from || !dateRange?.to) {
       toast.error("Please select a date range");
@@ -385,14 +384,19 @@ const WeeklySchedule = ({
     try {
       toast.info("Generating PDF export...");
       
+      // Fetch data for the selected date range
       const startDate = dateRange.from;
       const endDate = dateRange.to;
       
+      const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date => 
+        format(date, "yyyy-MM-dd")
+      );
+
       // Fetch schedule data for the date range
-      const scheduleData = await fetchScheduleDataForRange(startDate, endDate);
+      const { data: scheduleData, error } = await fetchScheduleDataForRange(startDate, endDate, dates);
       
-      if (!scheduleData || !scheduleData.dailySchedules) {
-        throw new Error("No schedule data found for the selected date range");
+      if (error) {
+        throw error;
       }
 
       const shiftName = shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Unknown Shift";
@@ -401,7 +405,7 @@ const WeeklySchedule = ({
         startDate,
         endDate,
         shiftName,
-        scheduleData: scheduleData.dailySchedules
+        scheduleData: scheduleData.dailySchedules || []
       });
 
       if (result.success) {
@@ -416,213 +420,200 @@ const WeeklySchedule = ({
     }
   };
 
-  // FIXED: Function to fetch schedule data for a date range
-  const fetchScheduleDataForRange = async (startDate: Date, endDate: Date) => {
-    const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date => 
-      format(date, "yyyy-MM-dd")
-    );
+  // Function to fetch schedule data for a date range
+  const fetchScheduleDataForRange = async (startDate: Date, endDate: Date, dates: string[]) => {
+    // Get recurring schedules
+    const { data: recurringData, error: recurringError } = await supabase
+      .from("recurring_schedules")
+      .select(`
+        *,
+        profiles:officer_id (
+          id, full_name, badge_number, rank, hire_date
+        ),
+        shift_types (
+          id, name, start_time, end_time
+        )
+      `)
+      .eq("shift_type_id", selectedShiftId)
+      .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
 
-    console.log("Fetching schedule data for range:", { startDate, endDate, dates });
+    if (recurringError) throw recurringError;
 
-    try {
-      // Get recurring schedules
-      const { data: recurringData, error: recurringError } = await supabase
-        .from("recurring_schedules")
-        .select(`
-          *,
-          profiles:officer_id (
-            id, full_name, badge_number, rank, hire_date
-          ),
-          shift_types (
-            id, name, start_time, end_time
-          )
-        `)
-        .eq("shift_type_id", selectedShiftId)
-        .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
+    // Get schedule exceptions
+    const { data: exceptionsData, error: exceptionsError } = await supabase
+      .from("schedule_exceptions")
+      .select("*")
+      .gte("date", startDate.toISOString().split('T')[0])
+      .lte("date", endDate.toISOString().split('T')[0])
+      .eq("shift_type_id", selectedShiftId);
 
-      if (recurringError) {
-        console.error("Recurring schedules error:", recurringError);
-        throw recurringError;
-      }
+    if (exceptionsError) throw exceptionsError;
 
-      // Get schedule exceptions
-      const { data: exceptionsData, error: exceptionsError } = await supabase
-        .from("schedule_exceptions")
-        .select("*")
-        .gte("date", startDate.toISOString().split('T')[0])
-        .lte("date", endDate.toISOString().split('T')[0])
-        .eq("shift_type_id", selectedShiftId);
+    // Get officer profiles separately
+    const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
+    let officerProfiles = [];
+    if (officerIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, full_name, badge_number, rank, hire_date")
+        .in("id", officerIds);
+      officerProfiles = profilesData || [];
+    }
 
-      if (exceptionsError) {
-        console.error("Schedule exceptions error:", exceptionsError);
-        throw exceptionsError;
-      }
+    // Get shift types for exceptions
+    const shiftTypeIds = [...new Set(exceptionsData?.map(e => e.shift_type_id).filter(Boolean))];
+    let exceptionShiftTypes = [];
+    if (shiftTypeIds.length > 0) {
+      const { data: shiftTypesData } = await supabase
+        .from("shift_types")
+        .select("id, name, start_time, end_time")
+        .in("id", shiftTypeIds);
+      exceptionShiftTypes = shiftTypesData || [];
+    }
 
-      // Get officer profiles separately
-      const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
-      let officerProfiles = [];
-      if (officerIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from("profiles")
-          .select("id, full_name, badge_number, rank, hire_date")
-          .in("id", officerIds);
-        officerProfiles = profilesData || [];
-      }
+    // Fetch service credits for all officers involved
+    const allOfficerIds = [
+      ...(recurringData?.map(r => r.officer_id) || []),
+      ...officerIds
+    ];
+    const uniqueOfficerIds = [...new Set(allOfficerIds)];
+    const serviceCredits = await fetchServiceCredits(uniqueOfficerIds);
 
-      // Get shift types for exceptions
-      const shiftTypeIds = [...new Set(exceptionsData?.map(e => e.shift_type_id).filter(Boolean))];
-      let exceptionShiftTypes = [];
-      if (shiftTypeIds.length > 0) {
-        const { data: shiftTypesData } = await supabase
-          .from("shift_types")
-          .select("id, name, start_time, end_time")
-          .in("id", shiftTypeIds);
-        exceptionShiftTypes = shiftTypesData || [];
-      }
+    // Combine exception data
+    const combinedExceptions = exceptionsData?.map(exception => ({
+      ...exception,
+      profiles: officerProfiles.find(p => p.id === exception.officer_id),
+      shift_types: exceptionShiftTypes.find(s => s.id === exception.shift_type_id)
+    })) || [];
 
-      // Fetch service credits for all officers involved
-      const allOfficerIds = [
-        ...(recurringData?.map(r => r.officer_id) || []),
-        ...officerIds
-      ];
-      const uniqueOfficerIds = [...new Set(allOfficerIds)];
-      const serviceCredits = await fetchServiceCredits(uniqueOfficerIds);
+    // Build schedule structure (similar to main query but for the range)
+    const scheduleByDateAndOfficer: Record<string, Record<string, any>> = {};
+    dates.forEach(date => { scheduleByDateAndOfficer[date] = {}; });
 
-      // Combine exception data
-      const combinedExceptions = exceptionsData?.map(exception => ({
-        ...exception,
-        profiles: officerProfiles.find(p => p.id === exception.officer_id),
-        shift_types: exceptionShiftTypes.find(s => s.id === exception.shift_type_id)
-      })) || [];
-
-      // Build schedule structure
-      const scheduleByDateAndOfficer: Record<string, Record<string, any>> = {};
-      dates.forEach(date => { scheduleByDateAndOfficer[date] = {}; });
-
-      // Process recurring schedules for the range
-      recurringData?.forEach(recurring => {
-        dates.forEach(date => {
-          const currentDate = parseISO(date);
-          const dayOfWeek = currentDate.getDay();
+    // Process recurring schedules for the range
+    recurringData?.forEach(recurring => {
+      dates.forEach(date => {
+        const currentDate = parseISO(date);
+        const dayOfWeek = currentDate.getDay();
+        
+        if (recurring.day_of_week === dayOfWeek) {
+          const scheduleStartDate = parseISO(recurring.start_date);
+          const scheduleEndDate = recurring.end_date ? parseISO(recurring.end_date) : null;
           
-          if (recurring.day_of_week === dayOfWeek) {
-            const scheduleStartDate = parseISO(recurring.start_date);
-            const scheduleEndDate = recurring.end_date ? parseISO(recurring.end_date) : null;
-            
-            if (currentDate >= scheduleStartDate && (!scheduleEndDate || currentDate <= scheduleEndDate)) {
-              const exception = combinedExceptions?.find(e => 
-                e.officer_id === recurring.officer_id && e.date === date && !e.is_off
-              );
-              const ptoException = combinedExceptions?.find(e => 
-                e.officer_id === recurring.officer_id && e.date === date && e.is_off
-              );
-              const defaultAssignment = getDefaultAssignment(recurring.officer_id, date);
+          if (currentDate >= scheduleStartDate && (!scheduleEndDate || currentDate <= scheduleEndDate)) {
+            const exception = combinedExceptions?.find(e => 
+              e.officer_id === recurring.officer_id && e.date === date && !e.is_off
+            );
+            const ptoException = combinedExceptions?.find(e => 
+              e.officer_id === recurring.officer_id && e.date === date && e.is_off
+            );
+            const defaultAssignment = getDefaultAssignment(recurring.officer_id, date);
 
-              if (!scheduleByDateAndOfficer[date][recurring.officer_id]) {
-                scheduleByDateAndOfficer[date][recurring.officer_id] = {
-                  officerId: recurring.officer_id,
-                  officerName: recurring.profiles?.full_name || "Unknown",
-                  badgeNumber: recurring.profiles?.badge_number,
-                  rank: recurring.profiles?.rank,
-                  service_credit: serviceCredits.get(recurring.officer_id) || 0,
-                  date,
-                  dayOfWeek,
-                  isRegularRecurringDay: true,
-                  shiftInfo: {
-                    type: recurring.shift_types?.name,
-                    time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
-                    position: recurring.position_name || defaultAssignment?.position_name,
-                    unitNumber: recurring.unit_number || defaultAssignment?.unit_number,
-                    scheduleId: recurring.id,
-                    scheduleType: "recurring" as const,
-                    shift: recurring.shift_types,
-                    isOff: false,
-                    hasPTO: !!ptoException,
-                    ptoData: ptoException ? {
-                      id: ptoException.id,
-                      ptoType: ptoException.reason,
-                      startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
-                      endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
-                      isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
-                      shiftTypeId: ptoException.shift_type_id
-                    } : undefined
-                  }
-                };
-              }
+            if (!scheduleByDateAndOfficer[date][recurring.officer_id]) {
+              scheduleByDateAndOfficer[date][recurring.officer_id] = {
+                officerId: recurring.officer_id,
+                officerName: recurring.profiles?.full_name || "Unknown",
+                badgeNumber: recurring.profiles?.badge_number,
+                rank: recurring.profiles?.rank,
+                service_credit: serviceCredits.get(recurring.officer_id) || 0,
+                date,
+                dayOfWeek,
+                isRegularRecurringDay: true,
+                shiftInfo: {
+                  type: recurring.shift_types?.name,
+                  time: `${recurring.shift_types?.start_time} - ${recurring.shift_types?.end_time}`,
+                  position: recurring.position_name || defaultAssignment?.position_name,
+                  unitNumber: recurring.unit_number || defaultAssignment?.unit_number,
+                  scheduleId: recurring.id,
+                  scheduleType: "recurring" as const,
+                  shift: recurring.shift_types,
+                  isOff: false,
+                  hasPTO: !!ptoException,
+                  ptoData: ptoException ? {
+                    id: ptoException.id,
+                    ptoType: ptoException.reason,
+                    startTime: ptoException.custom_start_time || recurring.shift_types?.start_time,
+                    endTime: ptoException.custom_end_time || recurring.shift_types?.end_time,
+                    isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+                    shiftTypeId: ptoException.shift_type_id
+                  } : undefined
+                }
+              };
             }
           }
-        });
-      });
-
-      // Process working exceptions for the range
-      combinedExceptions?.filter(e => !e.is_off).forEach(exception => {
-        if (!scheduleByDateAndOfficer[exception.date]) {
-          scheduleByDateAndOfficer[exception.date] = {};
         }
-
-        const ptoException = combinedExceptions?.find(e => 
-          e.officer_id === exception.officer_id && e.date === exception.date && e.is_off
-        );
-        const defaultAssignment = getDefaultAssignment(exception.officer_id, exception.date);
-
-        scheduleByDateAndOfficer[exception.date][exception.officer_id] = {
-          officerId: exception.officer_id,
-          officerName: exception.profiles?.full_name || "Unknown",
-          badgeNumber: exception.profiles?.badge_number,
-          rank: exception.profiles?.rank,
-          service_credit: serviceCredits.get(exception.officer_id) || 0,
-          date: exception.date,
-          dayOfWeek: parseISO(exception.date).getDay(),
-          isRegularRecurringDay: false,
-          shiftInfo: {
-            type: exception.shift_types?.name || "Custom",
-            time: exception.custom_start_time && exception.custom_end_time
-              ? `${exception.custom_start_time} - ${exception.custom_end_time}`
-              : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`,
-            position: exception.position_name || defaultAssignment?.position_name,
-            unitNumber: exception.unit_number || defaultAssignment?.unit_number,
-            scheduleId: exception.id,
-            scheduleType: "exception" as const,
-            shift: exception.shift_types,
-            isOff: false,
-            hasPTO: !!ptoException,
-            ptoData: ptoException ? {
-              id: ptoException.id,
-              ptoType: ptoException.reason,
-              startTime: ptoException.custom_start_time || exception.shift_types?.start_time,
-              endTime: ptoException.custom_end_time || exception.shift_types?.end_time,
-              isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
-              shiftTypeId: ptoException.shift_type_id
-            } : undefined
-          }
-        };
       });
+    });
 
-      // Convert to array format
-      const dailySchedules = dates.map(date => {
-        const officers = Object.values(scheduleByDateAndOfficer[date] || {});
-        const categorized = categorizeAndSortOfficers(officers);
-        const { supervisorCount, officerCount } = calculateStaffingCounts(categorized);
+    // Process working exceptions for the range
+    combinedExceptions?.filter(e => !e.is_off).forEach(exception => {
+      if (!scheduleByDateAndOfficer[exception.date]) {
+        scheduleByDateAndOfficer[exception.date] = {};
+      }
 
-        return {
-          date,
-          dayOfWeek: parseISO(date).getDay(),
-          officers,
-          categorizedOfficers: categorized,
-          staffing: {
-            supervisors: supervisorCount,
-            officers: officerCount,
-            total: supervisorCount + officerCount
-          }
-        };
-      });
+      const ptoException = combinedExceptions?.find(e => 
+        e.officer_id === exception.officer_id && e.date === exception.date && e.is_off
+      );
+      const defaultAssignment = getDefaultAssignment(exception.officer_id, exception.date);
 
-      console.log("Fetched schedule data:", { dailySchedules: dailySchedules.length });
-      return { dailySchedules };
-    } catch (error) {
-      console.error("Error fetching schedule data for range:", error);
-      throw error;
-    }
+      scheduleByDateAndOfficer[exception.date][exception.officer_id] = {
+        officerId: exception.officer_id,
+        officerName: exception.profiles?.full_name || "Unknown",
+        badgeNumber: exception.profiles?.badge_number,
+        rank: exception.profiles?.rank,
+        service_credit: serviceCredits.get(exception.officer_id) || 0,
+        date: exception.date,
+        dayOfWeek: parseISO(exception.date).getDay(),
+        isRegularRecurringDay: false,
+        shiftInfo: {
+          type: exception.shift_types?.name || "Custom",
+          time: exception.custom_start_time && exception.custom_end_time
+            ? `${exception.custom_start_time} - ${exception.custom_end_time}`
+            : `${exception.shift_types?.start_time} - ${exception.shift_types?.end_time}`,
+          position: exception.position_name || defaultAssignment?.position_name,
+          unitNumber: exception.unit_number || defaultAssignment?.unit_number,
+          scheduleId: exception.id,
+          scheduleType: "exception" as const,
+          shift: exception.shift_types,
+          isOff: false,
+          hasPTO: !!ptoException,
+          ptoData: ptoException ? {
+            id: ptoException.id,
+            ptoType: ptoException.reason,
+            startTime: ptoException.custom_start_time || exception.shift_types?.start_time,
+            endTime: ptoException.custom_end_time || exception.shift_types?.end_time,
+            isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time,
+            shiftTypeId: ptoException.shift_type_id
+          } : undefined
+        }
+      };
+    });
+
+    // Convert to array format
+    const dailySchedules = dates.map(date => {
+      const officers = Object.values(scheduleByDateAndOfficer[date] || {});
+      const categorized = categorizeAndSortOfficers(officers);
+      const { supervisorCount, officerCount } = calculateStaffingCounts(categorized);
+
+      return {
+        date,
+        dayOfWeek: parseISO(date).getDay(),
+        officers,
+        categorizedOfficers: categorized,
+        staffing: {
+          supervisors: supervisorCount,
+          officers: officerCount,
+          total: supervisorCount + officerCount
+        }
+      };
+    });
+
+    return { 
+      dailySchedules, 
+      dates,
+      recurring: recurringData,
+      exceptions: combinedExceptions
+    };
   };
 
 // Main schedule query - UPDATED to fetch service credits
@@ -1652,15 +1643,8 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogContent>
       </Dialog>
 
-{/* PDF Export Dialog - ONLY RENDERS WHEN DIALOG IS OPEN */}
-      {exportDialogOpen && (
-        <Dialog open={exportDialogOpen} onOpenChange={(open) => {
-          setExportDialogOpen(open);
-          if (!open) {
-            setCalendarOpen(false);
-            setDateRange(undefined);
-          }
-        }}>
+      {/* PDF Export Dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1706,82 +1690,80 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                     mode="range"
                     defaultMonth={dateRange?.from}
                     selected={dateRange}
-                    onSelect={(range) => {
-                      setDateRange(range);
-                    }}
+                    onSelect={setDateRange}
                     numberOfMonths={2}
                   />
                 </PopoverContent>
               </Popover>
             </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="export-shift">Shift</Label>
-        <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select shift" />
-          </SelectTrigger>
-          <SelectContent>
-            {shiftTypes?.map((shift) => (
-              <SelectItem key={shift.id} value={shift.id}>
-                {shift.name} ({shift.start_time} - {shift.end_time})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+            <div className="space-y-2">
+              <Label htmlFor="export-shift">Shift</Label>
+              <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select shift" />
+                </SelectTrigger>
+                <SelectContent>
+                  {shiftTypes?.map((shift) => (
+                    <SelectItem key={shift.id} value={shift.id}>
+                      {shift.name} ({shift.start_time} - {shift.end_time})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-      <div className="flex justify-end gap-2 pt-4">
-        <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
-          Cancel
-        </Button>
-        <Button onClick={handleExportPDF} disabled={!dateRange?.from || !dateRange?.to || !selectedShiftId}>
-          <Download className="h-4 w-4 mr-2" />
-          Export PDF
-        </Button>
-      </div>
-    </div>
-  </DialogContent>
-</Dialog>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleExportPDF} disabled={!dateRange?.from || !dateRange?.to || !selectedShiftId}>
+                <Download className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-{/* Schedule Management Dialog */}
-{isAdminOrSupervisor && (
-  <>
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add Schedule</DialogTitle>
-          <DialogDescription>
-            This feature is not implemented yet.
-          </DialogDescription>
-        </DialogHeader>
-        <Button onClick={() => setDialogOpen(false)}>Close</Button>
-      </DialogContent>
-    </Dialog>
+      {/* Schedule Management Dialog */}
+      {isAdminOrSupervisor && (
+        <>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Schedule</DialogTitle>
+                <DialogDescription>
+                  This feature is not implemented yet.
+                </DialogDescription>
+              </DialogHeader>
+              <Button onClick={() => setDialogOpen(false)}>Close</Button>
+            </DialogContent>
+          </Dialog>
 
-    {/* PTO Assignment Dialog */}
-    {selectedSchedule && (
-      <PTOAssignmentDialog
-        open={ptoDialogOpen}
-        onOpenChange={(open) => {
-          setPtoDialogOpen(open);
-          if (!open) {
-            queryClient.invalidateQueries({ queryKey });
-          }
-        }}
-        officer={{
-          officerId: selectedSchedule.officerId,
-          name: selectedSchedule.officerName,
-          scheduleId: selectedSchedule.scheduleId,
-          type: selectedSchedule.type,
-          ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
-        }}
-        shift={selectedSchedule.shift}
-        date={selectedSchedule.date}
-      />
-    )}
-  </>
-)}
+          {/* PTO Assignment Dialog - Import from your existing component */}
+          {selectedSchedule && (
+            <PTOAssignmentDialog
+              open={ptoDialogOpen}
+              onOpenChange={(open) => {
+                setPtoDialogOpen(open);
+                if (!open) {
+                  queryClient.invalidateQueries({ queryKey });
+                }
+              }}
+              officer={{
+                officerId: selectedSchedule.officerId,
+                name: selectedSchedule.officerName,
+                scheduleId: selectedSchedule.scheduleId,
+                type: selectedSchedule.type,
+                ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
+              }}
+              shift={selectedSchedule.shift}
+              date={selectedSchedule.date}
+            />
+          )}
+        </>
+      )}
     </>
   );
 };
