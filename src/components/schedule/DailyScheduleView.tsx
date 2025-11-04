@@ -658,13 +658,34 @@ for (const officer of allOfficers) {
   };
 
   // NEW: Partnership handler
-  const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
-    updatePartnershipMutation.mutate({
-      officer,
-      partnerOfficerId,
-      action: partnerOfficerId ? 'create' : 'remove'
-    });
-  };
+const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
+  console.log("🔄 Partnership change:", { officer, partnerOfficerId });
+  
+  if (!officer?.scheduleId || !officer?.officerId) {
+    toast.error("Invalid officer data for partnership");
+    return;
+  }
+
+  if (partnerOfficerId && !partnerOfficerId.trim()) {
+    toast.error("Invalid partner officer ID");
+    return;
+  }
+
+  updatePartnershipMutation.mutate({
+    officer: {
+      ...officer,
+      // Ensure we have required fields
+      date: officer.date || dateStr,
+      dayOfWeek: officer.dayOfWeek || dayOfWeek,
+      scheduleId: officer.scheduleId,
+      officerId: officer.officerId,
+      type: officer.type,
+      shift: officer.shift
+    },
+    partnerOfficerId,
+    action: partnerOfficerId ? 'create' : 'remove'
+  });
+};
 
   // FIXED: Handlers for PTO
   const handleSavePTOUnitNumber = (ptoRecord: any, unitNumber: string) => {
