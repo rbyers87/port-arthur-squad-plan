@@ -1488,7 +1488,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogContent>
       </Dialog>
 
-{/* PDF Export Dialog - ONLY renders when explicitly opened */}
+{/* ✅ Only render when exportDialogOpen is true */}
 {exportDialogOpen && (
   <Dialog
     open={exportDialogOpen}
@@ -1508,6 +1508,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogDescription>
       </DialogHeader>
 
+      {/* Date Range Selector */}
       <div className="space-y-2">
         <Label htmlFor="date-range">Date Range</Label>
         <Popover>
@@ -1523,16 +1524,11 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
               <CalendarRange className="mr-2 h-4 w-4" />
               {dateRange?.from
                 ? dateRange.to
-                  ? `${format(dateRange.from, "LLL dd, y")} - ${format(
-                      dateRange.to,
-                      "LLL dd, y"
-                    )}`
+                  ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
                   : format(dateRange.from, "LLL dd, y")
                 : "Pick a date range"}
             </Button>
           </PopoverTrigger>
-
-          {/* 👇 This calendar popover should only show when you click the date button */}
           <PopoverContent className="w-auto p-0" align="start">
             <Calendar
               initialFocus
@@ -1552,6 +1548,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
     </DialogContent>
   </Dialog>
 )}
+
 
 
       {/* Schedule Management Dialog */}
