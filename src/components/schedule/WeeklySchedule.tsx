@@ -1655,9 +1655,11 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
 {/* PDF Export Dialog */}
       <Dialog open={exportDialogOpen} onOpenChange={(open) => {
         setExportDialogOpen(open);
-        // Reset calendar state when dialog closes
+        // Always reset calendar state when dialog closes
         if (!open) {
           setCalendarOpen(false);
+          // Optionally reset the date range
+          // setDateRange(undefined);
         }
       }}>
         <DialogContent className="sm:max-w-md">
@@ -1674,7 +1676,12 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="date-range">Date Range</Label>
-              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <Popover open={calendarOpen && exportDialogOpen} onOpenChange={(open) => {
+                // Only allow opening if export dialog is open
+                if (exportDialogOpen) {
+                  setCalendarOpen(open);
+                }
+              }}>
                 <PopoverTrigger asChild>
                   <Button
                     id="date-range"
