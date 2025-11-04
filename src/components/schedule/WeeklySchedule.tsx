@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { PREDEFINED_POSITIONS } from "@/constants/positions";
 import { ScheduleCell } from "./ScheduleCell";
 import { useWeeklyScheduleMutations } from "@/hooks/useWeeklyScheduleMutations";
+import { useWeeklyPDFExport } from "@/hooks/useWeeklyPDFExport";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
 import { 
   getLastName, 
@@ -29,7 +30,6 @@ import {
   MINIMUM_SUPERVISORS
 } from "@/utils/scheduleUtils";
 import { cn } from "@/lib/utils";
-import jsPDF from "jspdf";
 
 interface WeeklyScheduleProps {
   userRole?: 'officer' | 'supervisor' | 'admin';
