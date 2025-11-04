@@ -1643,8 +1643,15 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogContent>
       </Dialog>
 
-      {/* PDF Export Dialog */}
-      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+{/* PDF Export Dialog - ONLY RENDERS WHEN DIALOG IS OPEN */}
+      {exportDialogOpen && (
+        <Dialog open={exportDialogOpen} onOpenChange={(open) => {
+          setExportDialogOpen(open);
+          if (!open) {
+            setCalendarOpen(false);
+            setDateRange(undefined);
+          }
+        }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1690,7 +1697,9 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                     mode="range"
                     defaultMonth={dateRange?.from}
                     selected={dateRange}
-                    onSelect={setDateRange}
+                    onSelect={(range) => {
+                      setDateRange(range);
+                    }}
                     numberOfMonths={2}
                   />
                 </PopoverContent>
