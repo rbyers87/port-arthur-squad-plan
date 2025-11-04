@@ -659,31 +659,39 @@ for (const officer of allOfficers) {
 
   // NEW: Partnership handler
 const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
-  console.log("🔄 Partnership change:", { officer, partnerOfficerId });
+  console.log("🔄 Partnership change - Remove:", { 
+    officer: officer.officerId, 
+    officerName: officer.name,
+    partnerOfficerId: officer.partnerData?.partnerOfficerId,
+    partnerName: officer.partnerData?.partnerName,
+    scheduleId: officer.scheduleId,
+    type: officer.type
+  });
   
   if (!officer?.scheduleId || !officer?.officerId) {
-    toast.error("Invalid officer data for partnership");
+    toast.error("Invalid officer data for partnership removal");
     return;
   }
 
-  if (partnerOfficerId && !partnerOfficerId.trim()) {
-    toast.error("Invalid partner officer ID");
-    return;
-  }
-
+  // For removal, we need to ensure we have the partnerOfficerId from the existing partnership
+  const partnerIdToRemove = officer.partnerData?.partnerOfficerId || officer.partnerOfficerId;
+  
   updatePartnershipMutation.mutate({
     officer: {
       ...officer,
-      // Ensure we have required fields
+      // Ensure we have all required fields
       date: officer.date || dateStr,
       dayOfWeek: officer.dayOfWeek || dayOfWeek,
       scheduleId: officer.scheduleId,
       officerId: officer.officerId,
       type: officer.type,
-      shift: officer.shift
+      shift: officer.shift,
+      // Ensure we have the partner data for removal
+      partnerOfficerId: partnerIdToRemove,
+      partnerData: officer.partnerData
     },
-    partnerOfficerId,
-    action: partnerOfficerId ? 'create' : 'remove'
+    partnerOfficerId: partnerIdToRemove, // Pass the partner ID for reference
+    action: 'remove'
   });
 };
 
