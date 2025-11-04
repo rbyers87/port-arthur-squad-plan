@@ -471,28 +471,26 @@ export const DailyScheduleView = ({ 
       const countedOfficers = regularOfficers.filter(o => !o.isPPO); // <<< PPO Exclusion Logic
       
 
-// Filter out FULL-DAY PTO, special assignments, and probationary from staffing counts
-const activeSupervisors = supervisors.filter(officer => {
-  const hasFullDayPTO = officer.hasPTO && officer.ptoData?.isFullShift;
-  return !hasFullDayPTO && officer.rank !== 'Probationary';
-});
+      return {
+        shift,
+        minSupervisors: minStaff?.minimum_supervisors || 1,
+        minOfficers: minStaff?.minimum_officers || 0,
+        currentSupervisors: supervisors.length,
+        currentOfficers: countedOfficers.length, // <<< Use the filtered count
+        supervisors,
+        officers: regularOfficers, // <<< Send all regular officers (including PPOs) for display
+        specialAssignmentOfficers,
+        ptoRecords: shiftPTORecords,
+      };
+    });
 
-const activeOfficers = regularOfficers.filter(officer => {
-  const hasFullDayPTO = officer.hasPTO && officer.ptoData?.isFullShift;
-  return !hasFullDayPTO && officer.rank !== 'Probationary';
-});
+    const filteredSchedule = filterShiftId === "all" 
+      ? scheduleByShift 
+      : scheduleByShift?.filter(s => s.shift.id === filterShiftId);
 
-return {
-  shift,
-  minSupervisors: minStaff?.minimum_supervisors || 1,
-  minOfficers: minStaff?.minimum_officers || 0,
-  currentSupervisors: activeSupervisors.length,
-  currentOfficers: activeOfficers.length,
-  supervisors,
-  officers: regularOfficers,
-  specialAssignmentOfficers,
-  ptoRecords: shiftPTORecords,
-};
+    return filteredSchedule;
+  },
+});
 
   // FIXED: Updated handlers to work with the new callback signatures
   const handleSavePosition = (officer: any, position: string) => {
