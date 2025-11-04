@@ -923,7 +923,7 @@ const scheduleByShift = shiftTypes?.map((shift) => {
     </Card>
   );
   }
-};
+});
 
 // Add Officer Form Component
 const AddOfficerForm = ({ shiftId, date, onSuccess, onCancel, shift }: any) => {
