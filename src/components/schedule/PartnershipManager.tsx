@@ -102,12 +102,33 @@ export const PartnershipManager = ({ officer, onPartnershipChange }: Partnership
     enabled: open,
   });
 
-  const handleCreatePartnership = async () => {
-    if (!selectedPartner) return;
-    onPartnershipChange(officer, selectedPartner);
-    setOpen(false);
-    setSelectedPartner("");
+// In PartnershipManager.tsx, update the handleCreatePartnership function:
+
+const handleCreatePartnership = async () => {
+  if (!selectedPartner) return;
+  
+  // Ensure we have all required data
+  const partnershipData = {
+    officer: {
+      ...officer,
+      // Ensure we have the date and dayOfWeek
+      date: officer.date || format(new Date(), "yyyy-MM-dd"),
+      dayOfWeek: officer.dayOfWeek || parseISO(officer.date || format(new Date(), "yyyy-MM-dd")).getDay(),
+      scheduleId: officer.scheduleId,
+      officerId: officer.officerId,
+      type: officer.type,
+      shift: officer.shift
+    },
+    partnerOfficerId: selectedPartner,
+    action: 'create' as const
   };
+
+  console.log("Creating partnership with data:", partnershipData);
+  
+  onPartnershipChange(partnershipData.officer, partnershipData.partnerOfficerId);
+  setOpen(false);
+  setSelectedPartner("");
+};
 
   const handleRemovePartnership = async () => {
     onPartnershipChange(officer, undefined);
