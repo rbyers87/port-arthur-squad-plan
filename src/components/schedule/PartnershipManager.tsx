@@ -130,10 +130,21 @@ const handleCreatePartnership = async () => {
   setSelectedPartner("");
 };
 
-  const handleRemovePartnership = async () => {
-    onPartnershipChange(officer, undefined);
-    setOpen(false);
-  };
+// In PartnershipManager.tsx, update the handleRemovePartnership function:
+
+const handleRemovePartnership = async () => {
+  console.log("Removing partnership for officer:", {
+    officerId: officer.officerId,
+    officerName: officer.name,
+    partnerOfficerId: officer.partnerData?.partnerOfficerId,
+    partnerName: officer.partnerData?.partnerName,
+    scheduleId: officer.scheduleId,
+    type: officer.type
+  });
+  
+  onPartnershipChange(officer, undefined);
+  setOpen(false);
+};
 
   // Display only version for non-editable view
   if (!officer.isPartnership) {
