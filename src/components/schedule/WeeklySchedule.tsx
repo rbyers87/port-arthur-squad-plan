@@ -1734,6 +1734,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
           </div>
         </DialogContent>
       </Dialog>
+  )} 
 
       {/* Schedule Management Dialog */}
       {isAdminOrSupervisor && (
