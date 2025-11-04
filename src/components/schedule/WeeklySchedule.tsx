@@ -1348,10 +1348,10 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                   </Button>
                 </>
               )}
-              <Button onClick={() => setExportDialogOpen(true)} size="sm" variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Export PDF
-              </Button>
+<Button onClick={() => setExportDialogOpen(true)}>
+  <Download className="mr-2 h-4 w-4" /> Export PDF
+</Button>
+
             </div>
           </div>
           
