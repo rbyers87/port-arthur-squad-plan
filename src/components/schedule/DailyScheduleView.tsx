@@ -419,18 +419,28 @@ export const DailyScheduleView = ({
             allOfficersMap.set(officerKey, officerData);
           });
 
-        const allOfficers = Array.from(allOfficersMap.values());
+const allOfficers = Array.from(allOfficersMap.values());
 
 // NEW: Process partnerships to combine officers and remove partners from individual listings
 const processedOfficers = [];
 const processedOfficerIds = new Set();
 const partnershipMap = new Map(); // Track partnerships
 
-// First pass: identify all partnerships
+// First pass: identify all partnerships and ensure they're reciprocal
 for (const officer of allOfficers) {
   if (officer.isPartnership && officer.partnerOfficerId) {
-    partnershipMap.set(officer.officerId, officer.partnerOfficerId);
-    partnershipMap.set(officer.partnerOfficerId, officer.officerId);
+    // Verify the partnership is reciprocal
+    const partnerOfficer = allOfficers.find(o => o.officerId === officer.partnerOfficerId);
+    if (partnerOfficer && partnerOfficer.isPartnership && partnerOfficer.partnerOfficerId === officer.officerId) {
+      partnershipMap.set(officer.officerId, officer.partnerOfficerId);
+      partnershipMap.set(officer.partnerOfficerId, officer.officerId);
+      console.log(`✅ Valid partnership: ${officer.name} ↔ ${partnerOfficer.name}`);
+    } else {
+      // If partnership is not reciprocal, clear it
+      console.warn(`❌ Non-reciprocal partnership found for officer ${officer.officerId}`);
+      officer.isPartnership = false;
+      officer.partnerOfficerId = null;
+    }
   }
 }
 
@@ -443,8 +453,8 @@ for (const officer of allOfficers) {
 
   const partnerOfficerId = partnershipMap.get(officer.officerId);
   
-  // If this officer is in a partnership
-  if (partnerOfficerId) {
+  // If this officer is in a VALID partnership
+  if (partnerOfficerId && partnershipMap.get(partnerOfficerId) === officer.officerId) {
     const partnerOfficer = allOfficers.find(o => o.officerId === partnerOfficerId);
     
     if (partnerOfficer) {
@@ -463,49 +473,58 @@ for (const officer of allOfficers) {
         secondaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? partnerOfficer : officer;
       }
 
-      // Create combined officer entry
-      const combinedOfficer = {
-        ...primaryOfficer,
-        isCombinedPartnership: true,
-        partnerData: {
-          partnerOfficerId: secondaryOfficer.officerId,
-          partnerName: secondaryOfficer.name,
-          partnerBadge: secondaryOfficer.badge,
-          partnerRank: secondaryOfficer.rank,
-          partnerIsPPO: secondaryOfficer.isPPO,
-          partnerPosition: secondaryOfficer.position,
-          partnerUnitNumber: secondaryOfficer.unitNumber,
-          partnerScheduleId: secondaryOfficer.scheduleId,
-          partnerType: secondaryOfficer.type
-        },
-        // Use the primary officer's position and unit number, or combine if needed
-        position: primaryOfficer.position || secondaryOfficer.position,
-        unitNumber: primaryOfficer.unitNumber || secondaryOfficer.unitNumber,
-        // Combine notes if both have them
-        notes: primaryOfficer.notes || secondaryOfficer.notes ? 
-          `${primaryOfficer.notes || ''}${primaryOfficer.notes && secondaryOfficer.notes ? ' / ' : ''}${secondaryOfficer.notes || ''}`.trim() 
-          : null,
-        // Mark as partnership
-        isPartnership: true,
-        partnerOfficerId: secondaryOfficer.officerId
-      };
+
+// Create combined officer entry
+const combinedOfficer = {
+  ...primaryOfficer,
+  isCombinedPartnership: true,
+  partnerData: {
+    partnerOfficerId: secondaryOfficer.officerId,
+    partnerName: secondaryOfficer.name,
+    partnerBadge: secondaryOfficer.badge,
+    partnerRank: secondaryOfficer.rank,
+    partnerIsPPO: secondaryOfficer.isPPO,
+    partnerPosition: secondaryOfficer.position,
+    partnerUnitNumber: secondaryOfficer.unitNumber,
+    partnerScheduleId: secondaryOfficer.scheduleId,
+    partnerType: secondaryOfficer.type
+  },
+  // Preserve the partnerOfficerId in the main object for easy access
+  partnerOfficerId: secondaryOfficer.officerId,
+  // Also store the original partner ID for backup
+  originalPartnerOfficerId: secondaryOfficer.officerId,
+  // Use the primary officer's position and unit number, or combine if needed
+  position: primaryOfficer.position || secondaryOfficer.position,
+  unitNumber: primaryOfficer.unitNumber || secondaryOfficer.unitNumber,
+  // Combine notes if both have them
+  notes: primaryOfficer.notes || secondaryOfficer.notes ? 
+    `${primaryOfficer.notes || ''}${primaryOfficer.notes && secondaryOfficer.notes ? ' / ' : ''}${secondaryOfficer.notes || ''}`.trim() 
+    : null,
+  // Mark as partnership
+  isPartnership: true
+};
 
       processedOfficers.push(combinedOfficer);
       // Mark both officers as processed
       processedOfficerIds.add(primaryOfficer.officerId);
       processedOfficerIds.add(secondaryOfficer.officerId);
+      
+      console.log(`🤝 Combined partnership: ${primaryOfficer.name} + ${secondaryOfficer.name}`);
     } else {
       // Partner not found, just add the officer individually
-      console.warn(`Partner officer ${partnerOfficerId} not found for officer ${officer.officerId}`);
+      console.warn(`❌ Partner officer ${partnerOfficerId} not found for officer ${officer.officerId}`);
       processedOfficers.push(officer);
       processedOfficerIds.add(officer.officerId);
     }
   } else {
-    // Not in a partnership, add individually
+    // Not in a valid partnership, add individually
     processedOfficers.push(officer);
     processedOfficerIds.add(officer.officerId);
   }
 }
+
+console.log(`👥 Processed officers: ${processedOfficers.length} (from ${allOfficers.length} total)`);
+console.log(`🤝 Valid partnerships found: ${partnershipMap.size / 2}`);
 
         console.log(`👥 Final officers for ${shift.name}:`, processedOfficers.length, processedOfficers.map(o => ({
           name: o.name,
@@ -657,15 +676,46 @@ for (const officer of allOfficers) {
     });
   };
 
-  // NEW: Partnership handler
-const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
-  console.log("🔄 Partnership change - Remove:", { 
+// NEW: Partnership handler
+// NEW: Handle creating partnerships
+const handleCreatePartnership = (officer: any, partnerOfficerId: string) => {
+  console.log("🔄 Creating partnership:", { 
     officer: officer.officerId, 
     officerName: officer.name,
-    partnerOfficerId: officer.partnerData?.partnerOfficerId,
-    partnerName: officer.partnerData?.partnerName,
+    partnerOfficerId: partnerOfficerId,
     scheduleId: officer.scheduleId,
     type: officer.type
+  });
+  
+  if (!officer?.scheduleId || !officer?.officerId || !partnerOfficerId) {
+    toast.error("Invalid data for partnership creation");
+    return;
+  }
+
+  updatePartnershipMutation.mutate({
+    officer: {
+      ...officer,
+      // Ensure we have all required fields
+      date: officer.date || dateStr,
+      dayOfWeek: officer.dayOfWeek || dayOfWeek,
+      scheduleId: officer.scheduleId,
+      officerId: officer.officerId,
+      type: officer.type,
+      shift: officer.shift
+    },
+    partnerOfficerId: partnerOfficerId,
+    action: 'create'
+  });
+};
+
+// NEW: Handle removing partnerships
+const handleRemovePartnership = (officer: any) => {
+  console.log("🔄 Removing partnership:", { 
+    officer: officer.officerId, 
+    officerName: officer.name,
+    officerData: officer, // Log the entire officer object to see what's available
+    partnerData: officer.partnerData,
+    partnerOfficerId: officer.partnerOfficerId
   });
   
   if (!officer?.scheduleId || !officer?.officerId) {
@@ -673,9 +723,33 @@ const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
     return;
   }
 
-  // For removal, we need to ensure we have the partnerOfficerId from the existing partnership
-  const partnerIdToRemove = officer.partnerData?.partnerOfficerId || officer.partnerOfficerId;
-  
+  // Try multiple ways to find the partner officer ID
+  let partnerIdToRemove = null;
+
+  // Method 1: Check partnerData first
+  if (officer.partnerData?.partnerOfficerId) {
+    partnerIdToRemove = officer.partnerData.partnerOfficerId;
+    console.log("Found partner ID in partnerData:", partnerIdToRemove);
+  }
+  // Method 2: Check direct partnerOfficerId field
+  else if (officer.partnerOfficerId) {
+    partnerIdToRemove = officer.partnerOfficerId;
+    console.log("Found partner ID in partnerOfficerId field:", partnerIdToRemove);
+  }
+  // Method 3: If this is a combined partnership, check the original data
+  else if (officer.isCombinedPartnership && officer.originalPartnerOfficerId) {
+    partnerIdToRemove = officer.originalPartnerOfficerId;
+    console.log("Found partner ID in originalPartnerOfficerId:", partnerIdToRemove);
+  }
+
+  if (!partnerIdToRemove) {
+    console.error("❌ No partner officer ID found for removal. Officer data:", officer);
+    toast.error("Could not find partner information. Please refresh the page and try again.");
+    return;
+  }
+
+  console.log("✅ Removing partnership with partner ID:", partnerIdToRemove);
+
   updatePartnershipMutation.mutate({
     officer: {
       ...officer,
@@ -690,9 +764,20 @@ const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
       partnerOfficerId: partnerIdToRemove,
       partnerData: officer.partnerData
     },
-    partnerOfficerId: partnerIdToRemove, // Pass the partner ID for reference
+    partnerOfficerId: partnerIdToRemove,
     action: 'remove'
   });
+};
+
+// Combined handler that routes to the correct function
+const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
+  if (partnerOfficerId) {
+    // This is a create operation
+    handleCreatePartnership(officer, partnerOfficerId);
+  } else {
+    // This is a remove operation  
+    handleRemovePartnership(officer);
+  }
 };
 
   // FIXED: Handlers for PTO

@@ -29,11 +29,11 @@ const getLogoBase64 = (): string => {
   return departmentLogo;
 };
 
-// Draw actual logo function (unchanged)
+// Draw actual logo function
 const drawActualLogo = (pdf: jsPDF, x: number, y: number) => {
   const logoBase64 = getLogoBase64();
   
-  if (!logoBase64 || logoBase64 === "your-actual-base64-logo-here") {
+  if (!logoBase64 || logoBase64 === "placeholder") {
     const logoSize = 20;
     pdf.setFillColor(COLORS.primary[0], COLORS.primary[1], COLORS.primary[2]);
     pdf.rect(x, y, logoSize, logoSize, 'F');
@@ -62,7 +62,39 @@ const drawActualLogo = (pdf: jsPDF, x: number, y: number) => {
   }
 };
 
-// Fixed table drawing function with centered columns
+// NEW: Function to format partnership display
+const formatPartnershipDisplay = (officer: any) => {
+  if (!officer.isCombinedPartnership || !officer.partnerData) {
+    return officer?.name ? officer.name.toUpperCase() : "UNKNOWN";
+  }
+
+  const primaryName = officer.name.toUpperCase();
+  const partnerName = officer.partnerData.partnerName.toUpperCase();
+  
+  return `${primaryName} + ${partnerName}`;
+};
+
+// NEW: Function to format partnership details for notes
+const formatPartnershipDetails = (officer: any) => {
+  if (!officer.isCombinedPartnership || !officer.partnerData) {
+    return officer?.notes || "";
+  }
+
+  const primaryBadge = officer.badge || "";
+  const partnerBadge = officer.partnerData.partnerBadge || "";
+  const primaryRank = officer.rank || "";
+  const partnerRank = officer.partnerData.partnerRank || "";
+  
+  let partnershipInfo = `PARTNERSHIP: ${primaryBadge} (${primaryRank}) + ${partnerBadge} (${partnerRank})`;
+  
+  if (officer.notes) {
+    partnershipInfo += ` | ${officer.notes}`;
+  }
+  
+  return partnershipInfo;
+};
+
+// UPDATED: Table drawing function with partnership support
 const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: number, margins: { left: number, right: number }, sectionColor?: number[]) => {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const tableWidth = pageWidth - margins.left - margins.right;
@@ -73,6 +105,8 @@ const drawCompactTable = (pdf: jsPDF, headers: string[], data: any[][], startY: 
       "REGULAR OFFICERS": 0.35,
       "SPECIAL ASSIGNMENT OFFICERS": 0.35,
       "PTO OFFICERS": 0.35,
+      "OFFICERS": 0.35,
+      "SUPERVISORS": 0.35,
       "BEAT": 0.10,
       "ASSIGNMENT": 0.20,
       "BADGE #": 0.10,
@@ -214,7 +248,7 @@ export const usePDFExport = () => {
       const pageWidth = pdf.internal.pageSize.getWidth();
       let yPosition = 20;
 
-      // Draw logo (unchanged)
+      // Draw logo
       drawActualLogo(pdf, 15, 15);
 
       // Shift info on the left, same line as logo
@@ -251,12 +285,16 @@ export const usePDFExport = () => {
             return; // Skip this supervisor
           }
           
+          // UPDATED: Use partnership formatting for supervisors
+          const displayName = formatPartnershipDisplay(supervisor);
+          const notes = formatPartnershipDetails(supervisor);
+          
           supervisorsData.push([
-            supervisor?.name ? supervisor.name.toUpperCase() : "UNKNOWN",
-            supervisor?.rank || "",
+            displayName,
+            supervisor?.position || "",
             supervisor?.badge || "",
             supervisor?.unitNumber ? `Unit ${supervisor.unitNumber}` : "",
-            supervisor?.notes || ""
+            notes
           ]);
         });
 
@@ -268,7 +306,7 @@ export const usePDFExport = () => {
         }
       }
 
-      // SECTION 1: REGULAR OFFICERS TABLE - FIXED: Filter out full-day PTO officers
+      // SECTION 1: REGULAR OFFICERS TABLE - UPDATED: Include partnership formatting
       const regularOfficersData: any[] = [];
       
       if (shiftData.officers && shiftData.officers.length > 0) {
@@ -285,12 +323,16 @@ export const usePDFExport = () => {
             return; // Skip this officer
           }
           
+          // UPDATED: Use partnership formatting
+          const displayName = formatPartnershipDisplay(officer);
+          const notes = formatPartnershipDetails(officer);
+          
           regularOfficersData.push([
-            officer?.name ? officer.name.toUpperCase() : "UNKNOWN",
+            displayName,
             officer?.position || "",
             officer?.badge || "",
             officer?.unitNumber || "",
-            officer?.notes || officer?.customTime || ""
+            notes
           ]);
         });
 
@@ -301,7 +343,7 @@ export const usePDFExport = () => {
         }
       }
 
-      // SECTION 2: SPECIAL ASSIGNMENT OFFICERS TABLE - FIXED: Filter out full-day PTO officers
+      // SECTION 2: SPECIAL ASSIGNMENT OFFICERS TABLE - UPDATED: Include partnership formatting
       const specialAssignmentData: any[] = [];
       
       if (shiftData.specialAssignmentOfficers && shiftData.specialAssignmentOfficers.length > 0) {
@@ -318,12 +360,16 @@ export const usePDFExport = () => {
             return; // Skip this officer
           }
           
+          // UPDATED: Use partnership formatting
+          const displayName = formatPartnershipDisplay(officer);
+          const notes = formatPartnershipDetails(officer);
+          
           specialAssignmentData.push([
-            officer?.name ? officer.name.toUpperCase() : "UNKNOWN",
+            displayName,
             officer?.position || "Special",
             officer?.badge || "",
             officer?.unitNumber || "",
-            officer?.notes || officer?.customTime || ""
+            notes
           ]);
         });
 
