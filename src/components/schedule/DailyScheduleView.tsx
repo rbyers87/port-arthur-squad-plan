@@ -471,14 +471,16 @@ export const DailyScheduleView = ({ 
       const countedOfficers = regularOfficers.filter(o => !o.isPPO); // <<< PPO Exclusion Logic
       
 
-// Filter out PTO, special assignments, and probationary from staffing counts
-const activeSupervisors = supervisors.filter(officer => 
-  !officer.hasPTO && officer.rank !== 'Probationary'
-);
+// Filter out FULL-DAY PTO, special assignments, and probationary from staffing counts
+const activeSupervisors = supervisors.filter(officer => {
+  const hasFullDayPTO = officer.hasPTO && officer.ptoData?.isFullShift;
+  return !hasFullDayPTO && officer.rank !== 'Probationary';
+});
 
-const activeOfficers = regularOfficers.filter(officer => 
-  !officer.hasPTO && officer.rank !== 'Probationary'
-);
+const activeOfficers = regularOfficers.filter(officer => {
+  const hasFullDayPTO = officer.hasPTO && officer.ptoData?.isFullShift;
+  return !hasFullDayPTO && officer.rank !== 'Probationary';
+});
 
 return {
   shift,
@@ -491,15 +493,6 @@ return {
   specialAssignmentOfficers,
   ptoRecords: shiftPTORecords,
 };
-
-    const filteredSchedule = filterShiftId === "all" 
-      ? scheduleByShift 
-      : scheduleByShift?.filter(s => s.shift.id === filterShiftId);
-
-    return filteredSchedule;
-  },
-  }
-});
 
   // FIXED: Updated handlers to work with the new callback signatures
   const handleSavePosition = (officer: any, position: string) => {
