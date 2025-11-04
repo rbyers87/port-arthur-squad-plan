@@ -7,33 +7,97 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Users } from "lucide-react";
+import { format, parseISO } from "date-fns";
 
 interface PartnershipManagerProps {
   officer: any;
   onPartnershipChange: (officer: any, partnerOfficerId?: string) => void;
 }
 
+// Helper function to extract last name
+const getLastName = (fullName: string) => {
+  if (!fullName) return '';
+  const parts = fullName.trim().split(' ');
+  return parts[parts.length - 1] || '';
+};
+
 export const PartnershipManager = ({ officer, onPartnershipChange }: PartnershipManagerProps) => {
   const [open, setOpen] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState("");
 
   const { data: availablePartners, isLoading } = useQuery({
-    queryKey: ["available-partners", officer.shift.id, officer.date],
+    queryKey: ["available-partners", officer.shift.id, officer.date || format(new Date(), "yyyy-MM-dd")],
     queryFn: async () => {
-      // Get all officers on the same shift for the same day
-      const { data: shiftOfficers, error } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          full_name,
-          badge_number,
-          rank
-        `)
-        .neq("id", officer.officerId) // Exclude current officer
-        .order("full_name");
+      // Get all officers working on the same shift and day
+      const dateToUse = officer.date || format(new Date(), "yyyy-MM-dd");
+      const dayOfWeek = parseISO(dateToUse).getDay();
 
-      if (error) throw error;
-      return shiftOfficers || [];
+      // First, get recurring officers for this shift and day
+      const { data: recurringOfficers, error: recurringError } = await supabase
+        .from("recurring_schedules")
+        .select(`
+          officer_id,
+          profiles:officer_id (
+            id,
+            full_name,
+            badge_number,
+            rank
+          )
+        `)
+        .eq("shift_type_id", officer.shift.id)
+        .eq("day_of_week", dayOfWeek)
+        .or(`end_date.is.null,end_date.gte.${dateToUse}`)
+        .neq("officer_id", officer.officerId); // Exclude current officer
+
+      if (recurringError) {
+        console.error("Error fetching recurring officers:", recurringError);
+        throw recurringError;
+      }
+
+      // Then, get exception officers for this specific date and shift
+      const { data: exceptionOfficers, error: exceptionError } = await supabase
+        .from("schedule_exceptions")
+        .select(`
+          officer_id,
+          profiles:officer_id (
+            id,
+            full_name,
+            badge_number,
+            rank
+          )
+        `)
+        .eq("date", dateToUse)
+        .eq("shift_type_id", officer.shift.id)
+        .eq("is_off", false)
+        .neq("officer_id", officer.officerId); // Exclude current officer
+
+      if (exceptionError) {
+        console.error("Error fetching exception officers:", exceptionError);
+        throw exceptionError;
+      }
+
+      // Combine and deduplicate officers
+      const allOfficers = [
+        ...(recurringOfficers || []).map((ro: any) => ro.profiles),
+        ...(exceptionOfficers || []).map((eo: any) => eo.profiles)
+      ];
+
+      // Remove duplicates and filter out null profiles
+      const uniqueOfficers = allOfficers
+        .filter((profile, index, self) => 
+          profile && 
+          profile.id && 
+          index === self.findIndex(p => p?.id === profile.id)
+        )
+        .filter(profile => profile.id !== officer.officerId) // Double-check exclusion
+        .sort((a, b) => {
+          const lastNameA = getLastName(a.full_name).toLowerCase();
+          const lastNameB = getLastName(b.full_name).toLowerCase();
+          return lastNameA.localeCompare(lastNameB);
+        });
+
+      console.log("Available partners:", uniqueOfficers);
+      return uniqueOfficers;
     },
     enabled: open,
   });
@@ -71,16 +135,24 @@ export const PartnershipManager = ({ officer, onPartnershipChange }: Partnership
                 <SelectValue placeholder="Select partner officer" />
               </SelectTrigger>
               <SelectContent>
-                {availablePartners?.map((partner) => (
-                  <SelectItem key={partner.id} value={partner.id}>
-                    {partner.full_name} ({partner.badge_number}) - {partner.rank}
-                  </SelectItem>
-                ))}
+                {isLoading ? (
+                  <div className="p-2 text-sm text-muted-foreground">Loading officers...</div>
+                ) : availablePartners?.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground">No available officers on this shift</div>
+                ) : (
+                  availablePartners?.map((partner) => (
+                    <SelectItem key={partner.id} value={partner.id}>
+                      {partner.full_name} 
+                      {partner.badge_number && ` (${partner.badge_number})`}
+                      {partner.rank && ` - ${partner.rank}`}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
             <Button 
               onClick={handleCreatePartnership}
-              disabled={!selectedPartner}
+              disabled={!selectedPartner || isLoading}
               className="w-full"
             >
               Create Partnership
