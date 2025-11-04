@@ -1744,44 +1744,44 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
   </DialogContent>
 </Dialog>
 
-      {/* Schedule Management Dialog */}
-      {isAdminOrSupervisor && (
-        <>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Schedule</DialogTitle>
-                <DialogDescription>
-                  This feature is not implemented yet.
-                </DialogDescription>
-              </DialogHeader>
-              <Button onClick={() => setDialogOpen(false)}>Close</Button>
-            </DialogContent>
-          </Dialog>
+{/* Schedule Management Dialog */}
+{isAdminOrSupervisor && (
+  <>
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Schedule</DialogTitle>
+          <DialogDescription>
+            This feature is not implemented yet.
+          </DialogDescription>
+        </DialogHeader>
+        <Button onClick={() => setDialogOpen(false)}>Close</Button>
+      </DialogContent>
+    </Dialog>
 
-          {/* PTO Assignment Dialog - Import from your existing component */}
-          {selectedSchedule && (
-            <PTOAssignmentDialog
-              open={ptoDialogOpen}
-              onOpenChange={(open) => {
-                setPtoDialogOpen(open);
-                if (!open) {
-                  queryClient.invalidateQueries({ queryKey });
-                }
-              }}
-              officer={{
-                officerId: selectedSchedule.officerId,
-                name: selectedSchedule.officerName,
-                scheduleId: selectedSchedule.scheduleId,
-                type: selectedSchedule.type,
-                ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
-              }}
-              shift={selectedSchedule.shift}
-              date={selectedSchedule.date}
-            />
-          )}
-        </>
-      )}
+    {/* PTO Assignment Dialog */}
+    {selectedSchedule && (
+      <PTOAssignmentDialog
+        open={ptoDialogOpen}
+        onOpenChange={(open) => {
+          setPtoDialogOpen(open);
+          if (!open) {
+            queryClient.invalidateQueries({ queryKey });
+          }
+        }}
+        officer={{
+          officerId: selectedSchedule.officerId,
+          name: selectedSchedule.officerName,
+          scheduleId: selectedSchedule.scheduleId,
+          type: selectedSchedule.type,
+          ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
+        }}
+        shift={selectedSchedule.shift}
+        date={selectedSchedule.date}
+      />
+    )}
+  </>
+)}
     </>
   );
 };
