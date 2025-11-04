@@ -1652,16 +1652,15 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogContent>
       </Dialog>
 
-{/* PDF Export Dialog */}
-      <Dialog open={exportDialogOpen} onOpenChange={(open) => {
-        setExportDialogOpen(open);
-        // Always reset calendar state when dialog closes
-        if (!open) {
-          setCalendarOpen(false);
-          // Optionally reset the date range
-          // setDateRange(undefined);
-        }
-      }}>
+{/* PDF Export Dialog - ONLY RENDERS WHEN DIALOG IS OPEN */}
+      {exportDialogOpen && (
+        <Dialog open={exportDialogOpen} onOpenChange={(open) => {
+          setExportDialogOpen(open);
+          if (!open) {
+            setCalendarOpen(false);
+            setDateRange(undefined);
+          }
+        }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1676,12 +1675,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="date-range">Date Range</Label>
-              <Popover open={calendarOpen && exportDialogOpen} onOpenChange={(open) => {
-                // Only allow opening if export dialog is open
-                if (exportDialogOpen) {
-                  setCalendarOpen(open);
-                }
-              }}>
+              <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     id="date-range"
@@ -1706,12 +1700,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                     )}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start" onInteractOutside={(e) => {
-                  // Allow clicking on the dialog content without closing the popover
-                  if (e.target instanceof Element && e.target.closest('[role="dialog"]')) {
-                    e.preventDefault();
-                  }
-                }}>
+                <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     initialFocus
                     mode="range"
@@ -1719,10 +1708,6 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                     selected={dateRange}
                     onSelect={(range) => {
                       setDateRange(range);
-                      // Close the popover when both dates are selected
-                      if (range?.from && range?.to) {
-                        setCalendarOpen(false);
-                      }
                     }}
                     numberOfMonths={2}
                   />
