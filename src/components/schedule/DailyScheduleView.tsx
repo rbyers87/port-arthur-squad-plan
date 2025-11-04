@@ -135,32 +135,34 @@ export const DailyScheduleView = ({
       );
     };
 
-    // Get recurring schedules for this day of week - FIXED: Include schedules with future end dates
-    const { data: recurringData, error: recurringError } = await supabase
-      .from("recurring_schedules")
-      .select(`
-        *,
-        profiles!inner (
-          id, 
-          full_name, 
-          badge_number, 
-          rank
-        ),
-        shift_types (
-          id, 
-          name, 
-          start_time, 
-          end_time
-        )
-      `)
-      .eq("day_of_week", dayOfWeek)
-      // FIX: Include schedules that are either ongoing OR end in the future
-      .or(`end_date.is.null,end_date.gte.${dateStr}`);
+// In your query function, replace the recurring_schedules query with this:
 
-    if (recurringError) {
-      console.error("Recurring schedules error:", recurringError);
-      throw recurringError;
-    }
+// Get recurring schedules for this day of week - FIXED: Include schedules with future end dates
+const { data: recurringData, error: recurringError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles:officer_id (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
+  .eq("day_of_week", dayOfWeek)
+  // FIX: Include schedules that are either ongoing OR end in the future
+  .or(`end_date.is.null,end_date.gte.${dateStr}`);
+
+if (recurringError) {
+  console.error("Recurring schedules error:", recurringError);
+  throw recurringError;
+}
 
     // Get schedule exceptions for this specific date
     const { data: exceptionsData, error: exceptionsError } = await supabase
