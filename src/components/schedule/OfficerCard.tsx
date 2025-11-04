@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit2, Save, X, Clock, Trash2 } from "lucide-react";
+import { Edit2, Save, X, Clock, Trash2, Users } from "lucide-react";
 import { PREDEFINED_POSITIONS } from "@/constants/positions";
 import { useState } from "react";
+import { PartnershipManager } from "./PartnershipManager";
 
 interface OfficerCardProps {
 	officer: any;
@@ -17,6 +18,7 @@ interface OfficerCardProps {
 	onSaveNotes: (officer: any, notes: string) => void;
 	onAssignPTO: (officer: any) => void;
 	onRemove?: (officer: any) => void;
+	onPartnershipChange?: (officer: any, partnerOfficerId?: string) => void;
 	isUpdating: boolean;
 	sectionType?: "regular" | "special" | "pto";
 }
@@ -29,6 +31,7 @@ export const OfficerCard = ({
 	onSaveNotes,
 	onAssignPTO,
 	onRemove,
+	onPartnershipChange,
 	isUpdating,
 	sectionType = "regular"
 }: OfficerCardProps) => {
@@ -99,7 +102,7 @@ export const OfficerCard = ({
 	}
 
 	return (
-		<div className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+		<div className={`flex items-center justify-between p-3 rounded-md ${officer.isPartnership ? 'bg-blue-50 border border-blue-200' : 'bg-muted/50'}`}>
 			{/* Officer Info - Left Side */}
 			<div className="flex-1 min-w-0">
 				<div className="flex items-center gap-3 mb-1">
@@ -125,6 +128,17 @@ export const OfficerCard = ({
 								<span className="ml-2 text-orange-600 font-medium">(Extra Shift)</span>
 							)}
 						</p>
+
+						{/* Partnership Display */}
+						{officer.isPartnership && officer.partnerData && (
+							<div className="flex items-center gap-2 mt-1 p-2 bg-blue-100 rounded border border-blue-200">
+								<Users className="h-3 w-3 text-blue-600" />
+								<span className="text-sm text-blue-700">
+									Partner: <strong>{officer.partnerData.partnerName}</strong> 
+									{officer.partnerData.partnerBadge && ` (${officer.partnerData.partnerBadge})`}
+								</span>
+							</div>
+						)}
 					</div>
 				</div>
 				<div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -147,6 +161,12 @@ export const OfficerCard = ({
 					{officer.hasPTO && !officer.ptoData?.isFullShift && (
 						<Badge className="text-xs bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
 							Partial PTO
+						</Badge>
+					)}
+					{/* Partnership indicator badge */}
+					{officer.isPartnership && (
+						<Badge className="text-xs bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200">
+							Partnership
 						</Badge>
 					)}
 				</div>
@@ -297,6 +317,14 @@ export const OfficerCard = ({
 						</Badge>
 						{canEdit && (
 							<div className="flex gap-1 justify-center">
+								{/* Partnership Manager */}
+								{onPartnershipChange && sectionType !== "pto" && (
+									<PartnershipManager 
+										officer={officer}
+										onPartnershipChange={onPartnershipChange}
+									/>
+								)}
+								
 								<Button
 									size="sm"
 									variant="ghost"
