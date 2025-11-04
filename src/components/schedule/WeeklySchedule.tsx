@@ -74,7 +74,12 @@ const WeeklySchedule = ({
     queryKey
   } = useWeeklyScheduleMutations(currentWeekStart, currentMonth, activeView, selectedShiftId);
 
+  const handleExportPDF = async () => {
+  const { useWeeklyPDFExport } = await import("@/hooks/useWeeklyPDFExport");
   const { exportWeeklyPDF } = useWeeklyPDFExport();
+  ...
+};
+
 
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
