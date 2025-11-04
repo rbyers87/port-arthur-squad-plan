@@ -922,6 +922,7 @@ const scheduleByShift = shiftTypes?.map((shift) => {
 </Dialog>
     </Card>
   );
+  }
 };
 
 // Add Officer Form Component
