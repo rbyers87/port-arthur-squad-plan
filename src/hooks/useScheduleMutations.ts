@@ -13,6 +13,8 @@ interface UpdateScheduleParams {
   date: string;
   officerId: string;
   shiftTypeId: string;
+  partnerOfficerId?: string; // Add partnership fields
+  isPartnership?: boolean;
 }
 
 export const useScheduleMutations = (dateStr: string) => {
@@ -38,7 +40,9 @@ export const useScheduleMutations = (dateStr: string) => {
             .update({
               position_name: params.positionName,
               unit_number: params.unitNumber,
-              notes: params.notes
+              notes: params.notes,
+              partner_officer_id: params.partnerOfficerId, // Add partnership
+              is_partnership: params.isPartnership // Add partnership
             })
             .eq("id", existingExceptions[0].id);
           
@@ -54,6 +58,8 @@ export const useScheduleMutations = (dateStr: string) => {
               position_name: params.positionName,
               unit_number: params.unitNumber,
               notes: params.notes,
+              partner_officer_id: params.partnerOfficerId, // Add partnership
+              is_partnership: params.isPartnership, // Add partnership
               custom_start_time: null,
               custom_end_time: null
             });
@@ -67,7 +73,9 @@ export const useScheduleMutations = (dateStr: string) => {
           .update({
             position_name: params.positionName,
             unit_number: params.unitNumber,
-            notes: params.notes
+            notes: params.notes,
+            partner_officer_id: params.partnerOfficerId, // Add partnership
+            is_partnership: params.isPartnership // Add partnership
           })
           .eq("id", params.scheduleId);
           
@@ -84,6 +92,213 @@ export const useScheduleMutations = (dateStr: string) => {
     },
   });
 
+  // Add a new mutation specifically for partnership management
+  const updatePartnershipMutation = useMutation({
+    mutationFn: async ({ 
+      officer, 
+      partnerOfficerId, 
+      action 
+    }: { 
+      officer: any; 
+      partnerOfficerId?: string; 
+      action: 'create' | 'remove' 
+    }) => {
+      if (action === 'create' && partnerOfficerId) {
+        // Update current officer with partner
+        const updateData = {
+          partner_officer_id: partnerOfficerId,
+          is_partnership: true
+        };
+
+        let updatePromise;
+        
+        if (officer.type === "recurring") {
+          updatePromise = supabase
+            .from("recurring_schedules")
+            .update(updateData)
+            .eq("id", officer.scheduleId);
+        } else {
+          updatePromise = supabase
+            .from("schedule_exceptions")
+            .update(updateData)
+            .eq("id", officer.scheduleId);
+        }
+
+        const { error } = await updatePromise;
+        if (error) throw error;
+
+        // Also update the partner's record to create reciprocal relationship
+        const partnerUpdateData = {
+          partner_officer_id: officer.officerId,
+          is_partnership: true
+        };
+
+        let partnerUpdatePromise;
+        
+        if (officer.type === "recurring") {
+          partnerUpdatePromise = supabase
+            .from("recurring_schedules")
+            .update(partnerUpdateData)
+            .eq("officer_id", partnerOfficerId)
+            .eq("day_of_week", officer.dayOfWeek)
+            .eq("shift_type_id", officer.shift.id);
+        } else {
+          partnerUpdatePromise = supabase
+            .from("schedule_exceptions")
+            .update(partnerUpdateData)
+            .eq("officer_id", partnerOfficerId)
+            .eq("date", officer.date)
+            .eq("shift_type_id", officer.shift.id);
+        }
+
+        const { error: partnerError } = await partnerUpdatePromise;
+        if (partnerError) throw partnerError;
+
+      } else if (action === 'remove') {
+        // Remove partnership from both officers
+        const removeData = {
+          partner_officer_id: null,
+          is_partnership: false
+        };
+
+        // Remove from current officer
+        let removePromise;
+        
+        if (officer.type === "recurring") {
+          removePromise = supabase
+            .from("recurring_schedules")
+            .update(removeData)
+            .eq("id", officer.scheduleId);
+        } else {
+          removePromise = supabase
+            .from("schedule_exceptions")
+            .update(removeData)
+            .eq("id", officer.scheduleId);
+        }
+
+        const { error } = await removePromise;
+        if (error) throw error;
+
+        // Remove from partner if exists
+        if (officer.partnerData) {
+          let partnerRemovePromise;
+          
+          if (officer.type === "recurring") {
+            partnerRemovePromise = supabase
+              .from("recurring_schedules")
+              .update(removeData)
+              .eq("officer_id", officer.partnerData.partnerOfficerId)
+              .eq("day_of_week", officer.dayOfWeek)
+              .eq("shift_type_id", officer.shift.id);
+          } else {
+            partnerRemovePromise = supabase
+              .from("schedule_exceptions")
+              .update(removeData)
+              .eq("officer_id", officer.partnerData.partnerOfficerId)
+              .eq("date", officer.date)
+              .eq("shift_type_id", officer.shift.id);
+          }
+
+          const { error: partnerError } = await partnerRemovePromise;
+          if (partnerError) throw partnerError;
+        }
+      }
+    },
+    onSuccess: () => {
+      toast.success("Partnership updated");
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update partnership");
+    },
+  });
+
+  // Update the addOfficerMutation to include partnership fields
+  const addOfficerMutation = useMutation({
+    mutationFn: async ({ 
+      officerId, 
+      shiftId, 
+      position, 
+      unitNumber, 
+      notes,
+      partnerOfficerId, // Add partnership field
+      isPartnership // Add partnership field
+    }: { 
+      officerId: string; 
+      shiftId: string; 
+      position: string; 
+      unitNumber?: string; 
+      notes?: string;
+      partnerOfficerId?: string;
+      isPartnership?: boolean;
+    }) => {
+      const { data: existingExceptions, error: checkError } = await supabase
+        .from("schedule_exceptions")
+        .select("id")
+        .eq("officer_id", officerId)
+        .eq("date", dateStr)
+        .eq("shift_type_id", shiftId)
+        .eq("is_off", false);
+
+      if (checkError) throw checkError;
+
+      if (existingExceptions && existingExceptions.length > 0) {
+        // Handle duplicates
+        if (existingExceptions.length > 1) {
+          const recordsToDelete = existingExceptions.slice(1);
+          for (const record of recordsToDelete) {
+            await supabase
+              .from("schedule_exceptions")
+              .delete()
+              .eq("id", record.id);
+          }
+        }
+        
+        const { error } = await supabase
+          .from("schedule_exceptions")
+          .update({
+            position_name: position,
+            unit_number: unitNumber,
+            notes: notes,
+            partner_officer_id: partnerOfficerId, // Add partnership
+            is_partnership: isPartnership, // Add partnership
+            custom_start_time: null,
+            custom_end_time: null
+          })
+          .eq("id", existingExceptions[0].id);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("schedule_exceptions")
+          .insert({
+            officer_id: officerId,
+            date: dateStr,
+            shift_type_id: shiftId,
+            is_off: false,
+            position_name: position,
+            unit_number: unitNumber,
+            notes: notes,
+            partner_officer_id: partnerOfficerId, // Add partnership
+            is_partnership: isPartnership, // Add partnership
+            custom_start_time: null,
+            custom_end_time: null
+          });
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      toast.success("Officer added to schedule");
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to add officer");
+    },
+  });
+
+  // Keep the existing mutations (updatePTODetailsMutation, removeOfficerMutation, removePTOMutation)
   const updatePTODetailsMutation = useMutation({
     mutationFn: async ({ 
       ptoId, 
@@ -130,81 +345,6 @@ export const useScheduleMutations = (dateStr: string) => {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to remove officer");
-    },
-  });
-
-  const addOfficerMutation = useMutation({
-    mutationFn: async ({ 
-      officerId, 
-      shiftId, 
-      position, 
-      unitNumber, 
-      notes 
-    }: { 
-      officerId: string; 
-      shiftId: string; 
-      position: string; 
-      unitNumber?: string; 
-      notes?: string 
-    }) => {
-      const { data: existingExceptions, error: checkError } = await supabase
-        .from("schedule_exceptions")
-        .select("id")
-        .eq("officer_id", officerId)
-        .eq("date", dateStr)
-        .eq("shift_type_id", shiftId)
-        .eq("is_off", false);
-
-      if (checkError) throw checkError;
-
-      if (existingExceptions && existingExceptions.length > 0) {
-        // Handle duplicates
-        if (existingExceptions.length > 1) {
-          const recordsToDelete = existingExceptions.slice(1);
-          for (const record of recordsToDelete) {
-            await supabase
-              .from("schedule_exceptions")
-              .delete()
-              .eq("id", record.id);
-          }
-        }
-        
-        const { error } = await supabase
-          .from("schedule_exceptions")
-          .update({
-            position_name: position,
-            unit_number: unitNumber,
-            notes: notes,
-            custom_start_time: null,
-            custom_end_time: null
-          })
-          .eq("id", existingExceptions[0].id);
-        
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("schedule_exceptions")
-          .insert({
-            officer_id: officerId,
-            date: dateStr,
-            shift_type_id: shiftId,
-            is_off: false,
-            position_name: position,
-            unit_number: unitNumber,
-            notes: notes,
-            custom_start_time: null,
-            custom_end_time: null
-          });
-        
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      toast.success("Officer added to schedule");
-      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to add officer");
     },
   });
 
@@ -272,6 +412,7 @@ export const useScheduleMutations = (dateStr: string) => {
     updatePTODetailsMutation,
     removeOfficerMutation,
     addOfficerMutation,
-    removePTOMutation
+    removePTOMutation,
+    updatePartnershipMutation // Add the new mutation
   };
 };
