@@ -421,58 +421,91 @@ export const DailyScheduleView = ({
 
         const allOfficers = Array.from(allOfficersMap.values());
 
-        // NEW: Process partnerships to combine officers and remove partners from individual listings
-        const processedOfficers = [];
-        const processedOfficerIds = new Set();
+// NEW: Process partnerships to combine officers and remove partners from individual listings
+const processedOfficers = [];
+const processedOfficerIds = new Set();
+const partnershipMap = new Map(); // Track partnerships
 
-        for (const officer of allOfficers) {
-          // Skip if this officer has already been processed as part of a partnership
-          if (processedOfficerIds.has(officer.officerId)) {
-            continue;
-          }
+// First pass: identify all partnerships
+for (const officer of allOfficers) {
+  if (officer.isPartnership && officer.partnerOfficerId) {
+    partnershipMap.set(officer.officerId, officer.partnerOfficerId);
+    partnershipMap.set(officer.partnerOfficerId, officer.officerId);
+  }
+}
 
-          // If this officer is in a partnership
-          if (officer.isPartnership && officer.partnerOfficerId) {
-            const partnerOfficer = allOfficers.find(o => o.officerId === officer.partnerOfficerId);
-            
-            if (partnerOfficer) {
-              // Create combined officer entry
-              const combinedOfficer = {
-                ...officer,
-                isCombinedPartnership: true,
-                partnerData: {
-                  partnerOfficerId: partnerOfficer.officerId,
-                  partnerName: partnerOfficer.name,
-                  partnerBadge: partnerOfficer.badge,
-                  partnerRank: partnerOfficer.rank,
-                  partnerIsPPO: partnerOfficer.isPPO,
-                  partnerPosition: partnerOfficer.position,
-                  partnerUnitNumber: partnerOfficer.unitNumber
-                },
-                // Use the primary officer's position and unit number
-                position: officer.position || partnerOfficer.position,
-                unitNumber: officer.unitNumber || partnerOfficer.unitNumber,
-                // Combine notes if both have them
-                notes: officer.notes || partnerOfficer.notes ? 
-                  `${officer.notes || ''}${officer.notes && partnerOfficer.notes ? ' / ' : ''}${partnerOfficer.notes || ''}`.trim() 
-                  : null
-              };
+// Second pass: process officers
+for (const officer of allOfficers) {
+  // Skip if this officer has already been processed as part of a partnership
+  if (processedOfficerIds.has(officer.officerId)) {
+    continue;
+  }
 
-              processedOfficers.push(combinedOfficer);
-              // Mark both officers as processed
-              processedOfficerIds.add(officer.officerId);
-              processedOfficerIds.add(partnerOfficer.officerId);
-            } else {
-              // Partner not found, just add the officer individually
-              processedOfficers.push(officer);
-              processedOfficerIds.add(officer.officerId);
-            }
-          } else {
-            // Not in a partnership, add individually
-            processedOfficers.push(officer);
-            processedOfficerIds.add(officer.officerId);
-          }
-        }
+  const partnerOfficerId = partnershipMap.get(officer.officerId);
+  
+  // If this officer is in a partnership
+  if (partnerOfficerId) {
+    const partnerOfficer = allOfficers.find(o => o.officerId === partnerOfficerId);
+    
+    if (partnerOfficer) {
+      // Determine which officer should be the primary (non-PPO takes precedence)
+      let primaryOfficer = officer;
+      let secondaryOfficer = partnerOfficer;
+      
+      // If current officer is PPO and partner is not, make partner the primary
+      if (officer.isPPO && !partnerOfficer.isPPO) {
+        primaryOfficer = partnerOfficer;
+        secondaryOfficer = officer;
+      }
+      // If both are same type, use alphabetical order
+      else if (officer.isPPO === partnerOfficer.isPPO) {
+        primaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? officer : partnerOfficer;
+        secondaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? partnerOfficer : officer;
+      }
+
+      // Create combined officer entry
+      const combinedOfficer = {
+        ...primaryOfficer,
+        isCombinedPartnership: true,
+        partnerData: {
+          partnerOfficerId: secondaryOfficer.officerId,
+          partnerName: secondaryOfficer.name,
+          partnerBadge: secondaryOfficer.badge,
+          partnerRank: secondaryOfficer.rank,
+          partnerIsPPO: secondaryOfficer.isPPO,
+          partnerPosition: secondaryOfficer.position,
+          partnerUnitNumber: secondaryOfficer.unitNumber,
+          partnerScheduleId: secondaryOfficer.scheduleId,
+          partnerType: secondaryOfficer.type
+        },
+        // Use the primary officer's position and unit number, or combine if needed
+        position: primaryOfficer.position || secondaryOfficer.position,
+        unitNumber: primaryOfficer.unitNumber || secondaryOfficer.unitNumber,
+        // Combine notes if both have them
+        notes: primaryOfficer.notes || secondaryOfficer.notes ? 
+          `${primaryOfficer.notes || ''}${primaryOfficer.notes && secondaryOfficer.notes ? ' / ' : ''}${secondaryOfficer.notes || ''}`.trim() 
+          : null,
+        // Mark as partnership
+        isPartnership: true,
+        partnerOfficerId: secondaryOfficer.officerId
+      };
+
+      processedOfficers.push(combinedOfficer);
+      // Mark both officers as processed
+      processedOfficerIds.add(primaryOfficer.officerId);
+      processedOfficerIds.add(secondaryOfficer.officerId);
+    } else {
+      // Partner not found, just add the officer individually
+      console.warn(`Partner officer ${partnerOfficerId} not found for officer ${officer.officerId}`);
+      processedOfficers.push(officer);
+      processedOfficerIds.add(officer.officerId);
+    }
+  } else {
+    // Not in a partnership, add individually
+    processedOfficers.push(officer);
+    processedOfficerIds.add(officer.officerId);
+  }
+}
 
         console.log(`👥 Final officers for ${shift.name}:`, processedOfficers.length, processedOfficers.map(o => ({
           name: o.name,
