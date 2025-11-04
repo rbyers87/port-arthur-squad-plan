@@ -264,6 +264,7 @@ const WeeklySchedule = ({
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
     from: startOfWeek(new Date(), { weekStartsOn: 0 }),
     to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4) // Default 4 weeks
@@ -1652,8 +1653,9 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
       </Dialog>
 
 {/* PDF Export Dialog - FIXED POPOVER */}
+// Alternative PDF Export Dialog with controlled popover
 <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
-  <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
+  <DialogContent className="sm:max-w-md">
     <DialogHeader>
       <DialogTitle className="flex items-center gap-2">
         <Download className="h-5 w-5" />
@@ -1667,7 +1669,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="date-range">Date Range</Label>
-        <Popover>
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
           <PopoverTrigger asChild>
             <Button
               id="date-range"
@@ -1692,7 +1694,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
               )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start" onInteractOutside={(e) => e.preventDefault()}>
+          <PopoverContent className="w-auto p-0" align="start">
             <Calendar
               initialFocus
               mode="range"
@@ -1700,36 +1702,13 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
               selected={dateRange}
               onSelect={(range) => {
                 setDateRange(range);
-                // Close the popover when selection is complete
+                // Close the popover when both dates are selected
                 if (range?.from && range?.to) {
-                  // Use setTimeout to ensure the state update happens before closing
-                  setTimeout(() => {
-                    const popoverContent = document.querySelector('[data-radix-popper-content-wrapper]');
-                    if (popoverContent) {
-                      const popoverTrigger = document.querySelector('[data-state="open"]');
-                      if (popoverTrigger) {
-                        (popoverTrigger as HTMLElement).click();
-                      }
-                    }
-                  }, 100);
+                  setCalendarOpen(false);
                 }
               }}
               numberOfMonths={2}
             />
-            <div className="flex justify-end p-2 border-t">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => {
-                  const popoverTrigger = document.querySelector('[data-state="open"]');
-                  if (popoverTrigger) {
-                    (popoverTrigger as HTMLElement).click();
-                  }
-                }}
-              >
-                Close
-              </Button>
-            </div>
           </PopoverContent>
         </Popover>
       </div>
