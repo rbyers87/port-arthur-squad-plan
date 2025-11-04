@@ -92,217 +92,218 @@ export const useScheduleMutations = (dateStr: string) => {
     },
   });
 
-  const updatePartnershipMutation = useMutation({
-    mutationFn: async ({ 
-      officer, 
-      partnerOfficerId, 
-      action 
-    }: { 
-      officer: any; 
-      partnerOfficerId?: string; 
-      action: 'create' | 'remove' 
-    }) => {
-      console.log("🔄 Partnership mutation:", { officer, partnerOfficerId, action, officerData: officer });
+const updatePartnershipMutation = useMutation({
+  mutationFn: async ({ 
+    officer, 
+    partnerOfficerId, 
+    action 
+  }: { 
+    officer: any; 
+    partnerOfficerId?: string; 
+    action: 'create' | 'remove' 
+  }) => {
+    console.log("🔄 Partnership mutation:", { officer, partnerOfficerId, action, officerData: officer });
 
-      if (action === 'create' && partnerOfficerId) {
-        // Validate inputs
-        if (!officer.officerId || !partnerOfficerId) {
-          throw new Error("Missing officer IDs for partnership");
+    if (action === 'create' && partnerOfficerId) {
+      // Validate inputs
+      if (!officer.officerId || !partnerOfficerId) {
+        throw new Error("Missing officer IDs for partnership");
+      }
+
+      // Update current officer with partner
+      const updateData = {
+        partner_officer_id: partnerOfficerId,
+        is_partnership: true
+      };
+
+      let updatePromise;
+      
+      if (officer.type === "recurring") {
+        updatePromise = supabase
+          .from("recurring_schedules")
+          .update(updateData)
+          .eq("id", officer.scheduleId);
+      } else {
+        updatePromise = supabase
+          .from("schedule_exceptions")
+          .update(updateData)
+          .eq("id", officer.scheduleId);
+      }
+
+      const { error, data } = await updatePromise;
+      if (error) {
+        console.error("Error updating officer partnership:", error);
+        throw error;
+      }
+
+      // Also update the partner's record to create reciprocal relationship
+      const partnerUpdateData = {
+        partner_officer_id: officer.officerId,
+        is_partnership: true
+      };
+
+      let partnerUpdatePromise;
+      
+      if (officer.type === "recurring") {
+        // Find partner's recurring schedule
+        const { data: partnerSchedule } = await supabase
+          .from("recurring_schedules")
+          .select("id")
+          .eq("officer_id", partnerOfficerId)
+          .eq("shift_type_id", officer.shift.id)
+          .eq("day_of_week", officer.dayOfWeek)
+          .single();
+
+        if (!partnerSchedule) {
+          throw new Error("Partner recurring schedule not found");
         }
 
-        // Update current officer with partner
-        const updateData = {
-          partner_officer_id: partnerOfficerId,
-          is_partnership: true
-        };
+        partnerUpdatePromise = supabase
+          .from("recurring_schedules")
+          .update(partnerUpdateData)
+          .eq("id", partnerSchedule.id);
+      } else {
+        // For exceptions, use the date
+        const { data: partnerSchedule } = await supabase
+          .from("schedule_exceptions")
+          .select("id")
+          .eq("officer_id", partnerOfficerId)
+          .eq("shift_type_id", officer.shift.id)
+          .eq("date", officer.date)
+          .single();
 
-        let updatePromise;
+        if (!partnerSchedule) {
+          throw new Error("Partner exception schedule not found");
+        }
+
+        partnerUpdatePromise = supabase
+          .from("schedule_exceptions")
+          .update(partnerUpdateData)
+          .eq("id", partnerSchedule.id);
+      }
+
+      const { error: partnerError } = await partnerUpdatePromise;
+      if (partnerError) {
+        console.error("Error updating partner relationship:", partnerError);
+        throw partnerError;
+      }
+
+    } else if (action === 'remove') {
+      console.log("Removing partnership for officer:", officer.officerId);
+      
+      // Remove partnership from current officer
+      const removeData = {
+        partner_officer_id: null,
+        is_partnership: false
+      };
+
+      // Remove from current officer
+      let removePromise;
+      
+      if (officer.type === "recurring") {
+        console.log("Removing from recurring schedule:", officer.scheduleId);
+        removePromise = supabase
+          .from("recurring_schedules")
+          .update(removeData)
+          .eq("id", officer.scheduleId);
+      } else {
+        console.log("Removing from exception schedule:", officer.scheduleId);
+        removePromise = supabase
+          .from("schedule_exceptions")
+          .update(removeData)
+          .eq("id", officer.scheduleId);
+      }
+
+      const { error, data } = await removePromise;
+      if (error) {
+        console.error("Error removing officer partnership:", error);
+        throw error;
+      }
+      console.log("Successfully removed partnership from officer");
+
+      // Remove from partner officer - CRITICAL FIX
+      const actualPartnerOfficerId = officer.partnerOfficerId || officer.partnerData?.partnerOfficerId;
+      if (actualPartnerOfficerId) {
+        console.log("Removing partnership from partner officer:", actualPartnerOfficerId);
+
+        let partnerRemovePromise;
         
         if (officer.type === "recurring") {
-          updatePromise = supabase
-            .from("recurring_schedules")
-            .update(updateData)
-            .eq("id", officer.scheduleId);
-        } else {
-          updatePromise = supabase
-            .from("schedule_exceptions")
-            .update(updateData)
-            .eq("id", officer.scheduleId);
-        }
-
-        const { error, data } = await updatePromise;
-        if (error) {
-          console.error("Error updating officer partnership:", error);
-          throw error;
-        }
-
-        // Also update the partner's record to create reciprocal relationship
-        const partnerUpdateData = {
-          partner_officer_id: officer.officerId,
-          is_partnership: true
-        };
-
-        let partnerUpdatePromise;
-        
-        if (officer.type === "recurring") {
-          // Find partner's recurring schedule
-          const { data: partnerSchedule } = await supabase
+          // Find partner's recurring schedule for the same shift and day
+          const { data: partnerSchedule, error: partnerFindError } = await supabase
             .from("recurring_schedules")
             .select("id")
-            .eq("officer_id", partnerOfficerId)
+            .eq("officer_id", actualPartnerOfficerId)
             .eq("shift_type_id", officer.shift.id)
             .eq("day_of_week", officer.dayOfWeek)
             .single();
 
-          if (!partnerSchedule) {
-            throw new Error("Partner recurring schedule not found");
+          if (partnerFindError) {
+            console.error("Error finding partner recurring schedule:", partnerFindError);
+            // Don't throw - we still want to remove the primary officer's partnership
+          } else if (partnerSchedule) {
+            partnerRemovePromise = supabase
+              .from("recurring_schedules")
+              .update(removeData)
+              .eq("id", partnerSchedule.id);
           }
-
-          partnerUpdatePromise = supabase
-            .from("recurring_schedules")
-            .update(partnerUpdateData)
-            .eq("id", partnerSchedule.id);
         } else {
           // For exceptions, use the date
-          const { data: partnerSchedule } = await supabase
+          const { data: partnerSchedule, error: partnerFindError } = await supabase
             .from("schedule_exceptions")
             .select("id")
-            .eq("officer_id", partnerOfficerId)
+            .eq("officer_id", actualPartnerOfficerId)
             .eq("shift_type_id", officer.shift.id)
             .eq("date", officer.date)
             .single();
 
-          if (!partnerSchedule) {
-            throw new Error("Partner exception schedule not found");
-          }
-
-          partnerUpdatePromise = supabase
-            .from("schedule_exceptions")
-            .update(partnerUpdateData)
-            .eq("id", partnerSchedule.id);
-        }
-
-        const { error: partnerError } = await partnerUpdatePromise;
-        if (partnerError) {
-          console.error("Error updating partner relationship:", partnerError);
-          throw partnerError;
-        }
-
-      } else if (action === 'remove') {
-        console.log("Removing partnership for officer:", officer.officerId);
-        
-        // Remove partnership from current officer
-        const removeData = {
-          partner_officer_id: null,
-          is_partnership: false
-        };
-
-        // Remove from current officer
-        let removePromise;
-        
-        if (officer.type === "recurring") {
-          console.log("Removing from recurring schedule:", officer.scheduleId);
-          removePromise = supabase
-            .from("recurring_schedules")
-            .update(removeData)
-            .eq("id", officer.scheduleId);
-        } else {
-          console.log("Removing from exception schedule:", officer.scheduleId);
-          removePromise = supabase
-            .from("schedule_exceptions")
-            .update(removeData)
-            .eq("id", officer.scheduleId);
-        }
-
-        const { error, data } = await removePromise;
-        if (error) {
-          console.error("Error removing officer partnership:", error);
-          throw error;
-        }
-        console.log("Successfully removed partnership from officer");
-
-        // Remove from partner officer - CRITICAL FIX
-        const actualPartnerOfficerId = officer.partnerOfficerId || officer.partnerData?.partnerOfficerId;
-        if (actualPartnerOfficerId) {
-          console.log("Removing partnership from partner officer:", actualPartnerOfficerId);
-
-          let partnerRemovePromise;
-          
-          if (officer.type === "recurring") {
-            // Find partner's recurring schedule for the same shift and day
-            const { data: partnerSchedule, error: partnerFindError } = await supabase
-              .from("recurring_schedules")
-              .select("id")
-              .eq("officer_id", actualPartnerOfficerId)
-              .eq("shift_type_id", officer.shift.id)
-              .eq("day_of_week", officer.dayOfWeek)
-              .single();
-
-            if (partnerFindError) {
-              console.error("Error finding partner recurring schedule:", partnerFindError);
-              // Don't throw - we still want to remove the primary officer's partnership
-            } else if (partnerSchedule) {
-              partnerRemovePromise = supabase
-                .from("recurring_schedules")
-                .update(removeData)
-                .eq("id", partnerSchedule.id);
-            }
-          } else {
-            // For exceptions, use the date
-            const { data: partnerSchedule, error: partnerFindError } = await supabase
+          if (partnerFindError) {
+            console.error("Error finding partner exception schedule:", partnerFindError);
+            // Don't throw - we still want to remove the primary officer's partnership
+          } else if (partnerSchedule) {
+            partnerRemovePromise = supabase
               .from("schedule_exceptions")
-              .select("id")
-              .eq("officer_id", actualPartnerOfficerId)
-              .eq("shift_type_id", officer.shift.id)
-              .eq("date", officer.date)
-              .single();
-
-            if (partnerFindError) {
-              console.error("Error finding partner exception schedule:", partnerFindError);
-              // Don't throw - we still want to remove the primary officer's partnership
-            } else if (partnerSchedule) {
-              partnerRemovePromise = supabase
-                .from("schedule_exceptions")
-                .update(removeData)
-                .eq("id", partnerSchedule.id);
-            }
+              .update(removeData)
+              .eq("id", partnerSchedule.id);
           }
-
-          if (partnerRemovePromise) {
-            const { error: partnerError } = await partnerRemovePromise;
-            if (partnerError) {
-              console.error("Error removing partner relationship:", partnerError);
-              // Don't throw - we still want to remove the primary officer's partnership
-            } else {
-              console.log("Successfully removed partnership from partner officer");
-            }
-          }
-        } else {
-          console.warn("No partnerOfficerId found for removal");
         }
-      }
-    },
-    onSuccess: () => {
-      if (action === 'remove') {
-        toast.success("Partnership removed successfully");
+
+        if (partnerRemovePromise) {
+          const { error: partnerError } = await partnerRemovePromise;
+          if (partnerError) {
+            console.error("Error removing partner relationship:", partnerError);
+            // Don't throw - we still want to remove the primary officer's partnership
+          } else {
+            console.log("Successfully removed partnership from partner officer");
+          }
+        }
       } else {
-        toast.success("Partnership created successfully");
+        console.warn("No partnerOfficerId found for removal");
       }
-      // Force refresh all relevant queries
+    }
+  },
+  onSuccess: (data, variables) => {
+    // Use variables.action instead of action
+    if (variables.action === 'remove') {
+      toast.success("Partnership removed successfully");
+    } else {
+      toast.success("Partnership created successfully");
+    }
+    // Force refresh all relevant queries
+    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+    queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    
+    // Add a small delay to ensure the backend has processed the changes
+    setTimeout(() => {
       queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      
-      // Add a small delay to ensure the backend has processed the changes
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-      }, 500);
-    },
-    onError: (error: any) => {
-      console.error("Partnership mutation error:", error);
-      toast.error(error.message || "Failed to update partnership");
-    },
-  });
+    }, 500);
+  },
+  onError: (error: any) => {
+    console.error("Partnership mutation error:", error);
+    toast.error(error.message || "Failed to update partnership");
+  },
+});
 
   const addOfficerMutation = useMutation({
     mutationFn: async ({ 
