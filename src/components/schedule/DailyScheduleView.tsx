@@ -677,8 +677,40 @@ console.log(`🤝 Valid partnerships found: ${partnershipMap.size / 2}`);
   };
 
 // NEW: Partnership handler
-const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
-  console.log("🔄 Partnership change - Remove:", { 
+// NEW: Handle creating partnerships
+const handleCreatePartnership = (officer: any, partnerOfficerId: string) => {
+  console.log("🔄 Creating partnership:", { 
+    officer: officer.officerId, 
+    officerName: officer.name,
+    partnerOfficerId: partnerOfficerId,
+    scheduleId: officer.scheduleId,
+    type: officer.type
+  });
+  
+  if (!officer?.scheduleId || !officer?.officerId || !partnerOfficerId) {
+    toast.error("Invalid data for partnership creation");
+    return;
+  }
+
+  updatePartnershipMutation.mutate({
+    officer: {
+      ...officer,
+      // Ensure we have all required fields
+      date: officer.date || dateStr,
+      dayOfWeek: officer.dayOfWeek || dayOfWeek,
+      scheduleId: officer.scheduleId,
+      officerId: officer.officerId,
+      type: officer.type,
+      shift: officer.shift
+    },
+    partnerOfficerId: partnerOfficerId,
+    action: 'create'
+  });
+};
+
+// NEW: Handle removing partnerships
+const handleRemovePartnership = (officer: any) => {
+  console.log("🔄 Removing partnership:", { 
     officer: officer.officerId, 
     officerName: officer.name,
     officerData: officer, // Log the entire officer object to see what's available
@@ -709,11 +741,6 @@ const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
     partnerIdToRemove = officer.originalPartnerOfficerId;
     console.log("Found partner ID in originalPartnerOfficerId:", partnerIdToRemove);
   }
-  // Method 4: Try to find partner from the schedule data
-  else {
-    console.log("Searching for partner in schedule data...");
-    // This is a fallback - we might need to query the database to find the partner
-  }
 
   if (!partnerIdToRemove) {
     console.error("❌ No partner officer ID found for removal. Officer data:", officer);
@@ -740,6 +767,17 @@ const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
     partnerOfficerId: partnerIdToRemove,
     action: 'remove'
   });
+};
+
+// Combined handler that routes to the correct function
+const handlePartnershipChange = (officer: any, partnerOfficerId?: string) => {
+  if (partnerOfficerId) {
+    // This is a create operation
+    handleCreatePartnership(officer, partnerOfficerId);
+  } else {
+    // This is a remove operation  
+    handleRemovePartnership(officer);
+  }
 };
 
   // FIXED: Handlers for PTO
