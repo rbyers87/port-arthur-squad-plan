@@ -1492,8 +1492,10 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogContent>
       </Dialog>
 
-{/* ✅ Only render when exportDialogOpen is true */}
+{/* PDF Export Dialog - ONLY renders when exportDialogOpen is true */}
 {exportDialogOpen && (
+  // log here runs only when the JSX is about to mount
+  (console.log("Export Dialog Mounted (JSX mount)"), 
   <Dialog
     open={exportDialogOpen}
     onOpenChange={(open) => {
