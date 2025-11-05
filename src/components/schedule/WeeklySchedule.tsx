@@ -153,43 +153,50 @@ const WeeklySchedule = ({
     }
   }, [shiftTypes, selectedShiftId]);
 
-  // Add this useEffect to your WeeklySchedule component to find the stuck calendar
+ // Replace your debug useEffect with this more detailed version
 useEffect(() => {
   const findStuckCalendar = () => {
-    console.log("🔍 === SEARCHING FOR STUCK CALENDAR IN WEEKLY SCHEDULE ===");
+    console.log("🔍 === DETAILED CALENDAR SEARCH ===");
     
-    // Check for any open popovers
-    const openPopovers = document.querySelectorAll('[data-state="open"]');
-    console.log("Open popovers found:", openPopovers.length);
+    // Get ALL calendar elements with full details
+    const calendars = document.querySelectorAll('[data-radix-calendar], .rdp, [role="grid"]');
+    console.log("Total calendar-like elements found:", calendars.length);
     
-    openPopovers.forEach((popover, index) => {
-      const rect = popover.getBoundingClientRect();
-      console.log(`Popover ${index}:`, {
-        visible: rect.width > 0 && rect.height > 0,
-        position: { top: rect.top, left: rect.left },
-        classes: popover.className,
-        html: popover.outerHTML.substring(0, 200) + '...'
-      });
-      
-      // Check if this popover contains a calendar
-      const calendar = popover.querySelector('[data-radix-calendar], .rdp');
-      if (calendar) {
-        console.log("🎯 FOUND STUCK CALENDAR IN POPOVER:", calendar);
-      }
-    });
-
-    // Also check for any calendar elements directly
-    const calendars = document.querySelectorAll('[data-radix-calendar], .rdp');
-    console.log("Total calendar elements found:", calendars.length);
     calendars.forEach((cal, index) => {
       const rect = cal.getBoundingClientRect();
-      console.log(`Calendar ${index}:`, {
+      const computedStyle = window.getComputedStyle(cal);
+      
+      console.log(`📅 Calendar ${index}:`, {
         visible: rect.width > 0 && rect.height > 0,
+        display: computedStyle.display,
+        position: computedStyle.position,
+        zIndex: computedStyle.zIndex,
+        classes: cal.className,
         parent: cal.parentElement?.className,
-        isInViewport: rect.top >= 0 && rect.left >= 0
+        grandparent: cal.parentElement?.parentElement?.className,
+        isInViewport: rect.top >= 0 && rect.left >= 0 && 
+                     rect.bottom <= window.innerHeight && 
+                     rect.right <= window.innerWidth,
+        outerHTML: cal.outerHTML.substring(0, 300) + '...'
       });
     });
+
+    // Also check for any hidden or off-screen calendars
+    const allElements = document.querySelectorAll('*');
+    const calendarElements = Array.from(allElements).filter(el => {
+      const rect = el.getBoundingClientRect();
+      const hasCalendarClass = el.className?.toString().includes('calendar') || 
+                              el.className?.toString().includes('rdp') ||
+                              el.getAttribute('data-radix-calendar');
+      return hasCalendarClass && (rect.width > 0 || rect.height > 0);
+    });
+    
+    console.log("🎯 Visible calendar elements:", calendarElements.length);
   };
+
+  findStuckCalendar();
+  setTimeout(findStuckCalendar, 100);
+}, []);
 
   // Run immediately
   findStuckCalendar();
