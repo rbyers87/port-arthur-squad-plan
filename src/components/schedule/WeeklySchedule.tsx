@@ -959,7 +959,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
       return isSupervisor && isScheduled;
     }).length || 0;
     
-    return (
+return (
       <div key={dateStr} className="p-2 text-center border-r text-sm">{supervisorCount}</div>
     );
   })}
@@ -1093,6 +1093,8 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                     onRemoveOfficer={removeOfficerMutation.mutate}
                     isUpdating={removeOfficerMutation.isPending}
                   />
+                ))}
+              </div>
             ))}
           </div>
         )}
