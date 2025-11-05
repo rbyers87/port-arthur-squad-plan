@@ -111,24 +111,11 @@ export const UnderstaffedDetection = () => {
             );
           };
 
-          // FIXED: Use the specific relationship name to avoid ambiguity
+          // FIXED: Use the exact same approach as DailyScheduleView - fetch data separately and combine
+          // First, get recurring schedules without the problematic join
           const { data: recurringData, error: recurringError } = await supabase
             .from("recurring_schedules")
-            .select(`
-              *,
-              profiles!recurring_schedules_officer_id_fkey (
-                id, 
-                full_name, 
-                badge_number, 
-                rank
-              ),
-              shift_types (
-                id, 
-                name, 
-                start_time, 
-                end_time
-              )
-            `)
+            .select("*")
             .eq("day_of_week", dayOfWeek)
             .or(`end_date.is.null,end_date.gte.${date}`);
 
@@ -137,9 +124,50 @@ export const UnderstaffedDetection = () => {
             throw recurringError;
           }
 
+          // Get officer profiles for recurring schedules
+          const recurringOfficerIds = [...new Set(recurringData?.map(r => r.officer_id).filter(Boolean))];
+          let recurringOfficerProfiles = [];
+
+          if (recurringOfficerIds.length > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+              .from("profiles")
+              .select("id, full_name, badge_number, rank")
+              .in("id", recurringOfficerIds);
+            
+            if (profilesError) {
+              console.error("❌ Recurring profiles error:", profilesError);
+            } else {
+              recurringOfficerProfiles = profilesData || [];
+            }
+          }
+
+          // Get shift types for recurring schedules
+          const recurringShiftTypeIds = [...new Set(recurringData?.map(r => r.shift_type_id).filter(Boolean))];
+          let recurringShiftTypes = [];
+
+          if (recurringShiftTypeIds.length > 0) {
+            const { data: shiftTypesData, error: shiftTypesError } = await supabase
+              .from("shift_types")
+              .select("id, name, start_time, end_time")
+              .in("id", recurringShiftTypeIds);
+            
+            if (shiftTypesError) {
+              console.error("❌ Recurring shift types error:", shiftTypesError);
+            } else {
+              recurringShiftTypes = shiftTypesData || [];
+            }
+          }
+
+          // Combine recurring data manually (like DailyScheduleView does)
+          const combinedRecurringData = recurringData?.map(recurring => ({
+            ...recurring,
+            profiles: recurringOfficerProfiles.find(p => p.id === recurring.officer_id),
+            shift_types: recurringShiftTypes.find(s => s.id === recurring.shift_type_id)
+          })) || [];
+
           console.log(`🔍 UNDERSTAFFED DETECTION - Recurring data for ${date}:`, {
-            totalCount: recurringData?.length,
-            officers: recurringData?.map(r => ({
+            totalCount: combinedRecurringData?.length,
+            officers: combinedRecurringData?.map(r => ({
               name: r.profiles?.full_name,
               shift: r.shift_types?.name,
               start_date: r.start_date,
@@ -159,44 +187,44 @@ export const UnderstaffedDetection = () => {
             throw exceptionsError;
           }
 
-          // Get officer profiles separately
-          const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
-          let officerProfiles = [];
+          // Get officer profiles for exceptions
+          const exceptionOfficerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
+          let exceptionOfficerProfiles = [];
 
-          if (officerIds.length > 0) {
+          if (exceptionOfficerIds.length > 0) {
             const { data: profilesData, error: profilesError } = await supabase
               .from("profiles")
               .select("id, full_name, badge_number, rank")
-              .in("id", officerIds);
+              .in("id", exceptionOfficerIds);
             
             if (profilesError) {
-              console.error("❌ Profiles error:", profilesError);
+              console.error("❌ Exception profiles error:", profilesError);
             } else {
-              officerProfiles = profilesData || [];
+              exceptionOfficerProfiles = profilesData || [];
             }
           }
 
-          // Get shift types for exceptions separately
-          const shiftTypeIds = [...new Set(exceptionsData?.map(e => e.shift_type_id).filter(Boolean))];
+          // Get shift types for exceptions
+          const exceptionShiftTypeIds = [...new Set(exceptionsData?.map(e => e.shift_type_id).filter(Boolean))];
           let exceptionShiftTypes = [];
 
-          if (shiftTypeIds.length > 0) {
+          if (exceptionShiftTypeIds.length > 0) {
             const { data: shiftTypesData, error: shiftTypesError } = await supabase
               .from("shift_types")
               .select("id, name, start_time, end_time")
-              .in("id", shiftTypeIds);
+              .in("id", exceptionShiftTypeIds);
             
             if (shiftTypesError) {
-              console.error("❌ Shift types error:", shiftTypesError);
+              console.error("❌ Exception shift types error:", shiftTypesError);
             } else {
               exceptionShiftTypes = shiftTypesData || [];
             }
           }
 
-          // Combine the data manually
+          // Combine exception data manually
           const combinedExceptions = exceptionsData?.map(exception => ({
             ...exception,
-            profiles: officerProfiles.find(p => p.id === exception.officer_id),
+            profiles: exceptionOfficerProfiles.find(p => p.id === exception.officer_id),
             shift_types: exceptionShiftTypes.find(s => s.id === exception.shift_type_id)
           })) || [];
 
@@ -219,7 +247,7 @@ export const UnderstaffedDetection = () => {
             const allAssignedOfficers = [];
 
             // Process recurring officers
-            const recurringOfficers = recurringData
+            const recurringOfficers = combinedRecurringData
               ?.filter(r => r.shift_types?.id === shift.id) || [];
 
             console.log(`🔍 Recurring officers for ${shift.name}:`, 
@@ -277,7 +305,7 @@ export const UnderstaffedDetection = () => {
             const additionalOfficers = workingExceptions
               ?.filter(e => 
                 e.shift_type_id === shift.id &&
-                !recurringData?.some(r => r.officer_id === e.officer_id && r.shift_types?.id === shift.id)
+                !combinedRecurringData?.some(r => r.officer_id === e.officer_id && r.shift_types?.id === shift.id)
               ) || [];
 
             for (const additionalOfficer of additionalOfficers) {
@@ -399,7 +427,7 @@ export const UnderstaffedDetection = () => {
     },
   });
 
-  // ... rest of the component remains the same
+  // ... rest of the component remains the same (the mutation and UI code)
   const { data: existingAlerts } = useQuery({
     queryKey: ["existing-vacancy-alerts"],
     queryFn: async () => {
