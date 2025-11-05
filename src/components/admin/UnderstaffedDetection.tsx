@@ -10,7 +10,6 @@ import { format, parseISO } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
-import { PREDEFINED_POSITIONS, RANK_ORDER } from "@/constants/positions";
 
 export const UnderstaffedDetection = () => {
   const queryClient = useQueryClient();
@@ -91,11 +90,15 @@ export const UnderstaffedDetection = () => {
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
           // Get default assignments
-          const { data: allDefaultAssignments } = await supabase
+          const { data: allDefaultAssignments, error: defaultAssignmentsError } = await supabase
             .from("officer_default_assignments")
             .select("*")
             .or(`end_date.is.null,end_date.gte.${date}`)
             .lte("start_date", date);
+
+          if (defaultAssignmentsError) {
+            console.error("Default assignments error:", defaultAssignmentsError);
+          }
 
           // Helper function to get default assignment
           const getDefaultAssignment = (officerId: string) => {
@@ -108,12 +111,12 @@ export const UnderstaffedDetection = () => {
             );
           };
 
-          // CRITICAL FIX: Use the EXACT same query as DailyScheduleView
+          // FIXED: Use the exact same query structure as DailyScheduleView
           const { data: recurringData, error: recurringError } = await supabase
             .from("recurring_schedules")
             .select(`
               *,
-              profiles:officer_id (
+              profiles!inner (
                 id, 
                 full_name, 
                 badge_number, 
