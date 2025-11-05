@@ -122,6 +122,13 @@ const WeeklySchedule = ({
   console.log("Export Dialog Open value:", exportDialogOpen);
 }, [exportDialogOpen]);
 
+  // Add this useEffect to debug the calendar state
+useEffect(() => {
+  console.log("Calendar Debug - Open:", calendarOpen);
+  console.log("Calendar Debug - Date Range:", dateRange);
+  console.log("Calendar Debug - Export Dialog Open:", exportDialogOpen);
+}, [calendarOpen, dateRange, exportDialogOpen]);
+
 
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
