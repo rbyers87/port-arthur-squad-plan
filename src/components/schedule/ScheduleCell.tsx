@@ -15,6 +15,8 @@ interface ScheduleCellProps {
   onEditAssignment: (officer: any, dateStr: string) => void;
   onRemoveOfficer: (officer: any) => void;
   isUpdating?: boolean;
+  isPPO?: boolean;
+  partnerInfo?: string;
 }
 
 export const ScheduleCell = ({
@@ -27,7 +29,9 @@ export const ScheduleCell = ({
   onRemovePTO,
   onEditAssignment,
   onRemoveOfficer,
-  isUpdating = false
+  isUpdating = false,
+  isPPO = false,
+  partnerInfo = null
 }: ScheduleCellProps) => {
   // Check if this officer has any schedule data for this date
   const hasSchedule = !!officer;
@@ -51,6 +55,11 @@ export const ScheduleCell = ({
   const isFullDayPTO = hasPTO && ptoData?.isFullShift;
   const isPartialPTO = hasPTO && !ptoData?.isFullShift;
 
+  // For PPOs, use partner display if available
+  const displayPosition = isPPO && partnerInfo 
+    ? `Partner with ${partnerInfo}`
+    : position;
+
   // If no officer data at all, this is an unscheduled day (dark gray)
   if (!hasSchedule) {
     return (
@@ -67,6 +76,7 @@ export const ScheduleCell = ({
       ${isFullDayPTO ? 'bg-green-50 border-green-200' : ''}
       ${isPartialPTO ? 'bg-white' : ''}
       ${!isOff && !hasPTO ? 'bg-white' : ''}
+      ${isPPO ? 'bg-blue-50/30' : ''}
     `}>
       {isOff ? (
         <div className="text-center text-muted-foreground font-medium">DD</div>
@@ -82,9 +92,9 @@ export const ScheduleCell = ({
           </Badge>
           
           {/* Show position for partial PTO */}
-          {isPartialPTO && position && (
+          {isPartialPTO && displayPosition && (
             <div className="text-xs text-muted-foreground mt-1 truncate">
-              {position}
+              {displayPosition}
             </div>
           )}
           
@@ -109,9 +119,9 @@ export const ScheduleCell = ({
               Special
             </Badge>
           )}
-          {position && (
+          {displayPosition && (
             <div className="text-sm font-medium truncate">
-              {position}
+              {displayPosition}
             </div>
           )}
         </div>
