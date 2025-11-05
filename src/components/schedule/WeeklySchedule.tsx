@@ -1244,9 +1244,9 @@ const renderMonthlyView = () => {
               <div className="space-y-1 flex-1 overflow-y-auto">
                 {ptoOfficers.length > 0 ? (
                   <div className="space-y-1">
-                    {/* Only show full-day PTO officers, categorized by rank */}
+                    {/* Only show full-day PTO officers - all in green to match weekly view */}
                     {ptoOfficers.map((officer: any) => {
-                      // Determine officer category for styling
+                      // Determine officer category for badges only
                       const isSupervisor = officer.rank?.toLowerCase().includes('lieutenant') || 
                                          officer.rank?.toLowerCase().includes('sergeant') ||
                                          officer.rank?.toLowerCase().includes('sgt') ||
@@ -1256,24 +1256,19 @@ const renderMonthlyView = () => {
                       return (
                         <div 
                           key={officer.officerId} 
-                          className={`
-                            text-xs p-1 rounded border flex items-center justify-between
-                            ${isPPO ? 'bg-yellow-50 border-yellow-200' : ''}
-                            ${isSupervisor ? 'bg-purple-50 border-purple-200' : ''}
-                            ${!isSupervisor && !isPPO ? 'bg-blue-50 border-blue-200' : ''}
-                          `}
+                          className="text-xs p-1 rounded border flex items-center justify-between bg-green-50 border-green-200"
                         >
                           <div className="flex items-center gap-1">
                             <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}`}>
                               {getLastName(officer.officerName)}
                             </div>
                             {isPPO && (
-                              <Badge variant="outline" className="h-3 text-[8px] px-1 bg-yellow-100 text-yellow-800 border-yellow-300">
+                              <Badge variant="outline" className="h-3 text-[8px] px-1 bg-blue-100 text-blue-800 border-blue-300">
                                 PPO
                               </Badge>
                             )}
                             {isSupervisor && (
-                              <Badge variant="outline" className="h-3 text-[8px] px-1 bg-purple-100 text-purple-800 border-purple-300">
+                              <Badge variant="outline" className="h-3 text-[8px] px-1 bg-yellow-100 text-yellow-800 border-yellow-300">
                                 {officer.rank || 'SUP'}
                               </Badge>
                             )}
