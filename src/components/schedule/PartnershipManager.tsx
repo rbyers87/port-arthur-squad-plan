@@ -32,22 +32,22 @@ export const PartnershipManager = ({ officer, onPartnershipChange }: Partnership
       const dateToUse = officer.date || format(new Date(), "yyyy-MM-dd");
       const dayOfWeek = parseISO(dateToUse).getDay();
 
-      // First, get recurring officers for this shift and day
-      const { data: recurringOfficers, error: recurringError } = await supabase
-        .from("recurring_schedules")
-        .select(`
-          officer_id,
-          profiles:officer_id (
-            id,
-            full_name,
-            badge_number,
-            rank
-          )
-        `)
-        .eq("shift_type_id", officer.shift.id)
-        .eq("day_of_week", dayOfWeek)
-        .or(`end_date.is.null,end_date.gte.${dateToUse}`)
-        .neq("officer_id", officer.officerId); // Exclude current officer
+     // First, get recurring officers for this shift and day
+const { data: recurringOfficers, error: recurringError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    officer_id,
+    profiles:profiles!recurring_schedules_officer_id_fkey (
+      id,
+      full_name,
+      badge_number,
+      rank
+    )
+  `)
+  .eq("shift_type_id", officer.shift.id)
+  .eq("day_of_week", dayOfWeek)
+  .or(`end_date.is.null,end_date.gte.${dateToUse}`)
+  .neq("officer_id", officer.officerId); // Exclude current officer
 
       if (recurringError) {
         console.error("Error fetching recurring officers:", recurringError);
