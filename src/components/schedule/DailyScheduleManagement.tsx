@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,12 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleMa
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedShiftId, setSelectedShiftId] = useState<string>("all");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  // Force close the calendar when component mounts
+  useEffect(() => {
+    console.log("📅 DailyScheduleManagement mounted - forcing calendar closed");
+    setIsCalendarOpen(false);
+  }, []);
 
   const { data: shiftTypes } = useQuery({
     queryKey: ["shift-types"],
@@ -58,23 +64,23 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleMa
                   ))}
                 </SelectContent>
               </Select>
-             <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-  <PopoverTrigger asChild>
-    <Button variant="outline" className="gap-2">
-      <CalendarIcon className="h-4 w-4" />
-      {format(selectedDate, "MMM d, yyyy")}
-    </Button>
-  </PopoverTrigger>
-  <PopoverContent className="w-auto p-0" align="end">
-    <Calendar
-      key="daily-schedule-calendar" // Add unique key
-      mode="single"
-      selected={selectedDate}
-      onSelect={handleDateSelect}
-      initialFocus
-    />
-  </PopoverContent>
-</Popover>
+              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <CalendarIcon className="h-4 w-4" />
+                    {format(selectedDate, "MMM d, yyyy")}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    key="daily-schedule-calendar" // Unique key to prevent conflicts
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={handleDateSelect}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </CardTitle>
         </CardHeader>
