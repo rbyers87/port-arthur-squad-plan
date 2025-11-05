@@ -1307,7 +1307,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
+            <CalendarIcon className="h-5 w-5" />
             Schedule
           </CardTitle>
         </CardHeader>
@@ -1324,7 +1324,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
+              <CalendarIcon className="h-5 w-5" />
               Schedule - {shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Select Shift"}
             </CardTitle>
             <div className="flex items-center gap-3">
