@@ -17,7 +17,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Grid, Download, CalendarRange } from "lucide-react";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO, eachWeekOfInterval, addYears, subYears } from "date-fns";
 import { toast } from "sonner";
-import { PREDEFINED_POSITIONS } from "@/constants/positions";
+import { PREDEFINED_POSITIONS, RANK_ORDER } from "@/constants/positions"; // <-- ADD THIS IMPORT
 import { ScheduleCell } from "./ScheduleCell";
 import { useWeeklyScheduleMutations } from "@/hooks/useWeeklyScheduleMutations";
 import { useWeeklyPDFExport } from "@/hooks/useWeeklyPDFExport";
