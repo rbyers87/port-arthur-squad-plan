@@ -1553,6 +1553,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                 }
               }}
               numberOfMonths={2}
+              className="pointer-events-auto"
             />
           </PopoverContent>
         </Popover>
