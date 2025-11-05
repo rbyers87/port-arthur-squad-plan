@@ -153,6 +153,51 @@ const WeeklySchedule = ({
     }
   }, [shiftTypes, selectedShiftId]);
 
+  // Replace your debug useEffect with this more detailed version
+useEffect(() => {
+  const findStuckCalendar = () => {
+    console.log("🔍 === DETAILED CALENDAR SEARCH ===");
+    
+    // Get ALL calendar elements with full details
+    const calendars = document.querySelectorAll('[data-radix-calendar], .rdp, [role="grid"]');
+    console.log("Total calendar-like elements found:", calendars.length);
+    
+    calendars.forEach((cal, index) => {
+      const rect = cal.getBoundingClientRect();
+      const computedStyle = window.getComputedStyle(cal);
+      
+      console.log(`📅 Calendar ${index}:`, {
+        visible: rect.width > 0 && rect.height > 0,
+        display: computedStyle.display,
+        position: computedStyle.position,
+        zIndex: computedStyle.zIndex,
+        classes: cal.className,
+        parent: cal.parentElement?.className,
+        grandparent: cal.parentElement?.parentElement?.className,
+        isInViewport: rect.top >= 0 && rect.left >= 0 && 
+                     rect.bottom <= window.innerHeight && 
+                     rect.right <= window.innerWidth,
+        outerHTML: cal.outerHTML.substring(0, 300) + '...'
+      });
+    });
+
+    // Also check for any hidden or off-screen calendars
+    const allElements = document.querySelectorAll('*');
+    const calendarElements = Array.from(allElements).filter(el => {
+      const rect = el.getBoundingClientRect();
+      const hasCalendarClass = el.className?.toString().includes('calendar') || 
+                              el.className?.toString().includes('rdp') ||
+                              el.getAttribute('data-radix-calendar');
+      return hasCalendarClass && (rect.width > 0 || rect.height > 0);
+    });
+    
+    console.log("🎯 Visible calendar elements:", calendarElements.length);
+  };
+
+  findStuckCalendar();
+  setTimeout(findStuckCalendar, 100);
+}, []);
+
   // Navigation functions
   const goToPreviousWeek = () => setCurrentWeekStart(prev => subWeeks(prev, 1));
   const goToNextWeek = () => setCurrentWeekStart(prev => addWeeks(prev, 1));
