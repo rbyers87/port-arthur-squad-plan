@@ -1112,17 +1112,16 @@ const renderMonthlyView = () => {
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
   const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
 
-  // Function to get rank priority for sorting
+  // Function to get rank priority using RANK_ORDER constant
   const getRankPriority = (rank: string) => {
-    const rankLower = rank?.toLowerCase() || '';
+    if (!rank) return 99; // Default to lowest priority if no rank
     
-    if (rankLower.includes('lieutenant') || rankLower.includes('lt')) return 1;
-    if (rankLower.includes('sergeant') || rankLower.includes('sgt')) return 2;
-    if (rankLower.includes('captain') || rankLower.includes('cpt')) return 0; // Highest if you have captains
-    if (rankLower.includes('chief')) return -1; // Highest if you have chiefs
-    if (rankLower.includes('commander')) return -2; // Highest if you have commanders
+    // Find the rank in RANK_ORDER (case-insensitive)
+    const rankKey = Object.keys(RANK_ORDER).find(
+      key => key.toLowerCase() === rank.toLowerCase()
+    );
     
-    return 3; // Other supervisors
+    return rankKey ? RANK_ORDER[rankKey as keyof typeof RANK_ORDER] : 99;
   };
 
   return (
