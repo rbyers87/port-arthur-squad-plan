@@ -1350,7 +1350,6 @@ const renderMonthlyView = () => {
     </div>
   );
 };
-
   const weekEnd = addDays(currentWeekStart, 6);
   const isCurrentWeek = startOfWeek(new Date(), { weekStartsOn: 0 }).getTime() === currentWeekStart.getTime();
   const isCurrentMonthView = isSameMonth(currentMonth, new Date());
