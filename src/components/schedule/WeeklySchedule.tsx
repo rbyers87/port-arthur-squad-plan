@@ -108,10 +108,7 @@ const WeeklySchedule = ({
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
-    from: startOfWeek(new Date(), { weekStartsOn: 0 }),
-    to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4),
-  });
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>(undefined);
 
   // Mutations for editing schedule, removing PTO, etc.
   const {
