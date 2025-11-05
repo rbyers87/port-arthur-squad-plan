@@ -219,19 +219,20 @@ const handleExportPDF = async () => {
 const fetchScheduleDataForRange = async (startDate: Date, endDate: Date, dates: string[]) => {
   try {
     // Get recurring schedules
-    const { data: recurringData, error: recurringError } = await supabase
-      .from("recurring_schedules")
-      .select(`
-        *,
-        profiles:officer_id (
-          id, full_name, badge_number, rank, hire_date
-        ),
-        shift_types (
-          id, name, start_time, end_time
-        )
-      `)
-      .eq("shift_type_id", selectedShiftId)
-      .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
+// In WeeklySchedule.tsx - update the recurring schedules query
+const { data: recurringData, error: recurringError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles:profiles!recurring_schedules_officer_id_fkey (
+      id, full_name, badge_number, rank, hire_date
+    ),
+    shift_types (
+      id, name, start_time, end_time
+    )
+  `)
+  .eq("shift_type_id", selectedShiftId)
+  .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
 
     if (recurringError) throw recurringError;
 
