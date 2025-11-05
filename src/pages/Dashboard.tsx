@@ -1,3 +1,6 @@
+
+
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -19,6 +22,7 @@ import { StaffManagement } from "@/components/admin/StaffManagement";
 import { Badge } from "@/components/ui/badge";
 import { useNotificationsSubscription } from "@/hooks/useNotificationsSubscription";
 import { VacancyAlerts } from "@/components/vacancy/VacancyAlerts";
+import { parseISO } from "date-fns";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -168,16 +172,66 @@ const Dashboard = () => {
         console.error("Error fetching exceptions:", exceptionsError);
       }
 
+      // Get PTO exceptions for today
+      const { data: ptoExceptionsData, error: ptoError } = await supabase
+        .from("schedule_exceptions")
+        .select(`
+          *,
+          profiles!schedule_exceptions_officer_id_fkey (
+            id, 
+            full_name,
+            rank
+          ),
+          shift_types (
+            id, 
+            name
+          )
+        `)
+        .eq("date", today)
+        .eq("is_off", true);
+
+      if (ptoError) {
+        console.error("Error fetching PTO exceptions:", ptoError);
+      }
+
       // Helper function to categorize officer type
       const isSupervisor = (rank: string) => {
         return rank && ['Sergeant', 'Lieutenant', 'Captain', 'Chief', 'Deputy Chief', 'Commander'].includes(rank);
       };
 
-      // Count officers from recurring schedules
+      // Helper function to check if officer has full-day PTO
+      const hasFullDayPTO = (officerId: string, shiftTypeId: string) => {
+        if (!ptoExceptionsData) return false;
+        
+        const ptoException = ptoExceptionsData.find(pto => 
+          pto.officer_id === officerId && 
+          pto.shift_type_id === shiftTypeId &&
+          !pto.custom_start_time && 
+          !pto.custom_end_time
+        );
+        
+        return !!ptoException;
+      };
+
+      // Helper function to check if officer is Probationary (PPO)
+      const isProbationary = (rank: string) => {
+        return rank && rank.toLowerCase() === 'probationary';
+      };
+
+      // Count officers from recurring schedules - EXCLUDING PPOs and full-day PTO
       recurringData?.forEach(schedule => {
         if (schedule.shift_types?.name && schedule.profiles) {
           const shiftName = schedule.shift_types.name;
-          if (isSupervisor(schedule.profiles.rank)) {
+          const officerId = schedule.profiles.id;
+          const officerRank = schedule.profiles.rank;
+          const shiftTypeId = schedule.shift_types.id;
+          
+          // Skip if officer has full-day PTO or is Probationary
+          if (hasFullDayPTO(officerId, shiftTypeId) || isProbationary(officerRank)) {
+            return;
+          }
+          
+          if (isSupervisor(officerRank)) {
             staffingBreakdown[shiftName].supervisors++;
           } else {
             staffingBreakdown[shiftName].officers++;
@@ -186,11 +240,20 @@ const Dashboard = () => {
         }
       });
 
-      // Count officers from working exceptions
+      // Count officers from working exceptions - EXCLUDING PPOs and full-day PTO
       exceptionsData?.forEach(exception => {
         if (exception.shift_types?.name && exception.profiles) {
           const shiftName = exception.shift_types.name;
-          if (isSupervisor(exception.profiles.rank)) {
+          const officerId = exception.profiles.id;
+          const officerRank = exception.profiles.rank;
+          const shiftTypeId = exception.shift_types.id;
+          
+          // Skip if officer has full-day PTO or is Probationary
+          if (hasFullDayPTO(officerId, shiftTypeId) || isProbationary(officerRank)) {
+            return;
+          }
+          
+          if (isSupervisor(officerRank)) {
             staffingBreakdown[shiftName].supervisors++;
           } else {
             staffingBreakdown[shiftName].officers++;
@@ -430,7 +493,7 @@ const Dashboard = () => {
         })}
       </CardTitle>
       <CardDescription>
-        Current officer and supervisor coverage by shift
+        Current officer and supervisor coverage by shift (excludes Probationary officers and full-day PTO)
       </CardDescription>
     </CardHeader>
     <CardContent>
