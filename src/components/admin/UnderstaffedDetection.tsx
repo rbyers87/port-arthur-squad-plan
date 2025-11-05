@@ -111,12 +111,12 @@ export const UnderstaffedDetection = () => {
             );
           };
 
-          // FIXED: Use the exact same query structure as DailyScheduleView
+          // FIXED: Use the specific relationship name to avoid ambiguity
           const { data: recurringData, error: recurringError } = await supabase
             .from("recurring_schedules")
             .select(`
               *,
-              profiles!inner (
+              profiles!recurring_schedules_officer_id_fkey (
                 id, 
                 full_name, 
                 badge_number, 
@@ -159,7 +159,7 @@ export const UnderstaffedDetection = () => {
             throw exceptionsError;
           }
 
-          // Get officer profiles separately (matching DailyScheduleView structure)
+          // Get officer profiles separately
           const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
           let officerProfiles = [];
 
@@ -193,7 +193,7 @@ export const UnderstaffedDetection = () => {
             }
           }
 
-          // Combine the data manually (matching DailyScheduleView)
+          // Combine the data manually
           const combinedExceptions = exceptionsData?.map(exception => ({
             ...exception,
             profiles: officerProfiles.find(p => p.id === exception.officer_id),
@@ -312,6 +312,15 @@ export const UnderstaffedDetection = () => {
               });
             }
 
+            // DEBUG: Let's check what we found
+            console.log(`🔍 DEBUG - Shift ${shift.name} on ${date}:`, {
+              recurringOfficersCount: recurringOfficers.length,
+              additionalOfficersCount: additionalOfficers.length,
+              allAssignedOfficersCount: allAssignedOfficers.length,
+              minSupervisors,
+              minOfficers
+            });
+
             // Count supervisors and officers based on ACTUAL assigned positions, excluding full-day PTO
             const currentSupervisors = allAssignedOfficers
               .filter(o => o.isSupervisor && !o.isFullDayPTO)
@@ -390,6 +399,7 @@ export const UnderstaffedDetection = () => {
     },
   });
 
+  // ... rest of the component remains the same
   const { data: existingAlerts } = useQuery({
     queryKey: ["existing-vacancy-alerts"],
     queryFn: async () => {
