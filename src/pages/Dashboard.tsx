@@ -1,5 +1,3 @@
-
-
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar, Users, AlertTriangle, Clock, LogOut, Bell, X } from "lucide-react";
+import { Calendar, Users, AlertTriangle, Clock, LogOut, Bell, X, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
 import WeeklySchedule from "@/components/schedule/WeeklySchedule";
@@ -21,7 +19,7 @@ import { StaffManagement } from "@/components/admin/StaffManagement";
 import { Badge } from "@/components/ui/badge";
 import { useNotificationsSubscription } from "@/hooks/useNotificationsSubscription";
 import { VacancyAlerts } from "@/components/vacancy/VacancyAlerts";
-import { parseISO } from "date-fns";
+import { parseISO, format } from "date-fns";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -30,6 +28,7 @@ const Dashboard = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [manualRefresh, setManualRefresh] = useState(0);
   const { primaryRole, isAdminOrSupervisor, loading: roleLoading } = useUserRole(user?.id);
 
   // Debug logging
@@ -96,12 +95,17 @@ const Dashboard = () => {
     },
   });
 
-  const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats"],
+  // Get today's date string for the query key
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
+    queryKey: ["dashboard-stats", todayStr, manualRefresh],
     queryFn: async () => {
       const today = new Date().toISOString().split("T")[0];
       const dayOfWeek = new Date().getDay();
         
+      console.log("🔄 Fetching dashboard stats for:", today);
+      
       // Get all shift types first
       const { data: shiftTypes, error: shiftError } = await supabase
         .from("shift_types")
@@ -214,38 +218,29 @@ const Dashboard = () => {
         return rank && rank.toLowerCase().includes('probationary');
       };
 
-      // Helper function to check if officer is in Special Assignment (matches DailyScheduleView logic)
+      // Helper function to check if officer is in Special Assignment - SIMPLIFIED LOGIC
       const isSpecialAssignment = (position: string) => {
         if (!position) return false;
         
         const positionLower = position.toLowerCase();
         
-        // First check if it's a supervisor position - these are NOT special assignments
-        const isSupervisorPosition = positionLower.includes('supervisor') || 
-                                   positionLower.includes('sergeant') ||
-                                   positionLower.includes('lieutenant') ||
-                                   positionLower.includes('captain') ||
-                                   positionLower.includes('chief');
+        // Only count regular district officers and supervisors
+        const isRegularPosition = 
+          positionLower.includes('district') ||
+          positionLower.includes('supervisor') ||
+          positionLower.includes('sergeant') ||
+          positionLower.includes('lieutenant') ||
+          positionLower.includes('captain') ||
+          positionLower.includes('chief');
         
-        if (isSupervisorPosition) {
-          return false;
-        }
-        
-        // Check for special assignment indicators (matches your DailyScheduleView logic)
-        const isSpecialAssignment = positionLower.includes('other') || 
-          (position && ![
-            'district 1', 'district 2', 'district 3', 'district 4', 'district 5',
-            'district 6', 'district 7', 'district 8', 'district 9', 'district 10',
-            'district 11', 'district 12', 'district 13', 'district 14', 'district 15'
-          ].some(standardPos => positionLower.includes(standardPos)));
-        
-        return isSpecialAssignment;
+        // If it's NOT a regular position, it's a special assignment
+        return !isRegularPosition;
       };
 
       // Track processed officers to avoid duplicates (like DailyScheduleView does)
       const processedOfficers = new Set();
 
-      // Count officers from recurring schedules - EXCLUDING PPOs, full-day PTO, and special assignments
+      // Count officers from recurring schedules - ONLY COUNT REGULAR POSITIONS
       recurringData?.forEach(schedule => {
         if (schedule.shift_types?.name && schedule.profiles) {
           const shiftName = schedule.shift_types.name;
@@ -283,7 +278,7 @@ const Dashboard = () => {
         }
       });
 
-      // Count officers from working exceptions - EXCLUDING PPOs, full-day PTO, and special assignments
+      // Count officers from working exceptions - ONLY COUNT REGULAR POSITIONS
       workingExceptions?.forEach(exception => {
         if (exception.shift_types?.name && exception.profiles) {
           const shiftName = exception.shift_types.name;
@@ -351,8 +346,49 @@ const Dashboard = () => {
       };
     },
     enabled: isAdminOrSupervisor,
-    refetchInterval: 30000,
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
   });
+
+  // Function to manually refresh stats
+  const handleRefreshStats = () => {
+    setManualRefresh(prev => prev + 1);
+    toast.success("Staffing data refreshed");
+  };
+
+  // Listen for schedule changes and refresh stats
+  useEffect(() => {
+    const channel = supabase
+      .channel('schedule-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'schedule_exceptions'
+        },
+        (payload) => {
+          console.log('🔄 Schedule exception change detected:', payload);
+          refetchStats();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'recurring_schedules'
+        },
+        (payload) => {
+          console.log('🔄 Recurring schedule change detected:', payload);
+          refetchStats();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refetchStats]);
 
   useEffect(() => {
     // Check authentication
@@ -531,81 +567,99 @@ const Dashboard = () => {
         {isAdminOrSupervisor && (
           <Card className="mb-8">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Staffing Overview - {new Date().toLocaleDateString('en-US', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Staffing Overview - {new Date().toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </CardTitle>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleRefreshStats}
+                  disabled={statsLoading}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${statsLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
               <CardDescription>
-                Current officer and supervisor coverage by shift (excludes Probationary officers, full-day PTO, and special assignments)
+                Current regular officer and supervisor coverage by shift (excludes Probationary officers, full-day PTO, and special assignments)
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {stats?.staffingBreakdown && Object.entries(stats.staffingBreakdown).map(([shiftName, data]) => (
-                  <div key={shiftName} className="border rounded-lg p-4">
-                    <h3 className="font-semibold text-lg mb-3">{shiftName}</h3>
-                    
-                    {/* Supervisors */}
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm text-muted-foreground">Supervisors:</span>
-                      <div className="flex items-center gap-2">
-                        <Badge 
-                          variant={data.supervisors >= data.minRequired.supervisors ? "default" : "destructive"}
-                          className="text-xs"
-                        >
-                          {data.supervisors} / {data.minRequired.supervisors}
-                        </Badge>
+              {statsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                  <p className="mt-2 text-muted-foreground">Loading staffing data...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {stats?.staffingBreakdown && Object.entries(stats.staffingBreakdown).map(([shiftName, data]) => (
+                    <div key={shiftName} className="border rounded-lg p-4">
+                      <h3 className="font-semibold text-lg mb-3">{shiftName}</h3>
+                      
+                      {/* Supervisors */}
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-muted-foreground">Supervisors:</span>
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={data.supervisors >= data.minRequired.supervisors ? "default" : "destructive"}
+                            className="text-xs"
+                          >
+                            {data.supervisors} / {data.minRequired.supervisors}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {/* Officers */}
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-sm text-muted-foreground">Officers:</span>
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={data.officers >= data.minRequired.officers ? "default" : "destructive"}
+                            className="text-xs"
+                          >
+                            {data.officers} / {data.minRequired.officers}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {/* Total and Status */}
+                      <div className="flex justify-between items-center pt-2 border-t">
+                        <span className="text-sm font-medium">Total:</span>
+                        <span className="text-sm font-bold">{data.total}</span>
+                      </div>
+                      
+                      {/* Status Indicator */}
+                      <div className="mt-2">
+                        {data.supervisors >= data.minRequired.supervisors && 
+                         data.officers >= data.minRequired.officers ? (
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                            Fully Staffed
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                            Understaffed
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                    
-                    {/* Officers */}
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="text-sm text-muted-foreground">Officers:</span>
-                      <div className="flex items-center gap-2">
-                        <Badge 
-                          variant={data.officers >= data.minRequired.officers ? "default" : "destructive"}
-                          className="text-xs"
-                        >
-                          {data.officers} / {data.minRequired.officers}
-                        </Badge>
-                      </div>
+                  ))}
+                  
+                  {/* Fallback if no data */}
+                  {(!stats?.staffingBreakdown || Object.keys(stats.staffingBreakdown).length === 0) && (
+                    <div className="col-span-full text-center py-8 text-muted-foreground">
+                      <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No staffing data available for today</p>
                     </div>
-                    
-                    {/* Total and Status */}
-                    <div className="flex justify-between items-center pt-2 border-t">
-                      <span className="text-sm font-medium">Total:</span>
-                      <span className="text-sm font-bold">{data.total}</span>
-                    </div>
-                    
-                    {/* Status Indicator */}
-                    <div className="mt-2">
-                      {data.supervisors >= data.minRequired.supervisors && 
-                       data.officers >= data.minRequired.officers ? (
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                          Fully Staffed
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                          Understaffed
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                
-                {/* Fallback if no data */}
-                {(!stats?.staffingBreakdown || Object.keys(stats.staffingBreakdown).length === 0) && (
-                  <div className="col-span-full text-center py-8 text-muted-foreground">
-                    <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No staffing data available for today</p>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
