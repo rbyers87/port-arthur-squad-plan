@@ -122,6 +122,77 @@ const WeeklySchedule = ({
   console.log("Export Dialog Open value:", exportDialogOpen);
 }, [exportDialogOpen]);
 
+  // Add this useEffect to your WeeklySchedule component
+useEffect(() => {
+  const findAndLogAllCalendars = () => {
+    console.log("🔍 === COMPREHENSIVE CALENDAR SEARCH ===");
+    
+    // Method 1: Search by common calendar selectors
+    const selectors = [
+      '[data-radix-calendar]',
+      '.rdp',
+      '[role="dialog"]',
+      '[data-state="open"]',
+      '.calendar',
+      '.date-picker',
+      '.popover-content'
+    ];
+    
+    selectors.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      if (elements.length > 0) {
+        console.log(`📅 Found ${elements.length} elements with selector: ${selector}`);
+        elements.forEach((el, index) => {
+          const rect = el.getBoundingClientRect();
+          console.log(`  Element ${index}:`, {
+            visible: rect.width > 0 && rect.height > 0,
+            position: { top: rect.top, left: rect.left },
+            classes: el.className,
+            parent: el.parentElement?.className,
+            html: el.outerHTML.substring(0, 200) + '...'
+          });
+        });
+      }
+    });
+
+    // Method 2: Search for any element containing "calendar" in class or id
+    const allElements = document.querySelectorAll('*');
+    const calendarElements = Array.from(allElements).filter(el => {
+      const className = el.className?.toString().toLowerCase() || '';
+      const id = el.id?.toLowerCase() || '';
+      return className.includes('calendar') || id.includes('calendar');
+    });
+    
+    if (calendarElements.length > 0) {
+      console.log(`📅 Found ${calendarElements.length} elements with 'calendar' in class/id`);
+      calendarElements.forEach((el, index) => {
+        console.log(`  Calendar element ${index}:`, {
+          tag: el.tagName,
+          classes: el.className,
+          id: el.id,
+          parent: el.parentElement?.className
+        });
+      });
+    }
+
+    // Method 3: Check if any Popover is open
+    const openPopovers = document.querySelectorAll('[data-state="open"]');
+    console.log(`🎯 Open popovers: ${openPopovers.length}`);
+    openPopovers.forEach((popover, index) => {
+      console.log(`  Open popover ${index}:`, {
+        classes: popover.className,
+        children: popover.children.length,
+        html: popover.outerHTML.substring(0, 300) + '...'
+      });
+    });
+  };
+
+  // Run search multiple times to catch dynamically rendered calendars
+  findAndLogAllCalendars();
+  setTimeout(findAndLogAllCalendars, 100);
+  setTimeout(findAndLogAllCalendars, 500);
+}, []);
+
   // Add this useEffect to debug the calendar state
 useEffect(() => {
   console.log("Calendar Debug - Open:", calendarOpen);
