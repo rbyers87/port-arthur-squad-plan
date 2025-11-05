@@ -417,14 +417,6 @@ const fetchScheduleDataForRange = async (startDate: Date, endDate: Date, dates: 
   }
 };
 
-    return { 
-      dailySchedules, 
-      dates,
-      recurring: recurringData,
-      exceptions: combinedExceptions
-    };
-  };
-
 // Main schedule query - UPDATED to fetch service credits
 const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
   queryKey,
