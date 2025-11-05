@@ -1,213 +1,80 @@
-// src/components/schedule/WeeklySchedule.tsx
+// components/schedule/WeeklySchedule.tsx - REFACTORED VERSION WITH PDF EXPORT
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-
-import {
-  Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Grid,
-  Download,
-  CalendarRange,
-} from "lucide-react";
-
-import {
-  format,
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  addDays,
-  addWeeks,
-  subWeeks,
-  startOfMonth,
-  endOfMonth,
-  addMonths,
-  subMonths,
-  isSameDay,
-  isSameMonth,
-  parseISO,
-  eachWeekOfInterval,
-  addYears,
-  subYears,
-} from "date-fns";
-
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Grid, Download, CalendarRange } from "lucide-react";
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, addMonths, subMonths, isSameDay, isSameMonth, parseISO, eachWeekOfInterval, addYears, subYears } from "date-fns";
 import { toast } from "sonner";
 import { PREDEFINED_POSITIONS } from "@/constants/positions";
 import { ScheduleCell } from "./ScheduleCell";
 import { useWeeklyScheduleMutations } from "@/hooks/useWeeklyScheduleMutations";
+import { useWeeklyPDFExport } from "@/hooks/useWeeklyPDFExport";
 import { PTOAssignmentDialog } from "./PTOAssignmentDialog";
-import {
-  getLastName,
+import { 
+  getLastName, 
   categorizeAndSortOfficers,
   calculateStaffingCounts,
   MINIMUM_STAFFING,
-  MINIMUM_SUPERVISORS,
+  MINIMUM_SUPERVISORS
 } from "@/utils/scheduleUtils";
 import { cn } from "@/lib/utils";
 
-// ✅ Import the extracted PDF hook (lazy load option explained below)
-import { useWeeklyPDFExport } from "@/hooks/useWeeklyPDFExport";
-
 interface WeeklyScheduleProps {
-  userRole?: "officer" | "supervisor" | "admin";
+  userRole?: 'officer' | 'supervisor' | 'admin';
   isAdminOrSupervisor?: boolean;
 }
 
-const WeeklySchedule = ({
-  userRole = "officer",
-  isAdminOrSupervisor = false,
+interface ExportOptions {
+  startDate: Date;
+  endDate: Date;
+  shiftName: string;
+  scheduleData: any[];
+}
+
+const WeeklySchedule = ({ 
+  userRole = 'officer', 
+  isAdminOrSupervisor = false 
 }: WeeklyScheduleProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-
-  // PDF export hook
-  const { exportWeeklyPDF } = useWeeklyPDFExport();
-
-  // All your existing useState hooks here
-  const [currentWeekStart, setCurrentWeekStart] = useState(
-    startOfWeek(new Date(), { weekStartsOn: 0 })
-  );
+  
+  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [activeView, setActiveView] = useState<"weekly" | "monthly">("weekly");
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingAssignment, setEditingAssignment] = useState<{
-    officer: any;
-    dateStr: string;
-  } | null>(null);
+  const [editingAssignment, setEditingAssignment] = useState<{ officer: any; dateStr: string } | null>(null);
   const [editPosition, setEditPosition] = useState("");
   const [customPosition, setCustomPosition] = useState("");
   const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
+    from: startOfWeek(new Date(), { weekStartsOn: 0 }),
+    to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4) // Default 4 weeks
+  });
 
-  // Mutations for editing schedule, removing PTO, etc.
+  // Use consolidated mutations hook
   const {
     updatePositionMutation,
     removeOfficerMutation,
     removePTOMutation,
-    queryKey,
+    queryKey
   } = useWeeklyScheduleMutations(currentWeekStart, currentMonth, activeView, selectedShiftId);
 
-  useEffect(() => {
-  console.log("Export Dialog Open value:", exportDialogOpen);
-}, [exportDialogOpen]);
-
-  // Add this useEffect to your WeeklySchedule component
-useEffect(() => {
-  const findAndLogAllCalendars = () => {
-    console.log("🔍 === COMPREHENSIVE CALENDAR SEARCH ===");
-    
-    // Method 1: Search by common calendar selectors
-    const selectors = [
-      '[data-radix-calendar]',
-      '.rdp',
-      '[role="dialog"]',
-      '[data-state="open"]',
-      '.calendar',
-      '.date-picker',
-      '.popover-content'
-    ];
-    
-    selectors.forEach(selector => {
-      const elements = document.querySelectorAll(selector);
-      if (elements.length > 0) {
-        console.log(`📅 Found ${elements.length} elements with selector: ${selector}`);
-        elements.forEach((el, index) => {
-          const rect = el.getBoundingClientRect();
-          console.log(`  Element ${index}:`, {
-            visible: rect.width > 0 && rect.height > 0,
-            position: { top: rect.top, left: rect.left },
-            classes: el.className,
-            parent: el.parentElement?.className,
-            html: el.outerHTML.substring(0, 200) + '...'
-          });
-        });
-      }
-    });
-
-    // Method 2: Search for any element containing "calendar" in class or id
-    const allElements = document.querySelectorAll('*');
-    const calendarElements = Array.from(allElements).filter(el => {
-      const className = el.className?.toString().toLowerCase() || '';
-      const id = el.id?.toLowerCase() || '';
-      return className.includes('calendar') || id.includes('calendar');
-    });
-    
-    if (calendarElements.length > 0) {
-      console.log(`📅 Found ${calendarElements.length} elements with 'calendar' in class/id`);
-      calendarElements.forEach((el, index) => {
-        console.log(`  Calendar element ${index}:`, {
-          tag: el.tagName,
-          classes: el.className,
-          id: el.id,
-          parent: el.parentElement?.className
-        });
-      });
-    }
-
-    // Method 3: Check if any Popover is open
-    const openPopovers = document.querySelectorAll('[data-state="open"]');
-    console.log(`🎯 Open popovers: ${openPopovers.length}`);
-    openPopovers.forEach((popover, index) => {
-      console.log(`  Open popover ${index}:`, {
-        classes: popover.className,
-        children: popover.children.length,
-        html: popover.outerHTML.substring(0, 300) + '...'
-      });
-    });
-  };
-
-  // Run search multiple times to catch dynamically rendered calendars
-  findAndLogAllCalendars();
-  setTimeout(findAndLogAllCalendars, 100);
-  setTimeout(findAndLogAllCalendars, 500);
-}, []);
-
-  // Add this useEffect to debug the calendar state
-useEffect(() => {
-  console.log("Calendar Debug - Open:", calendarOpen);
-  console.log("Calendar Debug - Date Range:", dateRange);
-  console.log("Calendar Debug - Export Dialog Open:", exportDialogOpen);
-}, [calendarOpen, dateRange, exportDialogOpen]);
-
-  useEffect(() => {
-  const calendars = document.querySelectorAll('[data-radix-calendar]');
-  console.log("Number of Calendar components on page:", calendars.length);
-  calendars.forEach((cal, index) => {
-    console.log(`Calendar ${index}:`, cal);
-  });
-}, []);
-
+  const { exportWeeklyPDF } = useWeeklyPDFExport();
 
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
@@ -299,61 +166,56 @@ useEffect(() => {
     navigate(`/daily-schedule?date=${dateStr}&shift=${selectedShiftId}`);
   };
 
-// Handle PDF export
-const handleExportPDF = async () => {
-  // Use default range if none selected
-  const exportDateRange = dateRange || {
-    from: startOfWeek(new Date(), { weekStartsOn: 0 }),
-    to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4),
-  };
-
-  if (!exportDateRange.from || !exportDateRange.to) {
-    toast.error("Please select a date range");
-    return;
-  }
-
-  if (!selectedShiftId) {
-    toast.error("Please select a shift");
-    return;
-  }
-
-  try {
-    toast.info("Generating PDF export...");
-
-    // Use exportDateRange here instead of dateRange
-    const startDate = exportDateRange.from;
-    const endDate = exportDateRange.to;
-
-    // Prepare the date list for fetching
-    const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date =>
-      format(date, "yyyy-MM-dd")
-    );
-
-    // Fetch schedule data for that date range
-    const { data: scheduleData, error } = await fetchScheduleDataForRange(startDate, endDate, dates);
-    if (error) throw error;
-
-    const shiftName = shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Unknown Shift";
-
-    // Run the export using the already-imported hook
-    const result = await exportWeeklyPDF({
-      startDate,
-      endDate,
-      shiftName,
-      scheduleData: scheduleData.dailySchedules || [],
-    });
-
-    if (result.success) {
-      toast.success("PDF exported successfully");
-      setExportDialogOpen(false);
-    } else {
-      toast.error("Failed to export PDF");
+  // Handle PDF export
+  const handleExportPDF = async () => {
+    if (!dateRange?.from || !dateRange?.to) {
+      toast.error("Please select a date range");
+      return;
     }
-  } catch (error) {
-    console.error("Export error:", error);
-    toast.error("Error generating PDF export");
-  }
-};
+
+    if (!selectedShiftId) {
+      toast.error("Please select a shift");
+      return;
+    }
+
+    try {
+      toast.info("Generating PDF export...");
+      
+      // Fetch data for the selected date range
+      const startDate = dateRange.from;
+      const endDate = dateRange.to;
+      
+      const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date => 
+        format(date, "yyyy-MM-dd")
+      );
+
+      // Fetch schedule data for the date range
+      const { data: scheduleData, error } = await fetchScheduleDataForRange(startDate, endDate, dates);
+      
+      if (error) {
+        throw error;
+      }
+
+      const shiftName = shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Unknown Shift";
+      
+      const result = await exportWeeklyPDF({
+        startDate,
+        endDate,
+        shiftName,
+        scheduleData: scheduleData.dailySchedules || []
+      });
+
+      if (result.success) {
+        toast.success("PDF exported successfully");
+        setExportDialogOpen(false);
+      } else {
+        toast.error("Failed to export PDF");
+      }
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Error generating PDF export");
+    }
+  };
 
   // Function to fetch schedule data for a date range
   const fetchScheduleDataForRange = async (startDate: Date, endDate: Date, dates: string[]) => {
@@ -1441,10 +1303,10 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                   </Button>
                 </>
               )}
-<Button onClick={() => setExportDialogOpen(true)}>
-  <Download className="mr-2 h-4 w-4" /> Export PDF
-</Button>
-
+              <Button onClick={() => setExportDialogOpen(true)} size="sm" variant="outline">
+                <Download className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
             </div>
           </div>
           
@@ -1578,116 +1440,139 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogContent>
       </Dialog>
 
-{/* PDF Export Dialog */}
-{exportDialogOpen && (
-  <Dialog
-    open={exportDialogOpen}
-    onOpenChange={(open) => {
-      setExportDialogOpen(open);
-      if (!open) {
-        setDateRange(undefined);
-        setCalendarOpen(false);
-      }
-    }}
-  >
-    <DialogContent className="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Download className="h-5 w-5" />
-          Export Schedule to PDF
-        </DialogTitle>
-        <DialogDescription>
-          Export recurring schedules and assignments for a specific time period.
-        </DialogDescription>
-      </DialogHeader>
+{/* PDF Export Dialog - ONLY RENDERS WHEN DIALOG IS OPEN */}
+      {exportDialogOpen && (
+        <Dialog open={exportDialogOpen} onOpenChange={(open) => {
+          setExportDialogOpen(open);
+          if (!open) {
+            setCalendarOpen(false);
+            setDateRange(undefined);
+          }
+        }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-5 w-5" />
+              Export Schedule to PDF
+            </DialogTitle>
+            <DialogDescription>
+              Export recurring schedules and assignments for a specific time period.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="date-range">Date Range</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="date-range"
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !dateRange && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarRange className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, "LLL dd, y")} -{" "}
+                          {format(dateRange.to, "LLL dd, y")}
+                        </>
+                      ) : (
+                        format(dateRange.from, "LLL dd, y")
+                      )
+                    ) : (
+                      <span>Pick a date range</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={(range) => {
+                      setDateRange(range);
+                    }}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
 
-      {/* Date Range Selector */}
-      <div className="space-y-2">
-        <Label htmlFor="date-range">Date Range</Label>
-        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              id="date-range"
-              variant="outline"
-              className={cn(
-                "w-full justify-start text-left font-normal",
-                !dateRange && "text-muted-foreground"
-              )}
-            >
-              <CalendarRange className="mr-2 h-4 w-4" />
-              {dateRange?.from
-                ? dateRange.to
-                  ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
-                  : format(dateRange.from, "LLL dd, y")
-                : "Pick a date range"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 bg-background z-[100]" align="start">
-            <Calendar
-              key="pdf-export-calendar" // Add unique key
-              initialFocus
-              mode="range"
-              defaultMonth={dateRange?.from || new Date()}
-              selected={dateRange}
-              onSelect={(range) => {
-                setDateRange(range);
-                if (range?.from && range?.to) {
-                  setCalendarOpen(false);
+            <div className="space-y-2">
+              <Label htmlFor="export-shift">Shift</Label>
+              <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select shift" />
+                </SelectTrigger>
+                <SelectContent>
+                  {shiftTypes?.map((shift) => (
+                    <SelectItem key={shift.id} value={shift.id}>
+                      {shift.name} ({shift.start_time} - {shift.end_time})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleExportPDF} disabled={!dateRange?.from || !dateRange?.to || !selectedShiftId}>
+                <Download className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+  )} 
+
+      {/* Schedule Management Dialog */}
+      {isAdminOrSupervisor && (
+        <>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Schedule</DialogTitle>
+                <DialogDescription>
+                  This feature is not implemented yet.
+                </DialogDescription>
+              </DialogHeader>
+              <Button onClick={() => setDialogOpen(false)}>Close</Button>
+            </DialogContent>
+          </Dialog>
+
+          {/* PTO Assignment Dialog - Import from your existing component */}
+          {selectedSchedule && (
+            <PTOAssignmentDialog
+              open={ptoDialogOpen}
+              onOpenChange={(open) => {
+                setPtoDialogOpen(open);
+                if (!open) {
+                  queryClient.invalidateQueries({ queryKey });
                 }
               }}
-              numberOfMonths={2}
+              officer={{
+                officerId: selectedSchedule.officerId,
+                name: selectedSchedule.officerName,
+                scheduleId: selectedSchedule.scheduleId,
+                type: selectedSchedule.type,
+                ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
+              }}
+              shift={selectedSchedule.shift}
+              date={selectedSchedule.date}
             />
-          </PopoverContent>
-        </Popover>
-      </div>
-
-      <Button className="w-full mt-4" onClick={handleExportPDF}>
-        Export PDF
-      </Button>
-    </DialogContent>
-  </Dialog>
-)}
-
-{/* Schedule Management Dialog */}
-{isAdminOrSupervisor && (
-  <>
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add Schedule</DialogTitle>
-          <DialogDescription>
-            This feature is not implemented yet.
-          </DialogDescription>
-        </DialogHeader>
-        <Button onClick={() => setDialogOpen(false)}>Close</Button>
-      </DialogContent>
-    </Dialog>
-
-    {/* PTO Assignment Dialog - Import from your existing component */}
-    {selectedSchedule && (
-      <PTOAssignmentDialog
-        open={ptoDialogOpen}
-        onOpenChange={(open) => {
-          setPtoDialogOpen(open);
-          if (!open) {
-            queryClient.invalidateQueries({ queryKey });
-          }
-        }}
-        officer={{
-          officerId: selectedSchedule.officerId,
-          name: selectedSchedule.officerName,
-          scheduleId: selectedSchedule.scheduleId,
-          type: selectedSchedule.type,
-          ...(selectedSchedule.existingPTO ? { existingPTO: selectedSchedule.existingPTO } : {})
-        }}
-        shift={selectedSchedule.shift}
-        date={selectedSchedule.date}
-      />
-    )}
-  </>
-)}
-</>
-);
+          )}
+        </>
+      )}
+    </>
+  );
 };
 
 export default WeeklySchedule;

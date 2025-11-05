@@ -113,19 +113,16 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
 
       if (error) throw error;
       
-      // Cast to any to avoid type conflicts
-      const allSchedules = (data || []) as any[];
-      
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
       // FIX: Include schedules that are either ongoing OR end in the future
-      const active = allSchedules.filter((s: any) => {
+      const active = data.filter(s => {
         const endDate = s.end_date ? new Date(s.end_date) : null;
         return !endDate || endDate >= today;
       });
       
-      const ended = allSchedules.filter((s: any) => {
+      const ended = data.filter(s => {
         const endDate = s.end_date ? new Date(s.end_date) : null;
         return endDate && endDate < today;
       });
@@ -139,27 +136,24 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
     queryKey: ["officer-default-assignments", officer.id],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("officer_default_assignments")
         .select("*")
         .eq("officer_id", officer.id)
-        .order("start_date", { ascending: false});
+        .order("start_date", { ascending: false });
 
       if (error) throw error;
-      
-      // Cast to any to avoid type conflicts
-      const assignments = (data || []) as any[];
       
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
       // FIX: Include assignments that are either ongoing OR end in the future
-      const active = assignments.filter((da: any) => {
+      const active = data.filter(da => {
         const endDate = da.end_date ? new Date(da.end_date) : null;
         return !endDate || endDate >= today;
       });
       
-      const ended = assignments.filter((da: any) => {
+      const ended = data.filter(da => {
         const endDate = da.end_date ? new Date(da.end_date) : null;
         return endDate && endDate < today;
       });
@@ -310,7 +304,7 @@ const addDefaultAssignmentMutation = useMutation({
     end?: string;
   }) => {
     // First, end any existing active assignments that overlap with the new one
-    const { error: endPreviousError } = await (supabase as any)
+    const { error: endPreviousError } = await supabase
       .from("officer_default_assignments")
       .update({ 
         end_date: data.start // End previous assignments the day before new one starts
@@ -325,7 +319,7 @@ const addDefaultAssignmentMutation = useMutation({
     }
 
     // Second, create the new default assignment
-    const { data: assignment, error: assignmentError } = await (supabase as any)
+    const { data: assignment, error: assignmentError } = await supabase
       .from("officer_default_assignments")
       .insert({
         officer_id: officer.id,
@@ -390,7 +384,7 @@ const addDefaultAssignmentMutation = useMutation({
         end_date?: string | null;
       } 
     }) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("officer_default_assignments")
         .update(updates)
         .eq("id", assignmentId);
@@ -411,7 +405,7 @@ const addDefaultAssignmentMutation = useMutation({
   // Delete default assignment mutation
   const deleteDefaultAssignmentMutation = useMutation({
     mutationFn: async (assignmentId: string) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("officer_default_assignments")
         .delete()
         .eq("id", assignmentId);
@@ -609,8 +603,8 @@ const handleAddDefaultAssignment = () => {
   };
 
   const isEditing = !!editingSchedule;
-  const activeSchedules = schedules?.filter((s: any) => !s.end_date || new Date(s.end_date) >= new Date()) || [];
-  const activeDefaultAssignments = defaultAssignments?.filter((da: any) => !da.end_date || new Date(da.end_date) >= new Date()) || [];
+  const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
+  const activeDefaultAssignments = defaultAssignments?.filter(da => !da.end_date || new Date(da.end_date) >= new Date()) || [];
 
   return (
     <>

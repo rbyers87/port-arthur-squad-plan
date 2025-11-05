@@ -118,7 +118,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
       if (error) throw error;
 
       // Update user role based on new rank
-      const getRoleFromRank = (rank: string): "admin" | "officer" | "supervisor" => {
+      const getRoleFromRank = (rank: string): string => {
         const rankLower = rank.toLowerCase();
         if (rankLower === 'chief' || rankLower === 'deputy chief') return 'admin';
         if (rankLower === 'sergeant' || rankLower === 'lieutenant') return 'supervisor';
