@@ -70,7 +70,7 @@ export const UnderstaffedDetection = () => {
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
           // Use the EXACT same approach as the dashboard stats - call getScheduleData directly
-          const { getScheduleData } = await import("./DailyScheduleView");
+          const { getScheduleData } = await import("../schedule/DailyScheduleView");
           const scheduleData = await getScheduleData(new Date(date), "all");
           
           if (!scheduleData || scheduleData.length === 0) {

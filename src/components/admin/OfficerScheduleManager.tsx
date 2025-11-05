@@ -138,11 +138,11 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
     queryKey: ["officer-default-assignments", officer.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = (await supabase
         .from("officer_default_assignments")
         .select("*")
         .eq("officer_id", officer.id)
-        .order("start_date", { ascending: false });
+        .order("start_date", { ascending: false })) as any;
 
       if (error) throw error;
       
@@ -150,12 +150,12 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       today.setHours(0, 0, 0, 0);
       
       // FIX: Include assignments that are either ongoing OR end in the future
-      const active = data.filter(da => {
+      const active = (data || []).filter((da: any) => {
         const endDate = da.end_date ? new Date(da.end_date) : null;
         return !endDate || endDate >= today;
       });
       
-      const ended = data.filter(da => {
+      const ended = (data || []).filter((da: any) => {
         const endDate = da.end_date ? new Date(da.end_date) : null;
         return endDate && endDate < today;
       });
@@ -334,13 +334,13 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       end?: string;
     }) => {
       // First, end any existing active assignments that overlap with the new one
-      const { error: endPreviousError } = await supabase
+      const { error: endPreviousError } = (await supabase
         .from("officer_default_assignments")
         .update({ 
-          end_date: data.start // End previous assignments the day before new one starts
-        })
+          end_date: data.start 
+        } as any)
         .eq("officer_id", officer.id)
-       .or(`end_date.is.null,end_date.gte.${data.start}`);
+       .or(`end_date.is.null,end_date.gte.${data.start}`)) as any;
        // .lt("start_date", data.start); // That started before the new assignment
 
       if (endPreviousError) {
@@ -349,7 +349,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       }
 
       // Second, create the new default assignment
-      const { data: assignment, error: assignmentError } = await supabase
+      const { data: assignment, error: assignmentError } = (await supabase
         .from("officer_default_assignments")
         .insert({
           officer_id: officer.id,
@@ -357,9 +357,9 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
           position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
           start_date: data.start,
           end_date: data.end || null,
-        })
+        } as any)
         .select()
-        .single();
+        .single()) as any;
 
       if (assignmentError) throw assignmentError;
 
@@ -414,10 +414,10 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
         end_date?: string | null;
       } 
     }) => {
-      const { error } = await supabase
+      const { error } = (await supabase
         .from("officer_default_assignments")
-        .update(updates)
-        .eq("id", assignmentId);
+        .update(updates as any)
+        .eq("id", assignmentId)) as any;
 
       if (error) throw error;
     },
@@ -435,10 +435,10 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   // Delete default assignment mutation
   const deleteDefaultAssignmentMutation = useMutation({
     mutationFn: async (assignmentId: string) => {
-      const { error } = await supabase
+      const { error } = (await supabase
         .from("officer_default_assignments")
         .delete()
-        .eq("id", assignmentId);
+        .eq("id", assignmentId)) as any;
 
       if (error) throw error;
     },
@@ -493,10 +493,10 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     setEditingSchedule(schedule);
     setSelectedDays([schedule.day_of_week]);
     setShiftTypeId(schedule.shift_type_id);
-    setStartDate(new Date(schedule.start_date));
-    setEndDate(schedule.end_date ? new Date(schedule.end_date) : undefined);
-    setUnitNumber(schedule.unit_number || "");
-    setAssignedPosition(schedule.position_name || "none");
+    setStartDate(new Date((schedule as any).start_date));
+    setEndDate((schedule as any).end_date ? new Date((schedule as any).end_date) : undefined);
+    setUnitNumber((schedule as any).unit_number || "");
+    setAssignedPosition((schedule as any).position_name || "none");
   };
 
   const handleSaveEdit = () => {
@@ -686,8 +686,8 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   };
 
   const isEditing = !!editingSchedule;
-  const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
-  const activeDefaultAssignments = defaultAssignments?.filter(da => !da.end_date || new Date(da.end_date) >= new Date()) || [];
+  const activeSchedules = (schedules as any)?.filter((s: any) => !s.end_date || new Date(s.end_date) >= new Date()) || [];
+  const activeDefaultAssignments = (defaultAssignments as any)?.filter((da: any) => !da.end_date || new Date(da.end_date) >= new Date()) || [];
 
   return (
     <>
@@ -767,24 +767,24 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                                   {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {format(new Date(schedule.start_date), "MMM d, yyyy")}
-                                  {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
-                                  {!schedule.end_date && " - Ongoing"}
+                                  {format(new Date((schedule as any).start_date), "MMM d, yyyy")}
+                                  {(schedule as any).end_date && ` - ${format(new Date((schedule as any).end_date), "MMM d, yyyy")}`}
+                                  {!(schedule as any).end_date && " - Ongoing"}
                                 </p>
                                 <div className="flex gap-2 flex-wrap">
-                                  {schedule.unit_number && (
+                                  {(schedule as any).unit_number && (
                                     <Badge variant="secondary" className="text-xs">
                                       <MapPin className="h-3 w-3 mr-1" />
-                                      {schedule.unit_number}
+                                      {(schedule as any).unit_number}
                                     </Badge>
                                   )}
-                                  {schedule.position_name && (
+                                  {(schedule as any).position_name && (
                                     <Badge variant="secondary" className="text-xs">
                                       <Building className="h-3 w-3 mr-1" />
-                                      {schedule.position_name}
+                                      {(schedule as any).position_name}
                                     </Badge>
                                   )}
-                                  {(!schedule.unit_number && !schedule.position_name) && (
+                                  {(!(schedule as any).unit_number && !(schedule as any).position_name) && (
                                     <span className="text-xs text-muted-foreground italic">No assignment details</span>
                                   )}
                                 </div>
@@ -840,20 +840,20 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                                     {schedule.shift_types?.start_time} - {schedule.shift_types?.end_time}
                                   </p>
                                   <p className="text-xs text-muted-foreground">
-                                    {format(new Date(schedule.start_date), "MMM d, yyyy")}
-                                    {schedule.end_date && ` - ${format(new Date(schedule.end_date), "MMM d, yyyy")}`}
+                                    {format(new Date((schedule as any).start_date), "MMM d, yyyy")}
+                                    {(schedule as any).end_date && ` - ${format(new Date((schedule as any).end_date), "MMM d, yyyy")}`}
                                   </p>
                                   <div className="flex gap-2 flex-wrap">
-                                    {schedule.unit_number && (
+                                    {(schedule as any).unit_number && (
                                       <Badge variant="secondary" className="text-xs">
                                         <MapPin className="h-3 w-3 mr-1" />
-                                        {schedule.unit_number}
+                                        {(schedule as any).unit_number}
                                       </Badge>
                                     )}
-                                    {schedule.position_name && (
+                                    {(schedule as any).position_name && (
                                       <Badge variant="secondary" className="text-xs">
                                         <Building className="h-3 w-3 mr-1" />
-                                        {schedule.position_name}
+                                        {(schedule as any).position_name}
                                       </Badge>
                                     )}
                                   </div>
@@ -1258,12 +1258,12 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                     )}
 
                     {/* Ended Default Assignments */}
-                    {defaultAssignments.filter(da => da.end_date && new Date(da.end_date) < new Date()).length > 0 && (
+                    {(defaultAssignments as any[]).filter((da: any) => da.end_date && new Date(da.end_date) < new Date()).length > 0 && (
                       <div className="space-y-2">
                         <h4 className="text-sm font-semibold text-muted-foreground">Ended Assignments</h4>
-                        {defaultAssignments
-                          .filter(da => da.end_date && new Date(da.end_date) < new Date())
-                          .map((assignment) => (
+                        {(defaultAssignments as any[])
+                          .filter((da: any) => da.end_date && new Date(da.end_date) < new Date())
+                          .map((assignment: any) => (
                             <div
                               key={assignment.id}
                               className="flex items-center justify-between p-3 border rounded-lg opacity-60 bg-muted/50"

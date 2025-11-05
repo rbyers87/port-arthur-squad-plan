@@ -118,7 +118,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
       if (error) throw error;
 
       // Update user role based on new rank
-      const getRoleFromRank = (rank: string): string => {
+      const getRoleFromRank = (rank: string): "admin" | "officer" | "supervisor" => {
         const rankLower = rank.toLowerCase();
         if (rankLower === 'chief' || rankLower === 'deputy chief') return 'admin';
         if (rankLower === 'sergeant' || rankLower === 'lieutenant') return 'supervisor';
@@ -130,7 +130,7 @@ export const OfficerProfileDialog = ({ officer, open, onOpenChange }: OfficerPro
       // Update the user_roles table
       const { error: roleError } = await supabase
         .from('user_roles')
-        .update({ role: newRole })
+        .update({ role: newRole as any })
         .eq('user_id', officer.id);
 
       if (roleError) {
