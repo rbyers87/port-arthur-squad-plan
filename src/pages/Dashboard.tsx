@@ -92,216 +92,215 @@ const Dashboard = () => {
     },
   });
 
-  const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats"],
-    queryFn: async () => {
-      const today = new Date().toISOString().split("T")[0];
-      const dayOfWeek = new Date().getDay();
-        
-      // Get all shift types first
-      const { data: shiftTypes, error: shiftError } = await supabase
-        .from("shift_types")
-        .select("*")
-        .order("start_time");
-      if (shiftError) throw shiftError;
+const { data: stats } = useQuery({
+  queryKey: ["dashboard-stats"],
+  queryFn: async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const dayOfWeek = new Date().getDay();
+      
+    // Get all shift types first
+    const { data: shiftTypes, error: shiftError } = await supabase
+      .from("shift_types")
+      .select("*")
+      .order("start_time");
+    if (shiftError) throw shiftError;
 
-      // Enhanced staffing breakdown
-      const staffingBreakdown: { 
-        [key: string]: { 
-          officers: number; 
-          supervisors: number; 
-          total: number;
-          minRequired?: { officers: number; supervisors: number };
-        } 
-      } = {};
+    // Get minimum staffing requirements from database
+    const { data: minimumStaffing, error: minError } = await supabase
+      .from("minimum_staffing")
+      .select("minimum_officers, minimum_supervisors, shift_type_id")
+      .eq("day_of_week", dayOfWeek);
 
-      // Initialize staffing breakdown with all shifts
-      shiftTypes?.forEach(shift => {
-        staffingBreakdown[shift.name] = { 
-          officers: 0, 
-          supervisors: 0, 
-          total: 0,
-          minRequired: getMinimumStaffing(shift.name)
-        };
-      });
+    if (minError) {
+      console.error("Error fetching minimum staffing:", minError);
+    }
 
-      // Get recurring schedules for today
-      const { data: recurringData, error: recurringError } = await supabase
-        .from("recurring_schedules")
-        .select(`
-          *,
-          profiles!recurring_schedules_officer_id_fkey (
-            id, 
-            full_name,
-            rank
-          ),
-          shift_types (
-            id, 
-            name
-          )
-        `)
-        .eq("day_of_week", dayOfWeek)
-        .or(`end_date.is.null,end_date.gte.${today}`);
+    // Enhanced staffing breakdown
+    const staffingBreakdown: { 
+      [key: string]: { 
+        officers: number; 
+        supervisors: number; 
+        total: number;
+        minRequired: { officers: number; supervisors: number };
+      } 
+    } = {};
 
-      if (recurringError) {
-        console.error("Error fetching recurring schedules:", recurringError);
-      }
-
-      // Get schedule exceptions for today - FIXED: Specify exact relationship
-      const { data: exceptionsData, error: exceptionsError } = await supabase
-        .from("schedule_exceptions")
-        .select(`
-          *,
-          profiles!schedule_exceptions_officer_id_fkey (
-            id, 
-            full_name,
-            rank
-          ),
-          shift_types (
-            id, 
-            name
-          )
-        `)
-        .eq("date", today)
-        .eq("is_off", false);
-
-      if (exceptionsError) {
-        console.error("Error fetching exceptions:", exceptionsError);
-      }
-
-      // Get PTO exceptions for today
-      const { data: ptoExceptionsData, error: ptoError } = await supabase
-        .from("schedule_exceptions")
-        .select(`
-          *,
-          profiles!schedule_exceptions_officer_id_fkey (
-            id, 
-            full_name,
-            rank
-          ),
-          shift_types (
-            id, 
-            name
-          )
-        `)
-        .eq("date", today)
-        .eq("is_off", true);
-
-      if (ptoError) {
-        console.error("Error fetching PTO exceptions:", ptoError);
-      }
-
-      // Helper function to categorize officer type
-      const isSupervisor = (rank: string) => {
-        return rank && ['Sergeant', 'Lieutenant', 'Captain', 'Chief', 'Deputy Chief', 'Commander'].includes(rank);
-      };
-
-      // Helper function to check if officer has full-day PTO
-      const hasFullDayPTO = (officerId: string, shiftTypeId: string) => {
-        if (!ptoExceptionsData) return false;
-        
-        const ptoException = ptoExceptionsData.find(pto => 
-          pto.officer_id === officerId && 
-          pto.shift_type_id === shiftTypeId &&
-          !pto.custom_start_time && 
-          !pto.custom_end_time
-        );
-        
-        return !!ptoException;
-      };
-
-      // Helper function to check if officer is Probationary (PPO)
-      const isProbationary = (rank: string) => {
-        return rank && rank.toLowerCase() === 'probationary';
-      };
-
-      // Count officers from recurring schedules - EXCLUDING PPOs and full-day PTO
-      recurringData?.forEach(schedule => {
-        if (schedule.shift_types?.name && schedule.profiles) {
-          const shiftName = schedule.shift_types.name;
-          const officerId = schedule.profiles.id;
-          const officerRank = schedule.profiles.rank;
-          const shiftTypeId = schedule.shift_types.id;
-          
-          // Skip if officer has full-day PTO or is Probationary
-          if (hasFullDayPTO(officerId, shiftTypeId) || isProbationary(officerRank)) {
-            return;
-          }
-          
-          if (isSupervisor(officerRank)) {
-            staffingBreakdown[shiftName].supervisors++;
-          } else {
-            staffingBreakdown[shiftName].officers++;
-          }
-          staffingBreakdown[shiftName].total++;
+    // Initialize staffing breakdown with minimum requirements from database
+    shiftTypes?.forEach(shift => {
+      const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
+      staffingBreakdown[shift.name] = { 
+        officers: 0, 
+        supervisors: 0, 
+        total: 0,
+        minRequired: {
+          officers: minStaff?.minimum_officers || 0,
+          supervisors: minStaff?.minimum_supervisors || 1
         }
-      });
+      };
+    });
 
-      // Count officers from working exceptions - EXCLUDING PPOs and full-day PTO
-      exceptionsData?.forEach(exception => {
-        if (exception.shift_types?.name && exception.profiles) {
-          const shiftName = exception.shift_types.name;
-          const officerId = exception.profiles.id;
-          const officerRank = exception.profiles.rank;
-          const shiftTypeId = exception.shift_types.id;
-          
-          // Skip if officer has full-day PTO or is Probationary
-          if (hasFullDayPTO(officerId, shiftTypeId) || isProbationary(officerRank)) {
-            return;
-          }
-          
-          if (isSupervisor(officerRank)) {
-            staffingBreakdown[shiftName].supervisors++;
-          } else {
-            staffingBreakdown[shiftName].officers++;
-          }
-          staffingBreakdown[shiftName].total++;
+    // Get recurring schedules for today
+    const { data: recurringData, error: recurringError } = await supabase
+      .from("recurring_schedules")
+      .select(`
+        *,
+        profiles!recurring_schedules_officer_id_fkey (
+          id, 
+          full_name,
+          rank
+        ),
+        shift_types (
+          id, 
+          name
+        )
+      `)
+      .eq("day_of_week", dayOfWeek)
+      .or(`end_date.is.null,end_date.gte.${today}`);
+
+    if (recurringError) {
+      console.error("Error fetching recurring schedules:", recurringError);
+    }
+
+    // Get schedule exceptions for today - FIXED: Specify exact relationship
+    const { data: exceptionsData, error: exceptionsError } = await supabase
+      .from("schedule_exceptions")
+      .select(`
+        *,
+        profiles!schedule_exceptions_officer_id_fkey (
+          id, 
+          full_name,
+          rank
+        ),
+        shift_types (
+          id, 
+          name
+        )
+      `)
+      .eq("date", today)
+      .eq("is_off", false);
+
+    if (exceptionsError) {
+      console.error("Error fetching exceptions:", exceptionsError);
+    }
+
+    // Get PTO exceptions for today
+    const { data: ptoExceptionsData, error: ptoError } = await supabase
+      .from("schedule_exceptions")
+      .select(`
+        *,
+        profiles!schedule_exceptions_officer_id_fkey (
+          id, 
+          full_name,
+          rank
+        ),
+        shift_types (
+          id, 
+          name
+        )
+      `)
+      .eq("date", today)
+      .eq("is_off", true);
+
+    if (ptoError) {
+      console.error("Error fetching PTO exceptions:", ptoError);
+    }
+
+    // Helper function to categorize officer type
+    const isSupervisor = (rank: string) => {
+      return rank && ['Sergeant', 'Lieutenant', 'Captain', 'Chief', 'Deputy Chief', 'Commander'].includes(rank);
+    };
+
+    // Helper function to check if officer has full-day PTO
+    const hasFullDayPTO = (officerId: string, shiftTypeId: string) => {
+      if (!ptoExceptionsData) return false;
+      
+      const ptoException = ptoExceptionsData.find(pto => 
+        pto.officer_id === officerId && 
+        pto.shift_type_id === shiftTypeId &&
+        !pto.custom_start_time && 
+        !pto.custom_end_time
+      );
+      
+      return !!ptoException;
+    };
+
+    // Helper function to check if officer is Probationary (PPO)
+    const isProbationary = (rank: string) => {
+      return rank && rank.toLowerCase().includes('probationary');
+    };
+
+    // Count officers from recurring schedules - EXCLUDING PPOs and full-day PTO
+    recurringData?.forEach(schedule => {
+      if (schedule.shift_types?.name && schedule.profiles) {
+        const shiftName = schedule.shift_types.name;
+        const officerId = schedule.profiles.id;
+        const officerRank = schedule.profiles.rank;
+        const shiftTypeId = schedule.shift_types.id;
+        
+        // Skip if officer has full-day PTO or is Probationary
+        if (hasFullDayPTO(officerId, shiftTypeId) || isProbationary(officerRank)) {
+          return;
         }
-      });
+        
+        if (isSupervisor(officerRank)) {
+          staffingBreakdown[shiftName].supervisors++;
+        } else {
+          staffingBreakdown[shiftName].officers++;
+        }
+        staffingBreakdown[shiftName].total++;
+      }
+    });
 
-      // Count open vacancies
-      const { count: openVacancies, error: vacanciesError } = await supabase
-        .from("vacancy_alerts")
+    // Count officers from working exceptions - EXCLUDING PPOs and full-day PTO
+    exceptionsData?.forEach(exception => {
+      if (exception.shift_types?.name && exception.profiles) {
+        const shiftName = exception.shift_types.name;
+        const officerId = exception.profiles.id;
+        const officerRank = exception.profiles.rank;
+        const shiftTypeId = exception.shift_types.id;
+        
+        // Skip if officer has full-day PTO or is Probationary
+        if (hasFullDayPTO(officerId, shiftTypeId) || isProbationary(officerRank)) {
+          return;
+        }
+        
+        if (isSupervisor(officerRank)) {
+          staffingBreakdown[shiftName].supervisors++;
+        } else {
+          staffingBreakdown[shiftName].officers++;
+        }
+        staffingBreakdown[shiftName].total++;
+      }
+    });
+
+    // Count open vacancies
+    const { count: openVacancies, error: vacanciesError } = await supabase
+      .from("vacancy_alerts")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "open");
+
+    if (vacanciesError) {
+      console.error("Error fetching vacancies:", vacanciesError);
+      // Try alternative table name if vacancy_alerts doesn't exist
+      const { count: altVacancies } = await supabase
+        .from("vacancies")
         .select("*", { count: "exact", head: true })
         .eq("status", "open");
-
-      if (vacanciesError) {
-        console.error("Error fetching vacancies:", vacanciesError);
-        // Try alternative table name if vacancy_alerts doesn't exist
-        const { count: altVacancies } = await supabase
-          .from("vacancies")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "open");
-        return { 
-          staffingBreakdown, 
-          openVacancies: altVacancies || 0 
-        };
-      }
-
       return { 
         staffingBreakdown, 
-        openVacancies: openVacancies || 0 
+        openVacancies: altVacancies || 0 
       };
-    },
-    enabled: isAdminOrSupervisor,
-    refetchInterval: 30000,
-  });
+    }
 
-  // Helper function for minimum staffing requirements
-  const getMinimumStaffing = (shiftName: string) => {
-    const requirements: { [key: string]: { officers: number; supervisors: number } } = {
-      'Day Shift': { officers: 8, supervisors: 2 },
-      'Evening Shift': { officers: 9, supervisors: 2 },
-      'Night Shift': { officers: 7, supervisors: 1 },
-      'First Watch': { officers: 8, supervisors: 2 },
-      'Second Watch': { officers: 9, supervisors: 2 },
-      'Third Watch': { officers: 7, supervisors: 1 },
-      'Shift 1': { officers: 8, supervisors: 2 },
-      'Shift 2': { officers: 9, supervisors: 2 },
-      'Shift 3': { officers: 7, supervisors: 1 },
+    return { 
+      staffingBreakdown, 
+      openVacancies: openVacancies || 0 
     };
-    return requirements[shiftName] || { officers: 8, supervisors: 1 };
-  };
+  },
+  enabled: isAdminOrSupervisor,
+  refetchInterval: 30000,
+});
+
 
   useEffect(() => {
     // Check authentication
@@ -500,50 +499,43 @@ const Dashboard = () => {
             <h3 className="font-semibold text-lg mb-3">{shiftName}</h3>
             
             {/* Supervisors */}
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-muted-foreground">Supervisors:</span>
-              <div className="flex items-center gap-2">
-                <Badge 
-                  variant={data.supervisors >= (data.minRequired?.supervisors || 1) ? "default" : "destructive"}
-                  className="text-xs"
-                >
-                  {data.supervisors} / {data.minRequired?.supervisors || 1}
-                </Badge>
-              </div>
-            </div>
-            
-            {/* Officers */}
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-sm text-muted-foreground">Officers:</span>
-              <div className="flex items-center gap-2">
-                <Badge 
-                  variant={data.officers >= (data.minRequired?.officers || 8) ? "default" : "destructive"}
-                  className="text-xs"
-                >
-                  {data.officers} / {data.minRequired?.officers || 8}
-                </Badge>
-              </div>
-            </div>
-            
-            {/* Total and Status */}
-            <div className="flex justify-between items-center pt-2 border-t">
-              <span className="text-sm font-medium">Total:</span>
-              <span className="text-sm font-bold">{data.total}</span>
-            </div>
-            
-            {/* Status Indicator */}
-            <div className="mt-2">
-              {data.supervisors >= (data.minRequired?.supervisors || 1) && 
-               data.officers >= (data.minRequired?.officers || 8) ? (
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                  Fully Staffed
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                  Understaffed
-                </Badge>
-              )}
-            </div>
+// In your staffing overview component, update the badge displays:
+<div className="flex justify-between items-center mb-2">
+  <span className="text-sm text-muted-foreground">Supervisors:</span>
+  <div className="flex items-center gap-2">
+    <Badge 
+      variant={data.supervisors >= data.minRequired.supervisors ? "default" : "destructive"}
+      className="text-xs"
+    >
+      {data.supervisors} / {data.minRequired.supervisors}
+    </Badge>
+  </div>
+</div>
+
+<div className="flex justify-between items-center mb-3">
+  <span className="text-sm text-muted-foreground">Officers:</span>
+  <div className="flex items-center gap-2">
+    <Badge 
+      variant={data.officers >= data.minRequired.officers ? "default" : "destructive"}
+      className="text-xs"
+    >
+      {data.officers} / {data.minRequired.officers}
+    </Badge>
+  </div>
+</div>
+
+<div className="mt-2">
+  {data.supervisors >= data.minRequired.supervisors && 
+   data.officers >= data.minRequired.officers ? (
+    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+      Fully Staffed
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+      Understaffed
+    </Badge>
+  )}
+</div>
           </div>
         ))}
         
