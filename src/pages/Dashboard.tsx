@@ -1,6 +1,6 @@
 
 
- import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { User } from "@supabase/supabase-js";
@@ -219,15 +219,27 @@ const Dashboard = () => {
         if (!position) return false;
         
         const positionLower = position.toLowerCase();
-        const isSupervisorPosition = positionLower.includes('supervisor');
+        
+        // First check if it's a supervisor position - these are NOT special assignments
+        const isSupervisorPosition = positionLower.includes('supervisor') || 
+                                   positionLower.includes('sergeant') ||
+                                   positionLower.includes('lieutenant') ||
+                                   positionLower.includes('captain') ||
+                                   positionLower.includes('chief');
+        
+        if (isSupervisorPosition) {
+          return false;
+        }
+        
+        // Check for special assignment indicators (matches your DailyScheduleView logic)
         const isSpecialAssignment = positionLower.includes('other') || 
           (position && ![
             'district 1', 'district 2', 'district 3', 'district 4', 'district 5',
             'district 6', 'district 7', 'district 8', 'district 9', 'district 10',
-            'supervisor', 'sergeant', 'lieutenant', 'captain', 'chief'
+            'district 11', 'district 12', 'district 13', 'district 14', 'district 15'
           ].some(standardPos => positionLower.includes(standardPos)));
         
-        return !isSupervisorPosition && isSpecialAssignment;
+        return isSpecialAssignment;
       };
 
       // Track processed officers to avoid duplicates (like DailyScheduleView does)
@@ -249,6 +261,13 @@ const Dashboard = () => {
               hasFullDayPTO(officerId, shiftTypeId) || 
               isProbationary(officerRank) ||
               isSpecialAssignment(position)) {
+            console.log(`🚫 Excluding officer from count: ${schedule.profiles.full_name}`, {
+              reason: processedOfficers.has(officerKey) ? 'duplicate' : 
+                      hasFullDayPTO(officerId, shiftTypeId) ? 'full day pto' :
+                      isProbationary(officerRank) ? 'ppo' :
+                      'special assignment',
+              position
+            });
             return;
           }
           
@@ -280,6 +299,13 @@ const Dashboard = () => {
               hasFullDayPTO(officerId, shiftTypeId) || 
               isProbationary(officerRank) ||
               isSpecialAssignment(position)) {
+            console.log(`🚫 Excluding officer from count: ${exception.profiles.full_name}`, {
+              reason: processedOfficers.has(officerKey) ? 'duplicate' : 
+                      hasFullDayPTO(officerId, shiftTypeId) ? 'full day pto' :
+                      isProbationary(officerRank) ? 'ppo' :
+                      'special assignment',
+              position
+            });
             return;
           }
           
