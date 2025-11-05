@@ -153,34 +153,6 @@ const WeeklySchedule = ({
     }
   }, [shiftTypes, selectedShiftId]);
 
-  // Replace your debug useEffect with this more detailed version
-useEffect(() => {
-  const findStuckCalendar = () => {
-    console.log("🔍 === DETAILED CALENDAR SEARCH ===");
-    
-    // Get ALL calendar elements with full details
-    const calendars = document.querySelectorAll('[data-radix-calendar], .rdp, [role="grid"]');
-    console.log("Total calendar-like elements found:", calendars.length);
-    
-    calendars.forEach((cal, index) => {
-      const rect = cal.getBoundingClientRect();
-      const computedStyle = window.getComputedStyle(cal);
-      
-      console.log(`📅 Calendar ${index}:`, {
-        visible: rect.width > 0 && rect.height > 0,
-        display: computedStyle.display,
-        position: computedStyle.position,
-        zIndex: computedStyle.zIndex,
-        classes: cal.className,
-        parent: cal.parentElement?.className,
-        grandparent: cal.parentElement?.parentElement?.className,
-        isInViewport: rect.top >= 0 && rect.left >= 0 && 
-                     rect.bottom <= window.innerHeight && 
-                     rect.right <= window.innerWidth,
-        outerHTML: cal.outerHTML.substring(0, 300) + '...'
-      });
-    });
-
     // Also check for any hidden or off-screen calendars
     const allElements = document.querySelectorAll('*');
     const calendarElements = Array.from(allElements).filter(el => {
@@ -211,59 +183,60 @@ useEffect(() => {
     navigate(`/daily-schedule?date=${dateStr}&shift=${selectedShiftId}`);
   };
 
-  // Handle PDF export
-  const handleExportPDF = async () => {
-    if (!dateRange?.from || !dateRange?.to) {
-      toast.error("Please select a date range");
-      return;
+// Handle PDF export - OPTIMIZED VERSION
+const handleExportPDF = async () => {
+  if (!dateRange?.from || !dateRange?.to) {
+    toast.error("Please select a date range");
+    return;
+  }
+
+  if (!selectedShiftId) {
+    toast.error("Please select a shift");
+    return;
+  }
+
+  try {
+    toast.info("Generating PDF export...");
+    
+    // Dynamically import the PDF export hook to avoid loading it on initial page load
+    const { useWeeklyPDFExport } = await import("@/hooks/useWeeklyPDFExport");
+    const { exportWeeklyPDF } = useWeeklyPDFExport();
+    
+    // Fetch data for the selected date range
+    const startDate = dateRange.from;
+    const endDate = dateRange.to;
+    
+    const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date => 
+      format(date, "yyyy-MM-dd")
+    );
+
+    // Fetch schedule data for the date range
+    const scheduleData = await fetchScheduleDataForRange(startDate, endDate, dates);
+    
+    const shiftName = shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Unknown Shift";
+    
+    const result = await exportWeeklyPDF({
+      startDate,
+      endDate,
+      shiftName,
+      scheduleData: scheduleData.dailySchedules || []
+    });
+
+    if (result.success) {
+      toast.success("PDF exported successfully");
+      setExportDialogOpen(false);
+    } else {
+      toast.error("Failed to export PDF");
     }
+  } catch (error) {
+    console.error("Export error:", error);
+    toast.error("Error generating PDF export");
+  }
+};
 
-    if (!selectedShiftId) {
-      toast.error("Please select a shift");
-      return;
-    }
-
-    try {
-      toast.info("Generating PDF export...");
-      
-      // Fetch data for the selected date range
-      const startDate = dateRange.from;
-      const endDate = dateRange.to;
-      
-      const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date => 
-        format(date, "yyyy-MM-dd")
-      );
-
-      // Fetch schedule data for the date range
-      const { data: scheduleData, error } = await fetchScheduleDataForRange(startDate, endDate, dates);
-      
-      if (error) {
-        throw error;
-      }
-
-      const shiftName = shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Unknown Shift";
-      
-      const result = await exportWeeklyPDF({
-        startDate,
-        endDate,
-        shiftName,
-        scheduleData: scheduleData.dailySchedules || []
-      });
-
-      if (result.success) {
-        toast.success("PDF exported successfully");
-        setExportDialogOpen(false);
-      } else {
-        toast.error("Failed to export PDF");
-      }
-    } catch (error) {
-      console.error("Export error:", error);
-      toast.error("Error generating PDF export");
-    }
-  };
-
-  // Function to fetch schedule data for a date range
-  const fetchScheduleDataForRange = async (startDate: Date, endDate: Date, dates: string[]) => {
+// Function to fetch schedule data for a date range - FIXED VERSION
+const fetchScheduleDataForRange = async (startDate: Date, endDate: Date, dates: string[]) => {
+  try {
     // Get recurring schedules
     const { data: recurringData, error: recurringError } = await supabase
       .from("recurring_schedules")
@@ -328,7 +301,7 @@ useEffect(() => {
       shift_types: exceptionShiftTypes.find(s => s.id === exception.shift_type_id)
     })) || [];
 
-    // Build schedule structure (similar to main query but for the range)
+    // Build schedule structure
     const scheduleByDateAndOfficer: Record<string, Record<string, any>> = {};
     dates.forEach(date => { scheduleByDateAndOfficer[date] = {}; });
 
@@ -449,6 +422,19 @@ useEffect(() => {
         }
       };
     });
+
+    // FIX: Return the correct structure that matches what the export function expects
+    return { 
+      dailySchedules, 
+      dates,
+      recurring: recurringData,
+      exceptions: combinedExceptions
+    };
+  } catch (error) {
+    console.error("Error in fetchScheduleDataForRange:", error);
+    throw error;
+  }
+};
 
     return { 
       dailySchedules, 
