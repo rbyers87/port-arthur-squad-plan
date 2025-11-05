@@ -1093,13 +1093,11 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                     onRemoveOfficer={removeOfficerMutation.mutate}
                     isUpdating={removeOfficerMutation.isPending}
                   />
-                ))}
-              </div>
             ))}
           </div>
         )}
       </div>
-  
+    </div>
   );
 };
 
