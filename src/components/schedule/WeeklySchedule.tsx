@@ -1083,38 +1083,53 @@ const renderExcelStyleWeeklyView = () => {
               })}
             </div>
 
-            {/* PPO OFFICERS */}
-            {ppos.map((officer) => (
-              <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-blue-50/30">
-                <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
-                <div className="p-2 border-r font-medium flex items-center gap-2">
-                  {getLastName(officer.officerName)}
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-xs">
-                    PPO
-                  </Badge>
-                </div>
-                {weekDays.map(({ dateStr }) => (
-                  <ScheduleCell
-                    key={dateStr}
-                    officer={officer.weeklySchedule[dateStr]}
-                    dateStr={dateStr}
-                    officerId={officer.officerId}
-                    officerName={officer.officerName}
-                    isAdminOrSupervisor={isAdminOrSupervisor}
-                    onAssignPTO={handleAssignPTO}
-                    onRemovePTO={handleRemovePTO}
-                    onEditAssignment={handleEditAssignment}
-                    onRemoveOfficer={removeOfficerMutation.mutate}
-                    isUpdating={removeOfficerMutation.isPending}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+{/* PPO OFFICERS */}
+{ppos.map((officer) => (
+  <div key={officer.officerId} className="grid grid-cols-9 border-b hover:bg-blue-50/30">
+    <div className="p-2 border-r text-sm font-mono">{officer.badgeNumber}</div>
+    <div className="p-2 border-r font-medium flex items-center gap-2">
+      {getLastName(officer.officerName)}
+      <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-xs">
+        PPO
+      </Badge>
     </div>
-  );
+    {weekDays.map(({ dateStr }) => {
+      const dayOfficer = officer.weeklySchedule[dateStr];
+      
+      // Extract partner information from position for PPOs
+      let partnerInfo = null;
+      if (dayOfficer?.shiftInfo?.position) {
+        const partnerMatch = dayOfficer.shiftInfo.position.match(/Partner with\s+(.+)/i);
+        if (partnerMatch) {
+          partnerInfo = partnerMatch[1];
+        }
+      }
+      
+      return (
+        <ScheduleCell
+          key={dateStr}
+          officer={dayOfficer}
+          dateStr={dateStr}
+          officerId={officer.officerId}
+          officerName={officer.officerName}
+          isAdminOrSupervisor={isAdminOrSupervisor}
+          onAssignPTO={handleAssignPTO}
+          onRemovePTO={handleRemovePTO}
+          onEditAssignment={handleEditAssignment}
+          onRemoveOfficer={removeOfficerMutation.mutate}
+          isUpdating={removeOfficerMutation.isPending}
+          isPPO={true}
+          partnerInfo={partnerInfo}
+        />
+      );
+    })}
+  </div>
+))}
+</div>
+)}
+</div>
+</div>
+);
 };
 
 const renderMonthlyView = () => {
