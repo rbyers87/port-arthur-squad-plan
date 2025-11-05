@@ -1112,6 +1112,29 @@ const renderMonthlyView = () => {
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
   const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
 
+  // Enhanced supervisor detection function
+  const isSupervisor = (officer: any) => {
+    const rank = officer.rank?.toLowerCase() || '';
+    const position = officer.shiftInfo?.position?.toLowerCase() || '';
+    
+    // Check for supervisor ranks
+    const supervisorRanks = [
+      'sergeant', 'sgt', 'lieutenant', 'lt', 'captain', 'cpt', 
+      'commander', 'chief', 'major', 'colonel', 'supervisor'
+    ];
+    
+    // Check for supervisor positions
+    const supervisorPositions = [
+      'supervisor', 'sergeant', 'sgt', 'lieutenant', 'lt', 'captain', 
+      'cpt', 'commander', 'chief', 'major', 'colonel'
+    ];
+    
+    return (
+      supervisorRanks.some(supervisorRank => rank.includes(supervisorRank)) ||
+      supervisorPositions.some(supervisorPosition => position.includes(supervisorPosition))
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-7 gap-1 mb-2">
@@ -1141,13 +1164,11 @@ const renderMonthlyView = () => {
           };
 
           allOfficers.forEach((officer: any) => {
-            // Check if officer is a supervisor based on rank
-            const isSupervisor = officer.rank?.toLowerCase().includes('supervisor') || 
-                               officer.shiftInfo?.position?.toLowerCase().includes('supervisor');
-            
+            // Use enhanced supervisor detection
+            const isSupervisorOfficer = isSupervisor(officer);
             const isPPO = officer.rank?.toLowerCase() === 'probationary';
             
-            if (isSupervisor) {
+            if (isSupervisorOfficer) {
               categorizedOfficers.supervisors.push(officer);
             } else if (isPPO) {
               categorizedOfficers.ppos.push(officer);
