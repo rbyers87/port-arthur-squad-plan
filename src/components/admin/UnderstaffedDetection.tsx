@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Mail, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { PREDEFINED_POSITIONS, RANK_ORDER } from "@/constants/positions";
 
 export const UnderstaffedDetection = () => {
   const queryClient = useQueryClient();
@@ -39,7 +40,6 @@ export const UnderstaffedDetection = () => {
       console.log("🔍 Starting understaffed shift detection...");
       
       try {
-        // Use the working dashboard stats approach - fetch data directly without joins
         const allUnderstaffedShifts = [];
 
         // Check each date in the next 7 days
@@ -61,26 +61,20 @@ export const UnderstaffedDetection = () => {
 
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-          // Use the dashboard stats approach - fetch staffing data directly
-          const staffingData = await getStaffingDataForDate(dateStr, dayOfWeek);
+          // Use the updated approach to get staffing data
+          const scheduleData = await getScheduleDataForUnderstaffing(date, selectedShiftId);
           
-          if (!staffingData) {
-            console.log("❌ No staffing data found for", dateStr);
+          if (!scheduleData || scheduleData.length === 0) {
+            console.log("❌ No schedule data found for", dateStr);
             continue;
           }
 
-          console.log(`📋 Staffing data for ${dateStr}:`, staffingData);
+          console.log(`📋 Schedule data for ${dateStr}:`, scheduleData);
 
           // Check each shift for understaffing
-          for (const shiftName in staffingData) {
-            const shiftData = staffingData[shiftName];
-            const shift = shiftTypes?.find(s => s.name === shiftName);
+          for (const shiftData of scheduleData) {
+            const shift = shiftData.shift;
             
-            if (!shift) {
-              console.log(`❌ Shift not found: ${shiftName}`);
-              continue;
-            }
-
             // Filter by selected shift if needed
             if (selectedShiftId !== "all" && shift.id !== selectedShiftId) {
               continue;
@@ -92,18 +86,18 @@ export const UnderstaffedDetection = () => {
 
             console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
             console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
-            console.log(`👥 Current staffing: ${shiftData.supervisors} supervisors, ${shiftData.officers} officers`);
+            console.log(`👥 Current staffing: ${shiftData.currentSupervisors} supervisors, ${shiftData.currentOfficers} officers`);
 
-            const supervisorsUnderstaffed = shiftData.supervisors < minSupervisors;
-            const officersUnderstaffed = shiftData.officers < minOfficers;
+            const supervisorsUnderstaffed = shiftData.currentSupervisors < minSupervisors;
+            const officersUnderstaffed = shiftData.currentOfficers < minOfficers;
             const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
 
             if (isUnderstaffed) {
               console.log("🚨 UNDERSTAFFED SHIFT FOUND:", {
                 date: dateStr,
                 shift: shift.name,
-                supervisors: `${shiftData.supervisors}/${minSupervisors}`,
-                officers: `${shiftData.officers}/${minOfficers}`,
+                supervisors: `${shiftData.currentSupervisors}/${minSupervisors}`,
+                officers: `${shiftData.currentOfficers}/${minOfficers}`,
                 dayOfWeek
               });
 
@@ -116,16 +110,19 @@ export const UnderstaffedDetection = () => {
                   start_time: shift.start_time,
                   end_time: shift.end_time
                 },
-                current_staffing: shiftData.supervisors + shiftData.officers,
+                current_staffing: shiftData.currentSupervisors + shiftData.currentOfficers,
                 minimum_required: minSupervisors + minOfficers,
-                current_supervisors: shiftData.supervisors,
-                current_officers: shiftData.officers,
+                current_supervisors: shiftData.currentSupervisors,
+                current_officers: shiftData.currentOfficers,
                 min_supervisors: minSupervisors,
                 min_officers: minOfficers,
                 day_of_week: dayOfWeek,
                 isSupervisorsUnderstaffed: supervisorsUnderstaffed,
                 isOfficersUnderstaffed: officersUnderstaffed,
-                assigned_officers: [] // We can't get individual officers without the problematic query
+                assigned_officers: [
+                  ...shiftData.supervisors.map(s => s.name),
+                  ...shiftData.officers.map(o => o.name)
+                ]
               };
 
               console.log("📊 Storing understaffed shift data:", shiftAlertData);
@@ -146,7 +143,6 @@ export const UnderstaffedDetection = () => {
     },
   });
 
-  // ... rest of the component remains the same
   const { data: existingAlerts } = useQuery({
     queryKey: ["existing-vacancy-alerts"],
     queryFn: async () => {
@@ -490,28 +486,456 @@ export const UnderstaffedDetection = () => {
   );
 };
 
-// Simple function to get staffing data without problematic joins
-async function getStaffingDataForDate(dateStr: string, dayOfWeek: number) {
-  try {
-    // Use the dashboard stats approach - call the existing function that works
-    const { getScheduleData } = await import("@/components/schedule/DailyScheduleView");
-    const scheduleData = await getScheduleData(new Date(dateStr), "all");
-    
-    if (!scheduleData) return null;
+// Updated function to get staffing data using the same logic as DailyScheduleView
+async function getScheduleDataForUnderstaffing(selectedDate: Date, filterShiftId: string = "all") {
+  const dateStr = format(selectedDate, "yyyy-MM-dd");
+  const dayOfWeek = selectedDate.getDay();
 
-    // Extract staffing counts from the working schedule data
-    const staffingData: Record<string, { supervisors: number; officers: number }> = {};
+  console.log("🔄 getScheduleDataForUnderstaffing called for:", { dateStr, filterShiftId });
+
+  // Function to sort supervisors by rank
+  const sortSupervisorsByRank = (supervisors: any[]) => {
+    return supervisors.sort((a, b) => {
+      const rankA = a.rank || 'Officer';
+      const rankB = b.rank || 'Officer';
+      return (RANK_ORDER[rankA as keyof typeof RANK_ORDER] || 99) - (RANK_ORDER[rankB as keyof typeof RANK_ORDER] || 99);
+    });
+  };
+
+  // Get all shift types
+  const { data: shiftTypes, error: shiftError } = await supabase
+    .from("shift_types")
+    .select("*")
+    .order("start_time");
+  if (shiftError) throw shiftError;
+
+  // Get minimum staffing requirements
+  const { data: minimumStaffing, error: minError } = await supabase
+    .from("minimum_staffing")
+    .select("minimum_officers, minimum_supervisors, shift_type_id")
+    .eq("day_of_week", dayOfWeek);
+  if (minError) throw minError;
+
+  // Get default assignments for all officers for this date
+  const { data: allDefaultAssignments, error: defaultAssignmentsError } = await supabase
+    .from("officer_default_assignments")
+    .select("*")
+    .or(`end_date.is.null,end_date.gte.${dateStr}`)
+    .lte("start_date", dateStr);
+
+  if (defaultAssignmentsError) {
+    console.error("Default assignments error:", defaultAssignmentsError);
+  }
+
+  // Helper function to get default assignment for an officer
+  const getDefaultAssignment = (officerId: string) => {
+    if (!allDefaultAssignments) return null;
     
-    for (const shiftData of scheduleData) {
-      staffingData[shiftData.shift.name] = {
-        supervisors: shiftData.currentSupervisors,
-        officers: shiftData.currentOfficers
-      };
+    const currentDate = parseISO(dateStr);
+    
+    return allDefaultAssignments.find(da => 
+      da.officer_id === officerId &&
+      parseISO(da.start_date) <= currentDate &&
+      (!da.end_date || parseISO(da.end_date) >= currentDate)
+    );
+  };
+
+  // Get recurring schedules
+  const { data: recurringData, error: recurringError } = await supabase
+    .from("recurring_schedules")
+    .select(`
+      *,
+      profiles:profiles!recurring_schedules_officer_id_fkey (
+        id, 
+        full_name, 
+        badge_number, 
+        rank
+      ),
+      shift_types (
+        id, 
+        name, 
+        start_time, 
+        end_time
+      )
+    `)
+    .eq("day_of_week", dayOfWeek)
+    .or(`end_date.is.null,end_date.gte.${dateStr}`);
+
+  if (recurringError) {
+    console.error("Recurring schedules error:", recurringError);
+    throw recurringError;
+  }
+
+  // Get schedule exceptions for this specific date
+  const { data: exceptionsData, error: exceptionsError } = await supabase
+    .from("schedule_exceptions")
+    .select("*")
+    .eq("date", dateStr);
+
+  if (exceptionsError) {
+    console.error("Schedule exceptions error:", exceptionsError);
+    throw exceptionsError;
+  }
+
+  // Get officer profiles separately
+  const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
+  let officerProfiles = [];
+
+  if (officerIds.length > 0) {
+    const { data: profilesData, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, full_name, badge_number, rank")
+      .in("id", officerIds);
+    
+    if (profilesError) {
+      console.error("❌ Profiles error:", profilesError);
+    } else {
+      officerProfiles = profilesData || [];
+    }
+  }
+
+  // Get shift types for exceptions separately
+  const shiftTypeIds = [...new Set(exceptionsData?.map(e => e.shift_type_id).filter(Boolean))];
+  let exceptionShiftTypes = [];
+
+  if (shiftTypeIds.length > 0) {
+    const { data: shiftTypesData, error: shiftTypesError } = await supabase
+      .from("shift_types")
+      .select("id, name, start_time, end_time")
+      .in("id", shiftTypeIds);
+    
+    if (shiftTypesError) {
+      console.error("❌ Shift types error:", shiftTypesError);
+    } else {
+      exceptionShiftTypes = shiftTypesData || [];
+    }
+  }
+
+  // Combine the data manually
+  const combinedExceptions = exceptionsData?.map(exception => ({
+    ...exception,
+    profiles: officerProfiles.find(p => p.id === exception.officer_id),
+    shift_types: exceptionShiftTypes.find(s => s.id === exception.shift_type_id)
+  })) || [];
+
+  // Separate PTO exceptions from regular exceptions
+  const ptoExceptions = combinedExceptions?.filter(e => e.is_off) || [];
+  const workingExceptions = combinedExceptions?.filter(e => !e.is_off) || [];
+
+  console.log("📊 DEBUG: Data counts", {
+    recurring: recurringData?.length,
+    workingExceptions: workingExceptions.length,
+    ptoExceptions: ptoExceptions.length,
+    defaultAssignments: allDefaultAssignments?.length
+  });
+
+  // Build schedule by shift
+  const scheduleByShift = shiftTypes?.map((shift) => {
+    const minStaff = minimumStaffing?.find(m => m.shift_type_id === shift.id);
+
+    // Get ALL officers for this shift, avoiding duplicates
+    const allOfficersMap = new Map();
+
+    // Process recurring officers for this shift
+    recurringData
+      ?.filter(r => r.shift_types?.id === shift.id)
+      .forEach(r => {
+        const officerKey = `${r.officer_id}-${shift.id}`;
+        
+        const workingException = workingExceptions?.find(e => 
+          e.officer_id === r.officer_id && e.shift_type_id === shift.id
+        );
+
+        const ptoException = ptoExceptions?.find(e => 
+          e.officer_id === r.officer_id && e.shift_type_id === shift.id
+        );
+
+        const defaultAssignment = getDefaultAssignment(r.officer_id);
+
+        const officerRank = workingException?.profiles?.rank || r.profiles?.rank;
+        const isProbationary = officerRank?.toLowerCase().includes('probationary');
+
+        let customTime = undefined;
+        if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
+          const shiftStart = shift.start_time;
+          const shiftEnd = shift.end_time;
+          const ptoStart = ptoException.custom_start_time;
+          const ptoEnd = ptoException.custom_end_time;
+          
+          if (ptoStart === shiftStart && ptoEnd !== shiftEnd) {
+            customTime = `Working: ${ptoEnd} - ${shiftEnd}`;
+          } else if (ptoStart !== shiftStart && ptoEnd === shiftEnd) {
+            customTime = `Working: ${shiftStart} - ${ptoStart}`;
+          } else if (ptoStart !== shiftStart && ptoEnd !== shiftEnd) {
+            customTime = `Working: ${shiftStart}-${ptoStart} & ${ptoEnd}-${shiftEnd}`;
+          } else {
+            customTime = `Working: Check PTO`;
+          }
+        } else if (workingException?.custom_start_time && workingException?.custom_end_time) {
+          customTime = `${workingException.custom_start_time} - ${workingException.custom_end_time}`;
+        }
+
+        const finalData = workingException ? {
+          scheduleId: workingException.id,
+          officerId: r.officer_id,
+          name: workingException.profiles?.full_name || r.profiles?.full_name || "Unknown",
+          badge: workingException.profiles?.badge_number || r.profiles?.badge_number,
+          rank: officerRank,
+          isPPO: isProbationary,
+          position: workingException.position_name || r.position_name || defaultAssignment?.position_name,
+          unitNumber: workingException.unit_number || r.unit_number || defaultAssignment?.unit_number,
+          notes: workingException.notes,
+          type: "recurring" as const,
+          originalScheduleId: r.id,
+          customTime: customTime,
+          hasPTO: !!ptoException,
+          ptoData: ptoException ? {
+            id: ptoException.id,
+            ptoType: ptoException.reason,
+            startTime: ptoException.custom_start_time || shift.start_time,
+            endTime: ptoException.custom_end_time || shift.end_time,
+            isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+          } : undefined,
+          isPartnership: workingException.is_partnership || r.is_partnership,
+          partnerOfficerId: workingException.partner_officer_id || r.partner_officer_id,
+          shift: shift,
+          isExtraShift: false
+        } : {
+          scheduleId: r.id,
+          officerId: r.officer_id,
+          name: r.profiles?.full_name || "Unknown",
+          badge: r.profiles?.badge_number,
+          rank: officerRank,
+          isPPO: isProbationary,
+          position: r.position_name || defaultAssignment?.position_name,
+          unitNumber: r.unit_number || defaultAssignment?.unit_number,
+          notes: null,
+          type: "recurring" as const,
+          originalScheduleId: r.id,
+          customTime: customTime,
+          hasPTO: !!ptoException,
+          ptoData: ptoException ? {
+            id: ptoException.id,
+            ptoType: ptoException.reason,
+            startTime: ptoException.custom_start_time || shift.start_time,
+            endTime: ptoException.custom_end_time || shift.end_time,
+            isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+          } : undefined,
+          isPartnership: r.is_partnership,
+          partnerOfficerId: r.partner_officer_id,
+          shift: shift,
+          isExtraShift: false
+        };
+
+        allOfficersMap.set(officerKey, finalData);
+      });
+
+    // Process additional officers from working exceptions
+    workingExceptions
+      ?.filter(e => e.shift_type_id === shift.id)
+      .forEach(e => {
+        const officerKey = `${e.officer_id}-${shift.id}`;
+        
+        if (allOfficersMap.has(officerKey)) {
+          console.log("🔄 Skipping duplicate officer (already in recurring):", e.profiles?.full_name);
+          return;
+        }
+
+        const isRegularRecurring = recurringData?.some(r => 
+          r.officer_id === e.officer_id && 
+          r.shift_types?.id === shift.id &&
+          r.day_of_week === dayOfWeek
+        );
+
+        const ptoException = ptoExceptions?.find(p => 
+          p.officer_id === e.officer_id && p.shift_type_id === shift.id
+        );
+
+        const officerRank = e.profiles?.rank;
+        const isProbationary = officerRank?.toLowerCase().includes('probationary');
+
+        const defaultAssignment = getDefaultAssignment(e.officer_id);
+
+        let customTime = undefined;
+        if (ptoException?.custom_start_time && ptoException?.custom_end_time) {
+          const shiftStart = shift.start_time;
+          const shiftEnd = shift.end_time;
+          const ptoStart = ptoException.custom_start_time;
+          const ptoEnd = ptoException.custom_end_time;
+          
+          if (ptoStart === shiftStart && ptoEnd !== shiftEnd) {
+            customTime = `Working: ${ptoEnd} - ${shiftEnd}`;
+          } else if (ptoStart !== shiftStart && ptoEnd === shiftEnd) {
+            customTime = `Working: ${shiftStart} - ${ptoStart}`;
+          } else if (ptoStart !== shiftStart && ptoEnd !== shiftEnd) {
+            customTime = `Working: ${shiftStart}-${ptoStart} & ${ptoEnd}-${shiftEnd}`;
+          } else {
+            customTime = `Working: Check PTO`;
+          }
+        } else if (e.custom_start_time && e.custom_end_time) {
+          customTime = `${e.custom_start_time} - ${e.custom_end_time}`;
+        }
+
+        const officerData = {
+          scheduleId: e.id,
+          officerId: e.officer_id,
+          name: e.profiles?.full_name || "Unknown",
+          badge: e.profiles?.badge_number,
+          rank: officerRank,
+          isPPO: isProbationary,
+          position: e.position_name || defaultAssignment?.position_name,
+          unitNumber: e.unit_number || defaultAssignment?.unit_number,
+          notes: e.notes,
+          type: isRegularRecurring ? "recurring" : "exception" as const,
+          originalScheduleId: null,
+          customTime: customTime,
+          hasPTO: !!ptoException,
+          ptoData: ptoException ? {
+            id: ptoException.id,
+            ptoType: ptoException.reason,
+            startTime: ptoException.custom_start_time || shift.start_time,
+            endTime: ptoException.custom_end_time || shift.end_time,
+            isFullShift: !ptoException.custom_start_time && !ptoException.custom_end_time
+          } : undefined,
+          isPartnership: e.is_partnership,
+          partnerOfficerId: e.partner_officer_id,
+          shift: shift,
+          isExtraShift: !isRegularRecurring
+        };
+
+        allOfficersMap.set(officerKey, officerData);
+      });
+
+    const allOfficers = Array.from(allOfficersMap.values());
+
+    // Process partnerships
+    const processedOfficers = [];
+    const processedOfficerIds = new Set();
+    const partnershipMap = new Map();
+
+    for (const officer of allOfficers) {
+      if (officer.isPartnership && officer.partnerOfficerId) {
+        const partnerOfficer = allOfficers.find(o => o.officerId === officer.partnerOfficerId);
+        if (partnerOfficer && partnerOfficer.isPartnership && partnerOfficer.partnerOfficerId === officer.officerId) {
+          partnershipMap.set(officer.officerId, officer.partnerOfficerId);
+          partnershipMap.set(officer.partnerOfficerId, officer.officerId);
+        } else {
+          officer.isPartnership = false;
+          officer.partnerOfficerId = null;
+        }
+      }
     }
 
-    return staffingData;
-  } catch (error) {
-    console.error("Error getting staffing data:", error);
-    return null;
-  }
+    for (const officer of allOfficers) {
+      if (processedOfficerIds.has(officer.officerId)) {
+        continue;
+      }
+
+      const partnerOfficerId = partnershipMap.get(officer.officerId);
+      
+      if (partnerOfficerId && partnershipMap.get(partnerOfficerId) === officer.officerId) {
+        const partnerOfficer = allOfficers.find(o => o.officerId === partnerOfficerId);
+        
+        if (partnerOfficer) {
+          let primaryOfficer = officer;
+          let secondaryOfficer = partnerOfficer;
+          
+          if (officer.isPPO && !partnerOfficer.isPPO) {
+            primaryOfficer = partnerOfficer;
+            secondaryOfficer = officer;
+          } else if (officer.isPPO === partnerOfficer.isPPO) {
+            primaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? officer : partnerOfficer;
+            secondaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? partnerOfficer : officer;
+          }
+
+          const combinedOfficer = {
+            ...primaryOfficer,
+            isCombinedPartnership: true,
+            partnerData: {
+              partnerOfficerId: secondaryOfficer.officerId,
+              partnerName: secondaryOfficer.name,
+              partnerBadge: secondaryOfficer.badge,
+              partnerRank: secondaryOfficer.rank,
+              partnerIsPPO: secondaryOfficer.isPPO,
+              partnerPosition: secondaryOfficer.position,
+              partnerUnitNumber: secondaryOfficer.unitNumber,
+              partnerScheduleId: secondaryOfficer.scheduleId,
+              partnerType: secondaryOfficer.type
+            },
+            partnerOfficerId: secondaryOfficer.officerId,
+            originalPartnerOfficerId: secondaryOfficer.officerId,
+            position: primaryOfficer.position || secondaryOfficer.position,
+            unitNumber: primaryOfficer.unitNumber || secondaryOfficer.unitNumber,
+            notes: primaryOfficer.notes || secondaryOfficer.notes ? 
+              `${primaryOfficer.notes || ''}${primaryOfficer.notes && secondaryOfficer.notes ? ' / ' : ''}${secondaryOfficer.notes || ''}`.trim() 
+              : null,
+            isPartnership: true
+          };
+
+          processedOfficers.push(combinedOfficer);
+          processedOfficerIds.add(primaryOfficer.officerId);
+          processedOfficerIds.add(secondaryOfficer.officerId);
+        } else {
+          processedOfficers.push(officer);
+          processedOfficerIds.add(officer.officerId);
+        }
+      } else {
+        processedOfficers.push(officer);
+        processedOfficerIds.add(officer.officerId);
+      }
+    }
+
+    // Get PTO records for this shift
+    const shiftPTORecords = ptoExceptions?.filter(e => 
+      e.shift_type_id === shift.id
+    ).map(e => ({
+      id: e.id,
+      officerId: e.officer_id,
+      name: e.profiles?.full_name || "Unknown",
+      badge: e.profiles?.badge_number,
+      rank: e.profiles?.rank,
+      ptoType: e.reason || "PTO",
+      startTime: e.custom_start_time || shift.start_time,
+      endTime: e.custom_end_time || shift.end_time,
+      isFullShift: !e.custom_start_time && !e.custom_end_time,
+      notes: e.notes,
+      customTime: e.custom_start_time && e.custom_end_time ? 
+        `${e.custom_start_time} - ${e.custom_end_time}` : undefined
+    })) || [];
+
+    // Separate supervisors from officers
+    const supervisors = processedOfficers.filter(o => 
+      o.rank && ['Sergeant', 'Lieutenant', 'Captain', 'Chief'].includes(o.rank)
+    );
+    const officers = processedOfficers.filter(o => 
+      !o.rank || !['Sergeant', 'Lieutenant', 'Captain', 'Chief'].includes(o.rank)
+    );
+
+    // Sort supervisors by rank
+    const sortedSupervisors = sortSupervisorsByRank(supervisors);
+
+    return {
+      shift,
+      supervisors: sortedSupervisors,
+      officers,
+      ptoRecords: shiftPTORecords,
+      currentSupervisors: supervisors.length,
+      currentOfficers: officers.length,
+      minSupervisors: minStaff?.minimum_supervisors || 1,
+      minOfficers: minStaff?.minimum_officers || 2
+    };
+  }) || [];
+
+  // Filter by shift if needed
+  const filteredSchedule = filterShiftId === "all" 
+    ? scheduleByShift 
+    : scheduleByShift.filter(s => s.shift.id === filterShiftId);
+
+  console.log("✅ getScheduleDataForUnderstaffing completed:", {
+    totalShifts: scheduleByShift.length,
+    filteredShifts: filteredSchedule.length,
+    selectedShiftId: filterShiftId
+  });
+
+  return filteredSchedule;
 }
