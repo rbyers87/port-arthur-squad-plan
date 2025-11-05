@@ -1258,8 +1258,8 @@ const renderMonthlyView = () => {
                           key={officer.officerId} 
                           className={`
                             text-xs p-1 rounded border flex items-center justify-between
-                            ${isSupervisor ? 'bg-yellow-50 border-yellow-200' : ''}
-                            ${isPPO ? 'bg-purple-50 border-purple-200' : ''}
+                            ${isPPO ? 'bg-yellow-50 border-yellow-200' : ''}
+                            ${isSupervisor ? 'bg-purple-50 border-purple-200' : ''}
                             ${!isSupervisor && !isPPO ? 'bg-blue-50 border-blue-200' : ''}
                           `}
                         >
@@ -1267,14 +1267,14 @@ const renderMonthlyView = () => {
                             <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}`}>
                               {getLastName(officer.officerName)}
                             </div>
-                            {isSupervisor && (
+                            {isPPO && (
                               <Badge variant="outline" className="h-3 text-[8px] px-1 bg-yellow-100 text-yellow-800 border-yellow-300">
-                                {officer.rank || 'SUP'}
+                                PPO
                               </Badge>
                             )}
-                            {isPPO && (
+                            {isSupervisor && (
                               <Badge variant="outline" className="h-3 text-[8px] px-1 bg-purple-100 text-purple-800 border-purple-300">
-                                PPO
+                                {officer.rank || 'SUP'}
                               </Badge>
                             )}
                           </div>
