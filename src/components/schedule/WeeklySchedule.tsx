@@ -907,7 +907,7 @@ const isSupervisorByRank = (officer: any) => {
       <div className="border rounded-lg overflow-hidden">
         <div className="grid grid-cols-9 bg-muted/50 border-b">
           <div className="p-2 font-semibold border-r">Empl#</div>
-          <div className="p-2 font-semibold border-r">COUNT</div>
+          <div className="p-2 font-semibold border-r">NAME</div>
           {weekDays.map(({ dateStr, dayName, formattedDate, isToday }) => {
   const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
   
