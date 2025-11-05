@@ -199,7 +199,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     },
   });
 
-  // Add schedule mutation (bulk insert multiple days)
+  // FIXED: Add schedule mutation (bulk insert multiple days)
   const addScheduleMutation = useMutation({
     mutationFn: async (data: { 
       days: number[]; 
@@ -209,6 +209,20 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       unitNumber?: string;
       assignedPosition?: string;
     }) => {
+      // Validate date range
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const startDate = new Date(data.start);
+      if (startDate < today) {
+        throw new Error("Start date cannot be in the past");
+      }
+
+      if (data.end && new Date(data.end) < startDate) {
+        throw new Error("End date cannot be before start date");
+      }
+
+      // Create schedules array
       const schedules = data.days.map(day => ({
         officer_id: officer.id,
         day_of_week: day,
@@ -219,20 +233,35 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
         position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
       }));
 
-      const { error } = await supabase
-        .from("recurring_schedules")
-        .insert(schedules);
+      console.log("Inserting schedules:", schedules); // Debug log
 
-      if (error) throw error;
+      // Use insert with select to get feedback
+      const { data: insertedSchedules, error } = await supabase
+        .from("recurring_schedules")
+        .insert(schedules)
+        .select();
+
+      if (error) {
+        console.error("Insert error:", error);
+        throw error;
+      }
+
+      if (!insertedSchedules || insertedSchedules.length === 0) {
+        throw new Error("No schedules were created");
+      }
+
+      return insertedSchedules;
     },
-    onSuccess: () => {
-      toast.success("Schedule added successfully");
+    onSuccess: (insertedSchedules) => {
+      console.log("Successfully created schedules:", insertedSchedules);
+      toast.success(`Created ${insertedSchedules.length} schedule(s) successfully`);
       queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
       queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
       queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
       resetForm();
     },
     onError: (error: any) => {
+      console.error("Schedule creation error:", error);
       toast.error(error.message || "Failed to add schedule");
     },
   });
@@ -294,81 +323,80 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     },
   });
 
+  // Add default assignment mutation - now ends previous active assignments
+  const addDefaultAssignmentMutation = useMutation({
+    mutationFn: async (data: { 
+      unitNumber?: string;
+      assignedPosition?: string;
+      start: string;
+      end?: string;
+    }) => {
+      // First, end any existing active assignments that overlap with the new one
+      const { error: endPreviousError } = await supabase
+        .from("officer_default_assignments")
+        .update({ 
+          end_date: data.start // End previous assignments the day before new one starts
+        })
+        .eq("officer_id", officer.id)
+       .or(`end_date.is.null,end_date.gte.${data.start}`);
+       // .lt("start_date", data.start); // That started before the new assignment
 
-// Add default assignment mutation - now ends previous active assignments
-const addDefaultAssignmentMutation = useMutation({
-  mutationFn: async (data: { 
-    unitNumber?: string;
-    assignedPosition?: string;
-    start: string;
-    end?: string;
-  }) => {
-    // First, end any existing active assignments that overlap with the new one
-    const { error: endPreviousError } = await supabase
-      .from("officer_default_assignments")
-      .update({ 
-        end_date: data.start // End previous assignments the day before new one starts
-      })
-      .eq("officer_id", officer.id)
-     .or(`end_date.is.null,end_date.gte.${data.start}`);
-     // .lt("start_date", data.start); // That started before the new assignment
+      if (endPreviousError) {
+        console.error("Failed to end previous assignments:", endPreviousError);
+        // Continue anyway - don't throw
+      }
 
-    if (endPreviousError) {
-      console.error("Failed to end previous assignments:", endPreviousError);
-      // Continue anyway - don't throw
-    }
+      // Second, create the new default assignment
+      const { data: assignment, error: assignmentError } = await supabase
+        .from("officer_default_assignments")
+        .insert({
+          officer_id: officer.id,
+          unit_number: data.unitNumber || null,
+          position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
+          start_date: data.start,
+          end_date: data.end || null,
+        })
+        .select()
+        .single();
 
-    // Second, create the new default assignment
-    const { data: assignment, error: assignmentError } = await supabase
-      .from("officer_default_assignments")
-      .insert({
-        officer_id: officer.id,
-        unit_number: data.unitNumber || null,
-        position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
-        start_date: data.start,
-        end_date: data.end || null,
-      })
-      .select()
-      .single();
+      if (assignmentError) throw assignmentError;
 
-    if (assignmentError) throw assignmentError;
+      // Third, update all active schedules with the new assignment
+      let scheduleQuery = supabase
+        .from("recurring_schedules")
+        .update({
+          unit_number: data.unitNumber || null,
+          position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
+        })
+        .eq("officer_id", officer.id)
+        .gte("start_date", data.start);
 
-    // Third, update all active schedules with the new assignment
-    let scheduleQuery = supabase
-      .from("recurring_schedules")
-      .update({
-        unit_number: data.unitNumber || null,
-        position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
-      })
-      .eq("officer_id", officer.id)
-      .gte("start_date", data.start);
+      if (data.end) {
+        scheduleQuery = scheduleQuery.lte("start_date", data.end);
+      } else {
+        scheduleQuery = scheduleQuery.or(`end_date.is.null,end_date.gte.${new Date().toISOString().split('T')[0]}`);
+      }
 
-    if (data.end) {
-      scheduleQuery = scheduleQuery.lte("start_date", data.end);
-    } else {
-      scheduleQuery = scheduleQuery.or(`end_date.is.null,end_date.gte.${new Date().toISOString().split('T')[0]}`);
-    }
+      const { error: schedulesError } = await scheduleQuery;
 
-    const { error: schedulesError } = await scheduleQuery;
+      if (schedulesError) {
+        console.error("Failed to update schedules:", schedulesError);
+      }
 
-    if (schedulesError) {
-      console.error("Failed to update schedules:", schedulesError);
-    }
-
-    return assignment;
-  },
-  onSuccess: () => {
-    toast.success("Default assignment added and previous assignments ended");
-    queryClient.invalidateQueries({ queryKey: ["officer-default-assignments", officer.id] });
-    queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
-    queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
-    queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
-    resetDefaultAssignmentForm();
-  },
-  onError: (error: any) => {
-    toast.error(error.message || "Failed to add default assignment");
-  },
-});
+      return assignment;
+    },
+    onSuccess: () => {
+      toast.success("Default assignment added and previous assignments ended");
+      queryClient.invalidateQueries({ queryKey: ["officer-default-assignments", officer.id] });
+      queryClient.invalidateQueries({ queryKey: ["officer-schedules", officer.id] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["daily-schedule"] });
+      resetDefaultAssignmentForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to add default assignment");
+    },
+  });
 
   // Update default assignment mutation
   const updateDefaultAssignmentMutation = useMutation({
@@ -423,6 +451,7 @@ const addDefaultAssignmentMutation = useMutation({
     },
   });
 
+  // FIXED: Handle add schedule with proper validation
   const handleAddSchedule = () => {
     if (selectedDays.length === 0) {
       toast.error("Please select at least one day");
@@ -432,6 +461,22 @@ const addDefaultAssignmentMutation = useMutation({
       toast.error("Please select a shift");
       return;
     }
+    
+    // Validate start date is not in past
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (startDate < today) {
+      toast.error("Start date cannot be in the past");
+      return;
+    }
+
+    // Validate end date if provided
+    if (endDate && endDate < startDate) {
+      toast.error("End date cannot be before start date");
+      return;
+    }
+
     addScheduleMutation.mutate({
       days: selectedDays,
       shiftId: shiftTypeId,
@@ -480,7 +525,6 @@ const addDefaultAssignmentMutation = useMutation({
     });
   };
 
-
   const handleEndAllSchedules = () => {
     const activeSchedules = schedules?.filter(s => !s.end_date || new Date(s.end_date) >= new Date()) || [];
     const today = format(new Date(), "yyyy-MM-dd");
@@ -502,19 +546,19 @@ const addDefaultAssignmentMutation = useMutation({
     setScheduleToDelete(scheduleId);
   };
 
-const handleAddDefaultAssignment = () => {
-  if (!defaultUnitNumber && defaultAssignedPosition === "none") {
-    toast.error("Please provide at least a unit number or position");
-    return;
-  }
+  const handleAddDefaultAssignment = () => {
+    if (!defaultUnitNumber && defaultAssignedPosition === "none") {
+      toast.error("Please provide at least a unit number or position");
+      return;
+    }
 
-  addDefaultAssignmentMutation.mutate({
-    unitNumber: defaultUnitNumber || undefined,
-    assignedPosition: defaultAssignedPosition !== "none" ? defaultAssignedPosition : undefined,
-    start: format(defaultAssignmentStartDate, "yyyy-MM-dd"),
-    end: defaultAssignmentEndDate ? format(defaultAssignmentEndDate, "yyyy-MM-dd") : undefined,
-  });
-};
+    addDefaultAssignmentMutation.mutate({
+      unitNumber: defaultUnitNumber || undefined,
+      assignedPosition: defaultAssignedPosition !== "none" ? defaultAssignedPosition : undefined,
+      start: format(defaultAssignmentStartDate, "yyyy-MM-dd"),
+      end: defaultAssignmentEndDate ? format(defaultAssignmentEndDate, "yyyy-MM-dd") : undefined,
+    });
+  };
 
   const handleEditDefaultAssignment = (assignment: any) => {
     setEditingDefaultAssignment(assignment);
@@ -863,8 +907,23 @@ const handleAddDefaultAssignment = () => {
                           <Calendar
                             mode="single"
                             selected={startDate}
-                            onSelect={(date) => date && setStartDate(date)}
+                            onSelect={(date) => {
+                              if (date) {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                if (date >= today) {
+                                  setStartDate(date);
+                                } else {
+                                  toast.error("Start date cannot be in the past");
+                                }
+                              }
+                            }}
                             initialFocus
+                            disabled={(date) => {
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              return date < today;
+                            }}
                             className="pointer-events-auto"
                           />
                         </PopoverContent>
@@ -927,7 +986,7 @@ const handleAddDefaultAssignment = () => {
                 </div>
               )}
 
-                           {/* Unified Schedule Form - Handles Both Add and Edit */}
+              {/* Unified Schedule Form - Handles Both Add and Edit */}
               {!showAddForm && !isEditing ? (
                 <Button
                   variant="outline"
@@ -1005,8 +1064,23 @@ const handleAddDefaultAssignment = () => {
                           <Calendar
                             mode="single"
                             selected={startDate}
-                            onSelect={(date) => date && setStartDate(date)}
+                            onSelect={(date) => {
+                              if (date) {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                if (date >= today) {
+                                  setStartDate(date);
+                                } else {
+                                  toast.error("Start date cannot be in the past");
+                                }
+                              }
+                            }}
                             initialFocus
+                            disabled={(date) => {
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              return date < today;
+                            }}
                             className="pointer-events-auto"
                           />
                         </PopoverContent>
