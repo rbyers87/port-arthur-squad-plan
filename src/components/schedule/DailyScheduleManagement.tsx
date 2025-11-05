@@ -58,22 +58,23 @@ export const DailyScheduleManagement = ({ isAdminOrSupervisor }: DailyScheduleMa
                   ))}
                 </SelectContent>
               </Select>
-              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="gap-2">
-                    <CalendarIcon className="h-4 w-4" />
-                    {format(selectedDate, "MMM d, yyyy")}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={handleDateSelect}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+             <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+  <PopoverTrigger asChild>
+    <Button variant="outline" className="gap-2">
+      <CalendarIcon className="h-4 w-4" />
+      {format(selectedDate, "MMM d, yyyy")}
+    </Button>
+  </PopoverTrigger>
+  <PopoverContent className="w-auto p-0" align="end">
+    <Calendar
+      key="daily-schedule-calendar" // Add unique key
+      mode="single"
+      selected={selectedDate}
+      onSelect={handleDateSelect}
+      initialFocus
+    />
+  </PopoverContent>
+</Popover>
             </div>
           </CardTitle>
         </CardHeader>
