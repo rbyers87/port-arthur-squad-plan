@@ -1112,27 +1112,17 @@ const renderMonthlyView = () => {
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
   const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
 
-  // Enhanced supervisor detection function
-  const isSupervisor = (officer: any) => {
-    const rank = officer.rank?.toLowerCase() || '';
-    const position = officer.shiftInfo?.position?.toLowerCase() || '';
+  // Function to get rank priority for sorting
+  const getRankPriority = (rank: string) => {
+    const rankLower = rank?.toLowerCase() || '';
     
-    // Check for supervisor ranks
-    const supervisorRanks = [
-      'sergeant', 'sgt', 'lieutenant', 'lt', 'captain', 'cpt', 
-      'commander', 'chief', 'major', 'colonel', 'supervisor'
-    ];
+    if (rankLower.includes('lieutenant') || rankLower.includes('lt')) return 1;
+    if (rankLower.includes('sergeant') || rankLower.includes('sgt')) return 2;
+    if (rankLower.includes('captain') || rankLower.includes('cpt')) return 0; // Highest if you have captains
+    if (rankLower.includes('chief')) return -1; // Highest if you have chiefs
+    if (rankLower.includes('commander')) return -2; // Highest if you have commanders
     
-    // Check for supervisor positions
-    const supervisorPositions = [
-      'supervisor', 'sergeant', 'sgt', 'lieutenant', 'lt', 'captain', 
-      'cpt', 'commander', 'chief', 'major', 'colonel'
-    ];
-    
-    return (
-      supervisorRanks.some(supervisorRank => rank.includes(supervisorRank)) ||
-      supervisorPositions.some(supervisorPosition => position.includes(supervisorPosition))
-    );
+    return 3; // Other supervisors
   };
 
   return (
@@ -1153,72 +1143,35 @@ const renderMonthlyView = () => {
           const isCurrentMonthDay = isSameMonth(day, currentMonth);
           const isToday = isSameDay(day, new Date());
           
-          // Get all officers for this day and categorize them properly
-          const allOfficers = daySchedule?.officers || [];
-          
-          // Categorize officers: supervisors first, then officers, then PPOs
-          const categorizedOfficers = {
-            supervisors: [] as any[],
-            officers: [] as any[],
-            ppos: [] as any[]
+          // Use the same categorizeAndSortOfficers function as the weekly view
+          const categorizedOfficers = daySchedule?.categorizedOfficers || {
+            supervisors: [],
+            officers: [],
+            ppos: []
           };
 
-          allOfficers.forEach((officer: any) => {
-            // Use enhanced supervisor detection
-            const isSupervisorOfficer = isSupervisor(officer);
-            const isPPO = officer.rank?.toLowerCase() === 'probationary';
+          // Sort supervisors by rank priority, then by name
+          const sortedSupervisors = [...categorizedOfficers.supervisors].sort((a, b) => {
+            const aPriority = getRankPriority(a.rank);
+            const bPriority = getRankPriority(b.rank);
             
-            if (isSupervisorOfficer) {
-              categorizedOfficers.supervisors.push(officer);
-            } else if (isPPO) {
-              categorizedOfficers.ppos.push(officer);
-            } else {
-              categorizedOfficers.officers.push(officer);
+            if (aPriority !== bPriority) {
+              return aPriority - bPriority; // Lower number = higher rank
             }
-          });
-
-          // Sort supervisors by name
-          categorizedOfficers.supervisors.sort((a, b) => 
-            getLastName(a.officerName).localeCompare(getLastName(b.officerName))
-          );
-
-          // Sort regular officers by service credit then name
-          categorizedOfficers.officers.sort((a, b) => {
-            const aCredit = a.service_credit || 0;
-            const bCredit = b.service_credit || 0;
-            if (bCredit !== aCredit) {
-              return bCredit - aCredit;
-            }
-            return getLastName(a.officerName).localeCompare(getLastName(b.officerName));
-          });
-
-          // Sort PPOs by service credit then name
-          categorizedOfficers.ppos.sort((a, b) => {
-            const aCredit = a.service_credit || 0;
-            const bCredit = b.service_credit || 0;
-            if (bCredit !== aCredit) {
-              return bCredit - aCredit;
-            }
+            
+            // If same rank, sort by last name
             return getLastName(a.officerName).localeCompare(getLastName(b.officerName));
           });
 
           // Get PTO officers (full-day only for display)
-          const ptoOfficers = allOfficers.filter((officer: any) => 
+          const ptoOfficers = daySchedule?.officers?.filter((officer: any) => 
             officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
           ) || [];
 
-          // Calculate staffing counts properly
-          const supervisorCount = categorizedOfficers.supervisors.filter((officer: any) => {
-            const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
-            const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
-            return isScheduled;
-          }).length;
-
-          const officerCount = categorizedOfficers.officers.filter((officer: any) => {
-            const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
-            const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
-            return isScheduled;
-          }).length;
+          // Calculate staffing counts using the same logic as weekly view
+          const { supervisorCount, officerCount } = isCurrentMonthDay && daySchedule
+            ? calculateStaffingCounts(categorizedOfficers)
+            : { supervisorCount: 0, officerCount: 0 };
 
           const ppoCount = categorizedOfficers.ppos.filter((officer: any) => {
             const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
@@ -1287,10 +1240,10 @@ const renderMonthlyView = () => {
               </div>
               
               <div className="space-y-1 flex-1 overflow-y-auto">
-                {allOfficers.length > 0 ? (
+                {daySchedule?.officers && daySchedule.officers.length > 0 ? (
                   <div className="space-y-1">
-                    {/* Display supervisors first with badge */}
-                    {categorizedOfficers.supervisors.map((officer: any) => (
+                    {/* Display supervisors first, sorted by rank */}
+                    {sortedSupervisors.map((officer: any) => (
                       <div 
                         key={officer.officerId} 
                         className={`
@@ -1306,7 +1259,7 @@ const renderMonthlyView = () => {
                             {getLastName(officer.officerName)}
                           </div>
                           <Badge variant="outline" className="h-3 text-[8px] px-1 bg-yellow-100 text-yellow-800 border-yellow-300">
-                            SUP
+                            {officer.rank || 'SUP'}
                           </Badge>
                         </div>
                         {officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift && (
