@@ -1158,18 +1158,6 @@ const renderMonthlyView = () => {
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
   const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
 
-  // Function to get rank priority using RANK_ORDER constant
-  const getRankPriority = (rank: string) => {
-    if (!rank) return 99; // Default to lowest priority if no rank
-    
-    // Find the rank in RANK_ORDER (case-insensitive)
-    const rankKey = Object.keys(RANK_ORDER).find(
-      key => key.toLowerCase() === rank.toLowerCase()
-    );
-    
-    return rankKey ? RANK_ORDER[rankKey as keyof typeof RANK_ORDER] : 99;
-  };
-
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-7 gap-1 mb-2">
@@ -1195,19 +1183,6 @@ const renderMonthlyView = () => {
             ppos: []
           };
 
-          // Sort supervisors by rank priority, then by name
-          const sortedSupervisors = [...categorizedOfficers.supervisors].sort((a, b) => {
-            const aPriority = getRankPriority(a.rank);
-            const bPriority = getRankPriority(b.rank);
-            
-            if (aPriority !== bPriority) {
-              return aPriority - bPriority; // Lower number = higher rank
-            }
-            
-            // If same rank, sort by last name
-            return getLastName(a.officerName).localeCompare(getLastName(b.officerName));
-          });
-
           // Get PTO officers (full-day only for display)
           const ptoOfficers = daySchedule?.officers?.filter((officer: any) => 
             officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
@@ -1218,11 +1193,12 @@ const renderMonthlyView = () => {
             ? calculateStaffingCounts(categorizedOfficers)
             : { supervisorCount: 0, officerCount: 0 };
 
-          const ppoCount = categorizedOfficers.ppos.filter((officer: any) => {
+          // Add null check for ppos
+          const ppoCount = categorizedOfficers.ppos?.filter((officer: any) => {
             const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
             const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
             return isScheduled;
-          }).length;
+          }).length || 0;
 
           const minimumOfficers = MINIMUM_STAFFING[dayName];
           const isOfficersUnderstaffed = isCurrentMonthDay && (officerCount < minimumOfficers);
@@ -1287,8 +1263,8 @@ const renderMonthlyView = () => {
               <div className="space-y-1 flex-1 overflow-y-auto">
                 {daySchedule?.officers && daySchedule.officers.length > 0 ? (
                   <div className="space-y-1">
-                    {/* Display supervisors first, sorted by rank */}
-                    {sortedSupervisors.map((officer: any) => (
+                    {/* Display supervisors first */}
+                    {categorizedOfficers.supervisors?.map((officer: any) => (
                       <div 
                         key={officer.officerId} 
                         className={`
@@ -1316,7 +1292,7 @@ const renderMonthlyView = () => {
                     ))}
                     
                     {/* Display regular officers */}
-                    {categorizedOfficers.officers.map((officer: any) => (
+                    {categorizedOfficers.officers?.map((officer: any) => (
                       <div 
                         key={officer.officerId} 
                         className={`
@@ -1338,8 +1314,8 @@ const renderMonthlyView = () => {
                       </div>
                     ))}
                     
-                    {/* Display PPOs with badge */}
-                    {categorizedOfficers.ppos.map((officer: any) => (
+                    {/* Display PPOs with badge - with null check */}
+                    {categorizedOfficers.ppos?.map((officer: any) => (
                       <div 
                         key={officer.officerId} 
                         className={`
