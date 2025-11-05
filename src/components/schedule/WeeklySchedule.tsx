@@ -215,7 +215,13 @@ const WeeklySchedule = ({
 
  // Handle PDF export
 const handleExportPDF = async () => {
-  if (!dateRange?.from || !dateRange?.to) {
+  // Use default range if none selected
+  const exportDateRange = dateRange || {
+    from: startOfWeek(new Date(), { weekStartsOn: 0 }),
+    to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4),
+  };
+
+  if (!exportDateRange.from || !exportDateRange.to) {
     toast.error("Please select a date range");
     return;
   }
