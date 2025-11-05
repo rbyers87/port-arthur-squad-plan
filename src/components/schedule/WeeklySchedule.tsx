@@ -1094,150 +1094,289 @@ const renderExcelStyleWeeklyView = () => {
   );
 };
 
-  const renderMonthlyView = () => {
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(currentMonth);
-    
-    const startDay = monthStart.getDay();
-    const endDay = monthEnd.getDay();
-    
-    const previousMonthDays = Array.from({ length: startDay }, (_, i) => 
-      addDays(monthStart, -startDay + i)
-    );
-    
-    const nextMonthDays = Array.from({ length: 6 - endDay }, (_, i) => 
-      addDays(monthEnd, i + 1)
-    );
+const renderMonthlyView = () => {
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  
+  const startDay = monthStart.getDay();
+  const endDay = monthEnd.getDay();
+  
+  const previousMonthDays = Array.from({ length: startDay }, (_, i) => 
+    addDays(monthStart, -startDay + i)
+  );
+  
+  const nextMonthDays = Array.from({ length: 6 - endDay }, (_, i) => 
+    addDays(monthEnd, i + 1)
+  );
 
-    const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-    const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
+  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const allCalendarDays = [...previousMonthDays, ...monthDays, ...nextMonthDays];
 
-    return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-            <div key={day} className="text-center font-medium text-sm py-2 bg-muted/50 rounded">
-              {day}
-            </div>
-          ))}
-        </div>
-        
-        <div className="grid grid-cols-7 gap-1">
-          {allCalendarDays.map((day) => {
-            const dateStr = format(day, "yyyy-MM-dd");
-            const dayName = format(day, "EEE").toUpperCase() as keyof typeof MINIMUM_STAFFING;
-            const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
-            const isCurrentMonthDay = isSameMonth(day, currentMonth);
-            const isToday = isSameDay(day, new Date());
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+          <div key={day} className="text-center font-medium text-sm py-2 bg-muted/50 rounded">
+            {day}
+          </div>
+        ))}
+      </div>
+      
+      <div className="grid grid-cols-7 gap-1">
+        {allCalendarDays.map((day) => {
+          const dateStr = format(day, "yyyy-MM-dd");
+          const dayName = format(day, "EEE").toUpperCase() as keyof typeof MINIMUM_STAFFING;
+          const daySchedule = schedules?.dailySchedules?.find(s => s.date === dateStr);
+          const isCurrentMonthDay = isSameMonth(day, currentMonth);
+          const isToday = isSameDay(day, new Date());
+          
+          // Get all officers for this day and categorize them properly
+          const allOfficers = daySchedule?.officers || [];
+          
+          // Categorize officers: supervisors first, then officers, then PPOs
+          const categorizedOfficers = {
+            supervisors: [] as any[],
+            officers: [] as any[],
+            ppos: [] as any[]
+          };
+
+          allOfficers.forEach((officer: any) => {
+            // Check if officer is a supervisor based on rank
+            const isSupervisor = officer.rank?.toLowerCase().includes('supervisor') || 
+                               officer.shiftInfo?.position?.toLowerCase().includes('supervisor');
             
-            const ptoOfficers = daySchedule?.officers.filter((officer: any) => 
-              officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
-            ) || [];
+            const isPPO = officer.rank?.toLowerCase() === 'probationary';
+            
+            if (isSupervisor) {
+              categorizedOfficers.supervisors.push(officer);
+            } else if (isPPO) {
+              categorizedOfficers.ppos.push(officer);
+            } else {
+              categorizedOfficers.officers.push(officer);
+            }
+          });
 
-            const { supervisorCount, officerCount } = isCurrentMonthDay && daySchedule
-              ? calculateStaffingCounts(daySchedule.categorizedOfficers)
-              : { supervisorCount: 0, officerCount: 0 };
+          // Sort supervisors by name
+          categorizedOfficers.supervisors.sort((a, b) => 
+            getLastName(a.officerName).localeCompare(getLastName(b.officerName))
+          );
 
-            const minimumOfficers = MINIMUM_STAFFING[dayName];
-            const isOfficersUnderstaffed = isCurrentMonthDay && (officerCount < minimumOfficers);
-            const isSupervisorsUnderstaffed = isCurrentMonthDay && (supervisorCount < MINIMUM_SUPERVISORS);
-            const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervisorsUnderstaffed);
+          // Sort regular officers by service credit then name
+          categorizedOfficers.officers.sort((a, b) => {
+            const aCredit = a.service_credit || 0;
+            const bCredit = b.service_credit || 0;
+            if (bCredit !== aCredit) {
+              return bCredit - aCredit;
+            }
+            return getLastName(a.officerName).localeCompare(getLastName(b.officerName));
+          });
 
-            return (
-              <div
-                key={day.toISOString()}
-                className={`
-                  min-h-32 p-2 border rounded-lg text-sm flex flex-col
-                  ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/20 text-muted-foreground'}
-                  ${isToday ? 'border-primary ring-2 ring-primary' : 'border-border'}
-                  hover:bg-accent/50 transition-colors
-                  ${isUnderstaffed ? 'bg-red-50 border-red-200' : ''}
-                `}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`
-                      h-6 w-6 p-0 text-xs font-medium hover:bg-primary hover:text-primary-foreground
-                      ${isToday ? 'bg-primary text-primary-foreground' : ''}
-                      ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}
-                    `}
-                    onClick={() => navigateToDailySchedule(dateStr)}
-                    title={`View daily schedule for ${format(day, "MMM d, yyyy")}`}
-                  >
-                    {format(day, "d")}
-                  </Button>
-                  
-                  <div className="flex flex-col gap-1">
-                    {isUnderstaffed && (
-                      <Badge variant="destructive" className="text-xs h-4">
-                        Understaffed
-                      </Badge>
-                    )}
-                    {ptoOfficers.length > 0 && (
-                      <Badge variant="outline" className="text-xs h-4 bg-green-50 text-green-800 border-green-200">
-                        {ptoOfficers.length} PTO
-                      </Badge>
-                    )}
-                    {isCurrentMonthDay && !isUnderstaffed && (
-                      <div className="flex flex-col gap-1">
-                        <Badge variant="outline" className="text-xs h-4">
-                          {supervisorCount}/{MINIMUM_SUPERVISORS} Sup
-                        </Badge>
-                        <Badge variant="outline" className="text-xs h-4">
-                          {officerCount}/{minimumOfficers} Ofc
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                </div>
+          // Sort PPOs by service credit then name
+          categorizedOfficers.ppos.sort((a, b) => {
+            const aCredit = a.service_credit || 0;
+            const bCredit = b.service_credit || 0;
+            if (bCredit !== aCredit) {
+              return bCredit - aCredit;
+            }
+            return getLastName(a.officerName).localeCompare(getLastName(b.officerName));
+          });
+
+          // Get PTO officers (full-day only for display)
+          const ptoOfficers = allOfficers.filter((officer: any) => 
+            officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
+          ) || [];
+
+          // Calculate staffing counts properly
+          const supervisorCount = categorizedOfficers.supervisors.filter((officer: any) => {
+            const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+            const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
+            return isScheduled;
+          }).length;
+
+          const officerCount = categorizedOfficers.officers.filter((officer: any) => {
+            const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+            const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
+            return isScheduled;
+          }).length;
+
+          const ppoCount = categorizedOfficers.ppos.filter((officer: any) => {
+            const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
+            const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
+            return isScheduled;
+          }).length;
+
+          const minimumOfficers = MINIMUM_STAFFING[dayName];
+          const isOfficersUnderstaffed = isCurrentMonthDay && (officerCount < minimumOfficers);
+          const isSupervisorsUnderstaffed = isCurrentMonthDay && (supervisorCount < MINIMUM_SUPERVISORS);
+          const isUnderstaffed = isCurrentMonthDay && (isOfficersUnderstaffed || isSupervisorsUnderstaffed);
+
+          return (
+            <div
+              key={day.toISOString()}
+              className={`
+                min-h-32 p-2 border rounded-lg text-sm flex flex-col
+                ${isCurrentMonthDay ? 'bg-card' : 'bg-muted/20 text-muted-foreground'}
+                ${isToday ? 'border-primary ring-2 ring-primary' : 'border-border'}
+                hover:bg-accent/50 transition-colors
+                ${isUnderstaffed ? 'bg-red-50 border-red-200' : ''}
+              `}
+            >
+              <div className="flex justify-between items-start mb-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`
+                    h-6 w-6 p-0 text-xs font-medium hover:bg-primary hover:text-primary-foreground
+                    ${isToday ? 'bg-primary text-primary-foreground' : ''}
+                    ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}
+                  `}
+                  onClick={() => navigateToDailySchedule(dateStr)}
+                  title={`View daily schedule for ${format(day, "MMM d, yyyy")}`}
+                >
+                  {format(day, "d")}
+                </Button>
                 
-                <div className="space-y-1 flex-1 overflow-y-auto">
-                  {ptoOfficers.length > 0 ? (
-                    ptoOfficers.map((officer: any) => (
-                      <div 
-                        key={officer.officerId} 
-                        className="text-xs p-1 bg-green-50 rounded border border-green-200"
-                      >
-                        <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-green-700' : 'text-green-800'}`}>
-                          {getLastName(officer.officerName)}
-                        </div>
-                        <div className={`truncate text-[10px] ${!isCurrentMonthDay ? 'text-green-500' : 'text-green-600'}`}>
-                          {officer.shiftInfo?.ptoData?.ptoType || 'PTO'}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className={`text-xs text-center py-2 ${!isCurrentMonthDay ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>
-                      No full-day PTO
+                <div className="flex flex-col gap-1">
+                  {isUnderstaffed && (
+                    <Badge variant="destructive" className="text-xs h-4">
+                      Understaffed
+                    </Badge>
+                  )}
+                  {ptoOfficers.length > 0 && (
+                    <Badge variant="outline" className="text-xs h-4 bg-green-50 text-green-800 border-green-200">
+                      {ptoOfficers.length} PTO
+                    </Badge>
+                  )}
+                  {isCurrentMonthDay && !isUnderstaffed && (
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline" className="text-xs h-4">
+                        {supervisorCount}/{MINIMUM_SUPERVISORS} Sup
+                      </Badge>
+                      <Badge variant="outline" className="text-xs h-4">
+                        {officerCount}/{minimumOfficers} Ofc
+                      </Badge>
+                      {ppoCount > 0 && (
+                        <Badge variant="outline" className="text-xs h-4 bg-blue-50 text-blue-800 border-blue-200">
+                          {ppoCount} PPO
+                        </Badge>
+                      )}
                     </div>
                   )}
                 </div>
-                
-                {isUnderstaffed && (
-                  <div className="mt-1 text-[10px] space-y-0.5 text-red-600">
-                    {isSupervisorsUnderstaffed && (
-                      <div>Sup: {supervisorCount}/{MINIMUM_SUPERVISORS}</div>
-                    )}
-                    {isOfficersUnderstaffed && (
-                      <div>Ofc: {officerCount}/{minimumOfficers}</div>
-                    )}
+              </div>
+              
+              <div className="space-y-1 flex-1 overflow-y-auto">
+                {allOfficers.length > 0 ? (
+                  <div className="space-y-1">
+                    {/* Display supervisors first with badge */}
+                    {categorizedOfficers.supervisors.map((officer: any) => (
+                      <div 
+                        key={officer.officerId} 
+                        className={`
+                          text-xs p-1 rounded border flex items-center justify-between
+                          ${officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift 
+                            ? 'bg-green-50 border-green-200' 
+                            : 'bg-yellow-50 border-yellow-200'
+                          }
+                        `}
+                      >
+                        <div className="flex items-center gap-1">
+                          <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}`}>
+                            {getLastName(officer.officerName)}
+                          </div>
+                          <Badge variant="outline" className="h-3 text-[8px] px-1 bg-yellow-100 text-yellow-800 border-yellow-300">
+                            SUP
+                          </Badge>
+                        </div>
+                        {officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift && (
+                          <div className={`text-[10px] ${!isCurrentMonthDay ? 'text-green-500' : 'text-green-600'}`}>
+                            PTO
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    
+                    {/* Display regular officers */}
+                    {categorizedOfficers.officers.map((officer: any) => (
+                      <div 
+                        key={officer.officerId} 
+                        className={`
+                          text-xs p-1 rounded border
+                          ${officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift 
+                            ? 'bg-green-50 border-green-200' 
+                            : 'bg-blue-50 border-blue-200'
+                          }
+                        `}
+                      >
+                        <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}`}>
+                          {getLastName(officer.officerName)}
+                        </div>
+                        {officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift && (
+                          <div className={`text-[10px] ${!isCurrentMonthDay ? 'text-green-500' : 'text-green-600'}`}>
+                            {officer.shiftInfo?.ptoData?.ptoType || 'PTO'}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    
+                    {/* Display PPOs with badge */}
+                    {categorizedOfficers.ppos.map((officer: any) => (
+                      <div 
+                        key={officer.officerId} 
+                        className={`
+                          text-xs p-1 rounded border flex items-center justify-between
+                          ${officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift 
+                            ? 'bg-green-50 border-green-200' 
+                            : 'bg-purple-50 border-purple-200'
+                          }
+                        `}
+                      >
+                        <div className="flex items-center gap-1">
+                          <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}`}>
+                            {getLastName(officer.officerName)}
+                          </div>
+                          <Badge variant="outline" className="h-3 text-[8px] px-1 bg-purple-100 text-purple-800 border-purple-300">
+                            PPO
+                          </Badge>
+                        </div>
+                        {officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift && (
+                          <div className={`text-[10px] ${!isCurrentMonthDay ? 'text-green-500' : 'text-green-600'}`}>
+                            PTO
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                )}
-                
-                {!isCurrentMonthDay && (
-                  <div className="text-[8px] text-muted-foreground text-center mt-1">
-                    {format(day, "MMM")}
+                ) : (
+                  <div className={`text-xs text-center py-2 ${!isCurrentMonthDay ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>
+                    No scheduled officers
                   </div>
                 )}
               </div>
-            );
-          })}
-        </div>
+              
+              {isUnderstaffed && (
+                <div className="mt-1 text-[10px] space-y-0.5 text-red-600">
+                  {isSupervisorsUnderstaffed && (
+                    <div>Sup: {supervisorCount}/{MINIMUM_SUPERVISORS}</div>
+                  )}
+                  {isOfficersUnderstaffed && (
+                    <div>Ofc: {officerCount}/{minimumOfficers}</div>
+                  )}
+                </div>
+              )}
+              
+              {!isCurrentMonthDay && (
+                <div className="text-[8px] text-muted-foreground text-center mt-1">
+                  {format(day, "MMM")}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   const weekEnd = addDays(currentWeekStart, 6);
   const isCurrentWeek = startOfWeek(new Date(), { weekStartsOn: 0 }).getTime() === currentWeekStart.getTime();
