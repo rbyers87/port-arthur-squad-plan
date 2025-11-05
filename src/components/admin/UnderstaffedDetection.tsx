@@ -540,12 +540,12 @@ async function getScheduleDataForUnderstaffing(selectedDate: Date, filterShiftId
     );
   };
 
-  // Get recurring schedules
+  // FIXED: Use explicit relationship name to avoid ambiguity
   const { data: recurringData, error: recurringError } = await supabase
     .from("recurring_schedules")
     .select(`
       *,
-      profiles:profiles!recurring_schedules_officer_id_fkey (
+      profiles:officer_id (
         id, 
         full_name, 
         badge_number, 
