@@ -837,18 +837,14 @@ const renderExcelStyleWeeklyView = () => {
     return rankKey ? RANK_ORDER[rankKey as keyof typeof RANK_ORDER] : 99;
   };
 
-  // Function to check if officer is supervisor based on rank (not assignment)
-  const isSupervisorByRank = (officer: any) => {
-    const rank = officer.rank?.toLowerCase() || '';
-    // Check if rank indicates supervisor (Lieutenant, Sergeant, etc.)
-    return rank.includes('lieutenant') || 
-           rank.includes('sergeant') || 
-           rank.includes('sgt') || 
-           rank.includes('lt') ||
-           rank.includes('captain') ||
-           rank.includes('chief') ||
-           rank.includes('commander');
-  };
+// Function to check if officer is supervisor based on rank (not assignment)
+const isSupervisorByRank = (officer: any) => {
+  const rank = officer.rank?.toLowerCase() || '';
+  
+  // Check if rank exists in RANK_ORDER and has a priority higher than Officer
+  const rankPriority = getRankPriority(officer.rank);
+  return rankPriority < RANK_ORDER.Officer; // Chiefs, Lieutenants, Sergeants are supervisors
+};
 
   // Categorize officers by their profile rank, not their assignment
   const supervisors = Array.from(allOfficers.values())
