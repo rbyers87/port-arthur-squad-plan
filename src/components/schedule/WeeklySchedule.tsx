@@ -842,9 +842,32 @@ const renderExcelStyleWeeklyView = () => {
     officerCategories.set(officer.officerId, supervisorDays > regularDays ? 'supervisor' : 'officer');
   });
 
+  // Function to get rank priority using RANK_ORDER constant
+  const getRankPriority = (rank: string) => {
+    if (!rank) return 99; // Default to lowest priority if no rank
+    
+    // Find the rank in RANK_ORDER (case-insensitive)
+    const rankKey = Object.keys(RANK_ORDER).find(
+      key => key.toLowerCase() === rank.toLowerCase()
+    );
+    
+    return rankKey ? RANK_ORDER[rankKey as keyof typeof RANK_ORDER] : 99;
+  };
+
+  // Sort supervisors by rank priority, then by last name
   const supervisors = Array.from(allOfficers.values())
     .filter(o => officerCategories.get(o.officerId) === 'supervisor')
-    .sort((a, b) => getLastName(a.officerName).localeCompare(getLastName(b.officerName)));
+    .sort((a, b) => {
+      const aPriority = getRankPriority(a.rank);
+      const bPriority = getRankPriority(b.rank);
+      
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority; // Lower number = higher rank
+      }
+      
+      // If same rank, sort by last name
+      return getLastName(a.officerName).localeCompare(getLastName(b.officerName));
+    });
 
   // Separate officers into regular officers and PPOs
   const allOfficersList = Array.from(allOfficers.values())
