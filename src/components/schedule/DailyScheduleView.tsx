@@ -99,8 +99,6 @@ const { data: scheduleData, isLoading } = useQuery({
   queryKey: ["daily-schedule", dateStr, filterShiftId],
   queryFn: () => getScheduleData(selectedDate, filterShiftId),
 });
-    },
-  });
 
   // FIXED: Updated handlers to work with the new callback signatures
   const handleSavePosition = (officer: any, position: string) => {
