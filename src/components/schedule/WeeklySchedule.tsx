@@ -129,6 +129,14 @@ useEffect(() => {
   console.log("Calendar Debug - Export Dialog Open:", exportDialogOpen);
 }, [calendarOpen, dateRange, exportDialogOpen]);
 
+  useEffect(() => {
+  const calendars = document.querySelectorAll('[data-radix-calendar]');
+  console.log("Number of Calendar components on page:", calendars.length);
+  calendars.forEach((cal, index) => {
+    console.log(`Calendar ${index}:`, cal);
+  });
+}, []);
+
 
   // Get shift types
   const { data: shiftTypes, isLoading: shiftsLoading } = useQuery({
