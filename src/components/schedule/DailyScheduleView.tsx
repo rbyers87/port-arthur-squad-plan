@@ -749,26 +749,26 @@ export const getScheduleData = async (selectedDate: Date, filterShiftId: string 
     );
   };
 
-  // Get recurring schedules for this day of week
-  const { data: recurringData, error: recurringError } = await supabase
-    .from("recurring_schedules")
-    .select(`
-      *,
-      profiles:officer_id (
-        id, 
-        full_name, 
-        badge_number, 
-        rank
-      ),
-      shift_types (
-        id, 
-        name, 
-        start_time, 
-        end_time
-      )
-    `)
-    .eq("day_of_week", dayOfWeek)
-    .or(`end_date.is.null,end_date.gte.${dateStr}`);
+// In DailyScheduleView.tsx - update the recurring schedules query
+const { data: recurringData, error: recurringError } = await supabase
+  .from("recurring_schedules")
+  .select(`
+    *,
+    profiles:profiles!recurring_schedules_officer_id_fkey (
+      id, 
+      full_name, 
+      badge_number, 
+      rank
+    ),
+    shift_types (
+      id, 
+      name, 
+      start_time, 
+      end_time
+    )
+  `)
+  .eq("day_of_week", dayOfWeek)
+  .or(`end_date.is.null,end_date.gte.${dateStr}`);
 
   if (recurringError) {
     console.error("Recurring schedules error:", recurringError);
