@@ -93,9 +93,9 @@ export const DailyScheduleView = ({
     updatePartnershipMutation // NEW: Added partnership mutation
   } = useScheduleMutations(dateStr);
 
-  const { data: scheduleData, isLoading } = useQuery({
-    queryKey: ["daily-schedule", dateStr],
-    queryFn: async () => {
+const { data: scheduleData, isLoading } = useQuery({
+  queryKey: ["daily-schedule", dateStr, filterShiftId], // Add filterShiftId here
+  queryFn: async () => {
       // Get all shift types
       const { data: shiftTypes, error: shiftError } = await supabase
         .from("shift_types")
