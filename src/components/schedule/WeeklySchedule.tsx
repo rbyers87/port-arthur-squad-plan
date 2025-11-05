@@ -1567,7 +1567,7 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
       </Button>
     </DialogContent>
   </Dialog>
-))}
+)}
 
 
 
