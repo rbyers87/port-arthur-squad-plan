@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PREDEFINED_POSITIONS } from "@/constants/positions";
 
 interface OfficerScheduleManagerProps {
   officer: {
@@ -73,6 +74,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   const [defaultAssignmentEndDate, setDefaultAssignmentEndDate] = useState<Date | undefined>(undefined);
   const [defaultUnitNumber, setDefaultUnitNumber] = useState("");
   const [defaultAssignedPosition, setDefaultAssignedPosition] = useState("none");
+  const [customPosition, setCustomPosition] = useState("");
   const [editingDefaultAssignment, setEditingDefaultAssignment] = useState<any>(null);
   const [defaultAssignmentToDelete, setDefaultAssignmentToDelete] = useState<string | null>(null);
 
@@ -546,28 +548,54 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     setScheduleToDelete(scheduleId);
   };
 
+  // FIXED: Handle default assignment with custom position
   const handleAddDefaultAssignment = () => {
     if (!defaultUnitNumber && defaultAssignedPosition === "none") {
       toast.error("Please provide at least a unit number or position");
       return;
     }
 
+    // Handle custom position
+    const finalPosition = defaultAssignedPosition === "Other (Custom)" 
+      ? customPosition 
+      : defaultAssignedPosition;
+
+    if (defaultAssignedPosition === "Other (Custom)" && !customPosition.trim()) {
+      toast.error("Please enter a custom position");
+      return;
+    }
+
     addDefaultAssignmentMutation.mutate({
       unitNumber: defaultUnitNumber || undefined,
-      assignedPosition: defaultAssignedPosition !== "none" ? defaultAssignedPosition : undefined,
+      assignedPosition: finalPosition !== "none" ? finalPosition : undefined,
       start: format(defaultAssignmentStartDate, "yyyy-MM-dd"),
       end: defaultAssignmentEndDate ? format(defaultAssignmentEndDate, "yyyy-MM-dd") : undefined,
     });
   };
 
+  // FIXED: Handle edit default assignment with custom position
   const handleEditDefaultAssignment = (assignment: any) => {
     setEditingDefaultAssignment(assignment);
     setDefaultUnitNumber(assignment.unit_number || "");
-    setDefaultAssignedPosition(assignment.position_name || "none");
+    
+    // Check if the position is in predefined positions or is custom
+    const position = assignment.position_name;
+    if (position && PREDEFINED_POSITIONS.includes(position as any)) {
+      setDefaultAssignedPosition(position);
+      setCustomPosition("");
+    } else if (position) {
+      setDefaultAssignedPosition("Other (Custom)");
+      setCustomPosition(position);
+    } else {
+      setDefaultAssignedPosition("none");
+      setCustomPosition("");
+    }
+    
     setDefaultAssignmentStartDate(new Date(assignment.start_date));
     setDefaultAssignmentEndDate(assignment.end_date ? new Date(assignment.end_date) : undefined);
   };
 
+  // FIXED: Handle save default assignment edit with custom position
   const handleSaveDefaultAssignmentEdit = () => {
     if (!editingDefaultAssignment) return;
 
@@ -576,9 +604,19 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       return;
     }
 
+    // Handle custom position
+    const finalPosition = defaultAssignedPosition === "Other (Custom)" 
+      ? customPosition 
+      : defaultAssignedPosition;
+
+    if (defaultAssignedPosition === "Other (Custom)" && !customPosition.trim()) {
+      toast.error("Please enter a custom position");
+      return;
+    }
+
     const updates = {
       unit_number: defaultUnitNumber || null,
-      position_name: defaultAssignedPosition !== "none" ? defaultAssignedPosition : null,
+      position_name: finalPosition !== "none" ? finalPosition : null,
       start_date: format(defaultAssignmentStartDate, "yyyy-MM-dd"),
       end_date: defaultAssignmentEndDate ? format(defaultAssignmentEndDate, "yyyy-MM-dd") : null,
     };
@@ -641,6 +679,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
     setShowDefaultAssignmentForm(false);
     setDefaultUnitNumber("");
     setDefaultAssignedPosition("none");
+    setCustomPosition("");
     setDefaultAssignmentStartDate(new Date());
     setDefaultAssignmentEndDate(undefined);
     setEditingDefaultAssignment(null);
@@ -1308,7 +1347,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">No position assigned</SelectItem>
-                            {shiftPositions.map((position) => (
+                            {PREDEFINED_POSITIONS.map((position) => (
                               <SelectItem key={position} value={position}>
                                 {position}
                               </SelectItem>
@@ -1317,6 +1356,17 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                         </Select>
                       </div>
                     </div>
+                    {defaultAssignedPosition === "Other (Custom)" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-custom-position">Custom Position</Label>
+                        <Input
+                          id="edit-custom-position"
+                          placeholder="Enter custom position..."
+                          value={customPosition}
+                          onChange={(e) => setCustomPosition(e.target.value)}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -1446,7 +1496,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">No position assigned</SelectItem>
-                            {shiftPositions.map((position) => (
+                            {PREDEFINED_POSITIONS.map((position) => (
                               <SelectItem key={position} value={position}>
                                 {position}
                               </SelectItem>
@@ -1455,6 +1505,17 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
                         </Select>
                       </div>
                     </div>
+                    {defaultAssignedPosition === "Other (Custom)" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="custom-position">Custom Position</Label>
+                        <Input
+                          id="custom-position"
+                          placeholder="Enter custom position..."
+                          value={customPosition}
+                          onChange={(e) => setCustomPosition(e.target.value)}
+                        />
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       Provide at least a unit number or position
                     </p>
