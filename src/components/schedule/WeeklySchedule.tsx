@@ -213,7 +213,7 @@ const WeeklySchedule = ({
     navigate(`/daily-schedule?date=${dateStr}&shift=${selectedShiftId}`);
   };
 
- // Handle PDF export
+// Handle PDF export
 const handleExportPDF = async () => {
   // Use default range if none selected
   const exportDateRange = dateRange || {
@@ -234,8 +234,9 @@ const handleExportPDF = async () => {
   try {
     toast.info("Generating PDF export...");
 
-    const startDate = dateRange.from;
-    const endDate = dateRange.to;
+    // Use exportDateRange here instead of dateRange
+    const startDate = exportDateRange.from;
+    const endDate = exportDateRange.to;
 
     // Prepare the date list for fetching
     const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date =>
@@ -267,7 +268,6 @@ const handleExportPDF = async () => {
     toast.error("Error generating PDF export");
   }
 };
-
 
   // Function to fetch schedule data for a date range
   const fetchScheduleDataForRange = async (startDate: Date, endDate: Date, dates: string[]) => {
