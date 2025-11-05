@@ -1492,19 +1492,17 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
         </DialogContent>
       </Dialog>
 
-{/* PDF Export Dialog - ONLY renders when exportDialogOpen is true */}
+{/* PDF Export Dialog */}
 {exportDialogOpen && (
   <Dialog
     open={exportDialogOpen}
     onOpenChange={(open) => {
+      console.log("Dialog onOpenChange called with:", open);
       setExportDialogOpen(open);
       if (!open) {
         setCalendarOpen(false);
-        // Reset to default 4-week range
-        setDateRange({
-          from: startOfWeek(new Date(), { weekStartsOn: 0 }),
-          to: addWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 4),
-        });
+        // Reset date range when dialog closes
+        setDateRange(undefined);
       }
     }}
   >
@@ -1522,7 +1520,13 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
       {/* Date Range Selector */}
       <div className="space-y-2">
         <Label htmlFor="date-range">Date Range</Label>
-        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <Popover 
+          open={calendarOpen} 
+          onOpenChange={(open) => {
+            console.log("Popover onOpenChange called with:", open);
+            setCalendarOpen(open);
+          }}
+        >
           <PopoverTrigger asChild>
             <Button
               id="date-range"
@@ -1531,6 +1535,10 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                 "w-full justify-start text-left font-normal",
                 !dateRange && "text-muted-foreground"
               )}
+              onClick={() => {
+                console.log("Date range button clicked");
+                setCalendarOpen(true);
+              }}
             >
               <CalendarRange className="mr-2 h-4 w-4" />
               {dateRange?.from
@@ -1540,21 +1548,29 @@ const { data: schedules, isLoading: schedulesLoading, error } = useQuery({
                 : "Pick a date range"}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 bg-background z-50" align="start">
+          <PopoverContent 
+            className="w-auto p-0 bg-background z-50" 
+            align="start"
+            onInteractOutside={() => {
+              console.log("Calendar interact outside");
+              setCalendarOpen(false);
+            }}
+          >
             <Calendar
               initialFocus
               mode="range"
-              defaultMonth={dateRange?.from}
+              defaultMonth={dateRange?.from || new Date()}
               selected={dateRange}
               onSelect={(range) => {
+                console.log("Calendar onSelect called with:", range);
                 setDateRange(range);
                 // Close popover when both dates are selected
                 if (range?.from && range?.to) {
+                  console.log("Both dates selected, closing calendar");
                   setCalendarOpen(false);
                 }
               }}
               numberOfMonths={2}
-              className="pointer-events-auto"
             />
           </PopoverContent>
         </Popover>
