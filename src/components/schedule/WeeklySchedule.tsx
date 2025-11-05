@@ -153,6 +153,52 @@ const WeeklySchedule = ({
     }
   }, [shiftTypes, selectedShiftId]);
 
+  // Add this useEffect to your WeeklySchedule component to find the stuck calendar
+useEffect(() => {
+  const findStuckCalendar = () => {
+    console.log("🔍 === SEARCHING FOR STUCK CALENDAR IN WEEKLY SCHEDULE ===");
+    
+    // Check for any open popovers
+    const openPopovers = document.querySelectorAll('[data-state="open"]');
+    console.log("Open popovers found:", openPopovers.length);
+    
+    openPopovers.forEach((popover, index) => {
+      const rect = popover.getBoundingClientRect();
+      console.log(`Popover ${index}:`, {
+        visible: rect.width > 0 && rect.height > 0,
+        position: { top: rect.top, left: rect.left },
+        classes: popover.className,
+        html: popover.outerHTML.substring(0, 200) + '...'
+      });
+      
+      // Check if this popover contains a calendar
+      const calendar = popover.querySelector('[data-radix-calendar], .rdp');
+      if (calendar) {
+        console.log("🎯 FOUND STUCK CALENDAR IN POPOVER:", calendar);
+      }
+    });
+
+    // Also check for any calendar elements directly
+    const calendars = document.querySelectorAll('[data-radix-calendar], .rdp');
+    console.log("Total calendar elements found:", calendars.length);
+    calendars.forEach((cal, index) => {
+      const rect = cal.getBoundingClientRect();
+      console.log(`Calendar ${index}:`, {
+        visible: rect.width > 0 && rect.height > 0,
+        parent: cal.parentElement?.className,
+        isInViewport: rect.top >= 0 && rect.left >= 0
+      });
+    });
+  };
+
+  // Run immediately
+  findStuckCalendar();
+  
+  // Run again after components have rendered
+  setTimeout(findStuckCalendar, 100);
+  setTimeout(findStuckCalendar, 500);
+}, []);
+
   // Navigation functions
   const goToPreviousWeek = () => setCurrentWeekStart(prev => subWeeks(prev, 1));
   const goToNextWeek = () => setCurrentWeekStart(prev => addWeeks(prev, 1));
