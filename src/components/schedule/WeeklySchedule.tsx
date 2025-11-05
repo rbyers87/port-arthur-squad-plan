@@ -1176,29 +1176,15 @@ const renderMonthlyView = () => {
           const isCurrentMonthDay = isSameMonth(day, currentMonth);
           const isToday = isSameDay(day, new Date());
           
-          // Use the same categorizeAndSortOfficers function as the weekly view
-          const categorizedOfficers = daySchedule?.categorizedOfficers || {
-            supervisors: [],
-            officers: [],
-            ppos: []
-          };
-
-          // Get PTO officers (full-day only for display)
+          // Get ONLY full-day PTO officers for display
           const ptoOfficers = daySchedule?.officers?.filter((officer: any) => 
             officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift
           ) || [];
 
-          // Calculate staffing counts using the same logic as weekly view
+          // Calculate staffing counts for the badges (but don't show all officers)
           const { supervisorCount, officerCount } = isCurrentMonthDay && daySchedule
-            ? calculateStaffingCounts(categorizedOfficers)
+            ? calculateStaffingCounts(daySchedule.categorizedOfficers || { supervisors: [], officers: [], ppos: [] })
             : { supervisorCount: 0, officerCount: 0 };
-
-          // Add null check for ppos
-          const ppoCount = categorizedOfficers.ppos?.filter((officer: any) => {
-            const hasFullDayPTO = officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift;
-            const isScheduled = officer.shiftInfo && !officer.shiftInfo.isOff && !hasFullDayPTO;
-            return isScheduled;
-          }).length || 0;
 
           const minimumOfficers = MINIMUM_STAFFING[dayName];
           const isOfficersUnderstaffed = isCurrentMonthDay && (officerCount < minimumOfficers);
@@ -1250,101 +1236,58 @@ const renderMonthlyView = () => {
                       <Badge variant="outline" className="text-xs h-4">
                         {officerCount}/{minimumOfficers} Ofc
                       </Badge>
-                      {ppoCount > 0 && (
-                        <Badge variant="outline" className="text-xs h-4 bg-blue-50 text-blue-800 border-blue-200">
-                          {ppoCount} PPO
-                        </Badge>
-                      )}
                     </div>
                   )}
                 </div>
               </div>
               
               <div className="space-y-1 flex-1 overflow-y-auto">
-                {daySchedule?.officers && daySchedule.officers.length > 0 ? (
+                {ptoOfficers.length > 0 ? (
                   <div className="space-y-1">
-                    {/* Display supervisors first */}
-                    {categorizedOfficers.supervisors?.map((officer: any) => (
-                      <div 
-                        key={officer.officerId} 
-                        className={`
-                          text-xs p-1 rounded border flex items-center justify-between
-                          ${officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift 
-                            ? 'bg-green-50 border-green-200' 
-                            : 'bg-yellow-50 border-yellow-200'
-                          }
-                        `}
-                      >
-                        <div className="flex items-center gap-1">
-                          <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}`}>
-                            {getLastName(officer.officerName)}
+                    {/* Only show full-day PTO officers, categorized by rank */}
+                    {ptoOfficers.map((officer: any) => {
+                      // Determine officer category for styling
+                      const isSupervisor = officer.rank?.toLowerCase().includes('lieutenant') || 
+                                         officer.rank?.toLowerCase().includes('sergeant') ||
+                                         officer.rank?.toLowerCase().includes('sgt') ||
+                                         officer.rank?.toLowerCase().includes('lt');
+                      const isPPO = officer.rank?.toLowerCase() === 'probationary';
+                      
+                      return (
+                        <div 
+                          key={officer.officerId} 
+                          className={`
+                            text-xs p-1 rounded border flex items-center justify-between
+                            ${isSupervisor ? 'bg-yellow-50 border-yellow-200' : ''}
+                            ${isPPO ? 'bg-purple-50 border-purple-200' : ''}
+                            ${!isSupervisor && !isPPO ? 'bg-blue-50 border-blue-200' : ''}
+                          `}
+                        >
+                          <div className="flex items-center gap-1">
+                            <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}`}>
+                              {getLastName(officer.officerName)}
+                            </div>
+                            {isSupervisor && (
+                              <Badge variant="outline" className="h-3 text-[8px] px-1 bg-yellow-100 text-yellow-800 border-yellow-300">
+                                {officer.rank || 'SUP'}
+                              </Badge>
+                            )}
+                            {isPPO && (
+                              <Badge variant="outline" className="h-3 text-[8px] px-1 bg-purple-100 text-purple-800 border-purple-300">
+                                PPO
+                              </Badge>
+                            )}
                           </div>
-                          <Badge variant="outline" className="h-3 text-[8px] px-1 bg-yellow-100 text-yellow-800 border-yellow-300">
-                            {officer.rank || 'SUP'}
-                          </Badge>
-                        </div>
-                        {officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift && (
-                          <div className={`text-[10px] ${!isCurrentMonthDay ? 'text-green-500' : 'text-green-600'}`}>
-                            PTO
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    
-                    {/* Display regular officers */}
-                    {categorizedOfficers.officers?.map((officer: any) => (
-                      <div 
-                        key={officer.officerId} 
-                        className={`
-                          text-xs p-1 rounded border
-                          ${officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift 
-                            ? 'bg-green-50 border-green-200' 
-                            : 'bg-blue-50 border-blue-200'
-                          }
-                        `}
-                      >
-                        <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}`}>
-                          {getLastName(officer.officerName)}
-                        </div>
-                        {officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift && (
                           <div className={`text-[10px] ${!isCurrentMonthDay ? 'text-green-500' : 'text-green-600'}`}>
                             {officer.shiftInfo?.ptoData?.ptoType || 'PTO'}
                           </div>
-                        )}
-                      </div>
-                    ))}
-                    
-                    {/* Display PPOs with badge - with null check */}
-                    {categorizedOfficers.ppos?.map((officer: any) => (
-                      <div 
-                        key={officer.officerId} 
-                        className={`
-                          text-xs p-1 rounded border flex items-center justify-between
-                          ${officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift 
-                            ? 'bg-green-50 border-green-200' 
-                            : 'bg-purple-50 border-purple-200'
-                          }
-                        `}
-                      >
-                        <div className="flex items-center gap-1">
-                          <div className={`font-medium truncate ${!isCurrentMonthDay ? 'text-muted-foreground' : ''}`}>
-                            {getLastName(officer.officerName)}
-                          </div>
-                          <Badge variant="outline" className="h-3 text-[8px] px-1 bg-purple-100 text-purple-800 border-purple-300">
-                            PPO
-                          </Badge>
                         </div>
-                        {officer.shiftInfo?.hasPTO && officer.shiftInfo?.ptoData?.isFullShift && (
-                          <div className={`text-[10px] ${!isCurrentMonthDay ? 'text-green-500' : 'text-green-600'}`}>
-                            PTO
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className={`text-xs text-center py-2 ${!isCurrentMonthDay ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>
-                    No scheduled officers
+                    No PTO
                   </div>
                 )}
               </div>
