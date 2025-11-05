@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Mail, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { PREDEFINED_POSITIONS, RANK_ORDER } from "@/constants/positions";
 
 export const UnderstaffedDetection = () => {
   const queryClient = useQueryClient();
@@ -89,50 +90,30 @@ export const UnderstaffedDetection = () => {
 
           console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-          // In UnderstaffedDetection.tsx - use EXACT same query as DailyScheduleView
-const { data: dailyScheduleData, error: dailyError } = await supabase
-  .from("recurring_schedules")
-  .select(`
-    *,
-    profiles!inner (
-      id, 
-      full_name, 
-      badge_number, 
-      rank
-    ),
-    shift_types (
-      id, 
-      name, 
-      start_time, 
-      end_time
-    )
-  `)
-  .eq("day_of_week", dayOfWeek)
-  // ⚠️ THIS IS THE CRITICAL FIX - MUST match DailyScheduleView exactly! ⚠️
-  .or(`end_date.is.null,end_date.gte.${startDate.toISOString().split('T')[0]}`);
+          // Get default assignments
+          const { data: allDefaultAssignments } = await supabase
+            .from("officer_default_assignments")
+            .select("*")
+            .or(`end_date.is.null,end_date.gte.${date}`)
+            .lte("start_date", date);
 
-console.log(`🔍 UNDERSTAFFED DETECTION - Query for ${date}, dayOfWeek ${dayOfWeek}:`, {
-  totalCount: dailyScheduleData?.length,
-  officers: dailyScheduleData?.map(r => ({
-    name: r.profiles?.full_name,
-    shift: r.shift_types?.name,
-    start_date: r.start_date,
-    end_date: r.end_date,
-    day_of_week: r.day_of_week
-  }))
-});
+          // Helper function to get default assignment
+          const getDefaultAssignment = (officerId: string) => {
+            if (!allDefaultAssignments) return null;
+            const dateObj = parseISO(date);
+            return allDefaultAssignments.find(da => 
+              da.officer_id === officerId &&
+              parseISO(da.start_date) <= dateObj &&
+              (!da.end_date || parseISO(da.end_date) >= dateObj)
+            );
+          };
 
-if (dailyError) {
-  console.error("❌ Recurring schedules error:", dailyError);
-  throw dailyError;
-}
-
-          // Get schedule exceptions for this specific date
-          const { data: exceptionsData, error: exceptionsError } = await supabase
-            .from("schedule_exceptions")
+          // CRITICAL FIX: Use the EXACT same query as DailyScheduleView
+          const { data: recurringData, error: recurringError } = await supabase
+            .from("recurring_schedules")
             .select(`
               *,
-              profiles!inner (
+              profiles:officer_id (
                 id, 
                 full_name, 
                 badge_number, 
@@ -145,6 +126,29 @@ if (dailyError) {
                 end_time
               )
             `)
+            .eq("day_of_week", dayOfWeek)
+            .or(`end_date.is.null,end_date.gte.${date}`);
+
+          if (recurringError) {
+            console.error("❌ Recurring schedules error:", recurringError);
+            throw recurringError;
+          }
+
+          console.log(`🔍 UNDERSTAFFED DETECTION - Recurring data for ${date}:`, {
+            totalCount: recurringData?.length,
+            officers: recurringData?.map(r => ({
+              name: r.profiles?.full_name,
+              shift: r.shift_types?.name,
+              start_date: r.start_date,
+              end_date: r.end_date,
+              day_of_week: r.day_of_week
+            }))
+          });
+
+          // Get schedule exceptions for this specific date
+          const { data: exceptionsData, error: exceptionsError } = await supabase
+            .from("schedule_exceptions")
+            .select("*")
             .eq("date", date);
 
           if (exceptionsError) {
@@ -152,11 +156,52 @@ if (dailyError) {
             throw exceptionsError;
           }
 
-          // Separate PTO exceptions from regular exceptions
-          const ptoExceptions = exceptionsData?.filter(e => e.is_off) || [];
-          const workingExceptions = exceptionsData?.filter(e => !e.is_off) || [];
+          // Get officer profiles separately (matching DailyScheduleView structure)
+          const officerIds = [...new Set(exceptionsData?.map(e => e.officer_id).filter(Boolean))];
+          let officerProfiles = [];
 
-          console.log(`📝 Total exceptions: ${exceptionsData?.length || 0} (PTO: ${ptoExceptions.length}, Working: ${workingExceptions.length})`);
+          if (officerIds.length > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+              .from("profiles")
+              .select("id, full_name, badge_number, rank")
+              .in("id", officerIds);
+            
+            if (profilesError) {
+              console.error("❌ Profiles error:", profilesError);
+            } else {
+              officerProfiles = profilesData || [];
+            }
+          }
+
+          // Get shift types for exceptions separately
+          const shiftTypeIds = [...new Set(exceptionsData?.map(e => e.shift_type_id).filter(Boolean))];
+          let exceptionShiftTypes = [];
+
+          if (shiftTypeIds.length > 0) {
+            const { data: shiftTypesData, error: shiftTypesError } = await supabase
+              .from("shift_types")
+              .select("id, name, start_time, end_time")
+              .in("id", shiftTypeIds);
+            
+            if (shiftTypesError) {
+              console.error("❌ Shift types error:", shiftTypesError);
+            } else {
+              exceptionShiftTypes = shiftTypesData || [];
+            }
+          }
+
+          // Combine the data manually (matching DailyScheduleView)
+          const combinedExceptions = exceptionsData?.map(exception => ({
+            ...exception,
+            profiles: officerProfiles.find(p => p.id === exception.officer_id),
+            shift_types: exceptionShiftTypes.find(s => s.id === exception.shift_type_id)
+          })) || [];
+
+          // Separate PTO exceptions from regular exceptions
+          const ptoExceptions = combinedExceptions?.filter(e => e.is_off) || [];
+          const workingExceptions = combinedExceptions?.filter(e => !e.is_off) || [];
+
+          console.log(`📝 Total exceptions: ${combinedExceptions?.length || 0} (PTO: ${ptoExceptions.length}, Working: ${workingExceptions.length})`);
 
           // Check each shift type for understaffing
           for (const shift of shiftTypesToCheck || []) {
@@ -167,32 +212,32 @@ if (dailyError) {
             console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
             console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
 
-            // Build the schedule exactly like DailyScheduleView does
+            // Build the schedule using the same logic as DailyScheduleView
             const allAssignedOfficers = [];
 
-            // Process recurring officers - check if they have working exceptions that override their position
-const recurringOfficers = dailyScheduleData
-  ?.filter(r => r.shift_types?.id === shift.id) || [];
+            // Process recurring officers
+            const recurringOfficers = recurringData
+              ?.filter(r => r.shift_types?.id === shift.id) || [];
 
-console.log(`🔍 Recurring officers for ${shift.name}:`, 
-  recurringOfficers.length,
-  recurringOfficers.map(r => ({
-    name: r.profiles?.full_name,
-    end_date: r.end_date
-  }))
-);
+            console.log(`🔍 Recurring officers for ${shift.name}:`, 
+              recurringOfficers.length,
+              recurringOfficers.map(r => ({
+                name: r.profiles?.full_name,
+                end_date: r.end_date
+              }))
+            );
 
             for (const recurringOfficer of recurringOfficers) {
               // Check if this officer has a working exception for today that overrides their position
               const workingException = workingExceptions?.find(e => 
                 e.officer_id === recurringOfficer.officer_id && 
-                e.shift_types?.id === shift.id
+                e.shift_type_id === shift.id
               );
 
               // Check if this officer has PTO for today
               const ptoException = ptoExceptions?.find(e => 
                 e.officer_id === recurringOfficer.officer_id && 
-                e.shift_types?.id === shift.id
+                e.shift_type_id === shift.id
               );
 
               // Skip officers with full-day PTO
@@ -201,8 +246,15 @@ console.log(`🔍 Recurring officers for ${shift.name}:`,
                 continue;
               }
 
-              // Use the position from the working exception if it exists, otherwise use recurring position
-              const actualPosition = workingException?.position_name || recurringOfficer.position_name;
+              // Get default assignment
+              const defaultAssignment = getDefaultAssignment(recurringOfficer.officer_id);
+
+              // Use the position from the working exception if it exists, otherwise use recurring position or default
+              const actualPosition = workingException?.position_name || 
+                                   recurringOfficer.position_name || 
+                                   defaultAssignment?.position_name;
+
+              // Determine if supervisor based on position (matching DailyScheduleView logic)
               const isSupervisor = actualPosition?.toLowerCase().includes('supervisor');
 
               console.log(`✅ ${recurringOfficer.profiles?.full_name} - Position: ${actualPosition || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - ${workingException ? 'Exception Override' : 'Recurring'}`);
@@ -212,22 +264,24 @@ console.log(`🔍 Recurring officers for ${shift.name}:`,
                 name: recurringOfficer.profiles?.full_name,
                 position: actualPosition,
                 isSupervisor: isSupervisor,
-                type: workingException ? 'exception' : 'recurring'
+                type: workingException ? 'exception' : 'recurring',
+                hasPTO: !!ptoException,
+                isFullDayPTO: ptoException?.is_off && !ptoException.custom_start_time && !ptoException.custom_end_time
               });
             }
 
             // Process additional officers from working exceptions (manually added shifts)
             const additionalOfficers = workingExceptions
               ?.filter(e => 
-                e.shift_types?.id === shift.id &&
-                !dailyScheduleData?.some(r => r.officer_id === e.officer_id)
+                e.shift_type_id === shift.id &&
+                !recurringData?.some(r => r.officer_id === e.officer_id && r.shift_types?.id === shift.id)
               ) || [];
 
             for (const additionalOfficer of additionalOfficers) {
               // Check if this officer has PTO for today
               const ptoException = ptoExceptions?.find(p => 
                 p.officer_id === additionalOfficer.officer_id && 
-                p.shift_types?.id === shift.id
+                p.shift_type_id === shift.id
               );
 
               // Skip officers with full-day PTO
@@ -236,29 +290,42 @@ console.log(`🔍 Recurring officers for ${shift.name}:`,
                 continue;
               }
 
-              const isSupervisor = additionalOfficer.position_name?.toLowerCase().includes('supervisor');
+              // Get default assignment
+              const defaultAssignment = getDefaultAssignment(additionalOfficer.officer_id);
+
+              const actualPosition = additionalOfficer.position_name || defaultAssignment?.position_name;
+              const isSupervisor = actualPosition?.toLowerCase().includes('supervisor');
               
-              console.log(`✅ ${additionalOfficer.profiles?.full_name} - Position: ${additionalOfficer.position_name || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Added Shift`);
+              console.log(`✅ ${additionalOfficer.profiles?.full_name} - Position: ${actualPosition || 'No position'} - ${isSupervisor ? 'Supervisor' : 'Officer'} - Added Shift`);
 
               allAssignedOfficers.push({
                 officerId: additionalOfficer.officer_id,
                 name: additionalOfficer.profiles?.full_name,
-                position: additionalOfficer.position_name,
+                position: actualPosition,
                 isSupervisor: isSupervisor,
-                type: 'added'
+                type: 'added',
+                hasPTO: !!ptoException,
+                isFullDayPTO: ptoException?.is_off && !ptoException.custom_start_time && !ptoException.custom_end_time
               });
             }
 
-            // Count supervisors and officers based on ACTUAL assigned positions
-            const currentSupervisors = allAssignedOfficers.filter(o => o.isSupervisor).length;
-            const currentOfficers = allAssignedOfficers.filter(o => !o.isSupervisor).length;
+            // Count supervisors and officers based on ACTUAL assigned positions, excluding full-day PTO
+            const currentSupervisors = allAssignedOfficers
+              .filter(o => o.isSupervisor && !o.isFullDayPTO)
+              .length;
+              
+            const currentOfficers = allAssignedOfficers
+              .filter(o => !o.isSupervisor && !o.isFullDayPTO)
+              .length;
 
             console.log(`👥 Final staffing: ${currentSupervisors} supervisors, ${currentOfficers} officers`);
             console.log(`📋 All assigned officers:`, allAssignedOfficers.map(o => ({
               name: o.name,
               position: o.position,
               isSupervisor: o.isSupervisor,
-              type: o.type
+              type: o.type,
+              hasPTO: o.hasPTO,
+              isFullDayPTO: o.isFullDayPTO
             })));
 
             const supervisorsUnderstaffed = currentSupervisors < minSupervisors;
@@ -292,12 +359,14 @@ console.log(`🔍 Recurring officers for ${shift.name}:`,
                 day_of_week: dayOfWeek,
                 isSupervisorsUnderstaffed: supervisorsUnderstaffed,
                 isOfficersUnderstaffed: officersUnderstaffed,
-                assigned_officers: allAssignedOfficers.map(o => ({
-                  name: o.name,
-                  position: o.position,
-                  isSupervisor: o.isSupervisor,
-                  type: o.type
-                }))
+                assigned_officers: allAssignedOfficers
+                  .filter(o => !o.isFullDayPTO) // Only show officers who are actually working
+                  .map(o => ({
+                    name: o.name,
+                    position: o.position,
+                    isSupervisor: o.isSupervisor,
+                    type: o.type
+                  }))
               };
 
               console.log("📊 Storing understaffed shift data:", shiftData);
