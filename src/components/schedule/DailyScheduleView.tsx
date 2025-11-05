@@ -93,9 +93,79 @@ export const DailyScheduleView = ({
     updatePartnershipMutation // NEW: Added partnership mutation
   } = useScheduleMutations(dateStr);
 
-const { data: scheduleData, isLoading } = useQuery({
-  queryKey: ["daily-schedule", dateStr, filterShiftId], // Add filterShiftId here
-  queryFn: async () => {
+export const DailyScheduleView = ({ 
+  selectedDate, 
+  filterShiftId = "all", 
+  isAdminOrSupervisor = false,
+  userRole = 'officer'
+}: DailyScheduleViewProps) => {
+  console.log("🔄 DailyScheduleView RENDERED - User Role:", userRole, "Filter Shift:", filterShiftId);
+  const queryClient = useQueryClient();
+  const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
+  const [editPosition, setEditPosition] = useState("");
+  const [customPosition, setCustomPosition] = useState("");
+  const [editingUnitNumber, setEditingUnitNumber] = useState<string | null>(null);
+  const [editUnitValue, setEditUnitValue] = useState("");
+  const [editingNotes, setEditingNotes] = useState<string | null>(null);
+  const [editNotesValue, setEditNotesValue] = useState("");
+  const [ptoDialogOpen, setPtoDialogOpen] = useState(false);
+  const [selectedOfficer, setSelectedOfficer] = useState<{
+    officerId: string;
+    name: string;
+    scheduleId: string;
+    type: "recurring" | "exception";
+    existingPTO?: {
+      id: string;
+      ptoType: string;
+      startTime: string;
+      endTime: string;
+      isFullShift: boolean;
+    };
+  } | null>(null);
+  const [selectedShift, setSelectedShift] = useState<{
+    id: string;
+    name: string;
+    start_time: string;
+    end_time: string;
+  } | null>(null);
+  const [addOfficerDialogOpen, setAddOfficerDialogOpen] = useState(false);
+  const [selectedShiftForAdd, setSelectedShiftForAdd] = useState<any>(null);
+  const { exportToPDF } = usePDFExport();
+
+  // Determine if user can edit based on role
+  const canEdit = userRole === 'supervisor' || userRole === 'admin';
+
+  const dateStr = format(selectedDate, "yyyy-MM-dd");
+  const dayOfWeek = selectedDate.getDay();
+
+  // Use centralized constants
+  const predefinedPositions = PREDEFINED_POSITIONS;
+
+  // Function to sort supervisors by rank ONLY
+  const sortSupervisorsByRank = (supervisors: any[]) => {
+    return supervisors.sort((a, b) => {
+      const rankA = a.rank || 'Officer';
+      const rankB = b.rank || 'Officer';
+      return (RANK_ORDER[rankA as keyof typeof RANK_ORDER] || 99) - (RANK_ORDER[rankB as keyof typeof RANK_ORDER] || 99);
+    });
+  };
+
+  // Use centralized mutation hook - NOW INCLUDES PARTNERSHIP MUTATION
+  const {
+    updateScheduleMutation,
+    updatePTODetailsMutation,
+    removeOfficerMutation,
+    addOfficerMutation,
+    removePTOMutation,
+    updatePartnershipMutation // NEW: Added partnership mutation
+  } = useScheduleMutations(dateStr);
+
+  // UPDATED: Include filterShiftId in query key
+  const { data: scheduleData, isLoading } = useQuery({
+    queryKey: ["daily-schedule", dateStr, filterShiftId],
+    queryFn: async () => {
+      console.log("🔄 Fetching schedule data for:", { dateStr, filterShiftId });
+
       // Get all shift types
       const { data: shiftTypes, error: shiftError } = await supabase
         .from("shift_types")
@@ -419,112 +489,111 @@ const { data: scheduleData, isLoading } = useQuery({
             allOfficersMap.set(officerKey, officerData);
           });
 
-const allOfficers = Array.from(allOfficersMap.values());
+        const allOfficers = Array.from(allOfficersMap.values());
 
-// NEW: Process partnerships to combine officers and remove partners from individual listings
-const processedOfficers = [];
-const processedOfficerIds = new Set();
-const partnershipMap = new Map(); // Track partnerships
+        // NEW: Process partnerships to combine officers and remove partners from individual listings
+        const processedOfficers = [];
+        const processedOfficerIds = new Set();
+        const partnershipMap = new Map(); // Track partnerships
 
-// First pass: identify all partnerships and ensure they're reciprocal
-for (const officer of allOfficers) {
-  if (officer.isPartnership && officer.partnerOfficerId) {
-    // Verify the partnership is reciprocal
-    const partnerOfficer = allOfficers.find(o => o.officerId === officer.partnerOfficerId);
-    if (partnerOfficer && partnerOfficer.isPartnership && partnerOfficer.partnerOfficerId === officer.officerId) {
-      partnershipMap.set(officer.officerId, officer.partnerOfficerId);
-      partnershipMap.set(officer.partnerOfficerId, officer.officerId);
-      console.log(`✅ Valid partnership: ${officer.name} ↔ ${partnerOfficer.name}`);
-    } else {
-      // If partnership is not reciprocal, clear it
-      console.warn(`❌ Non-reciprocal partnership found for officer ${officer.officerId}`);
-      officer.isPartnership = false;
-      officer.partnerOfficerId = null;
-    }
-  }
-}
+        // First pass: identify all partnerships and ensure they're reciprocal
+        for (const officer of allOfficers) {
+          if (officer.isPartnership && officer.partnerOfficerId) {
+            // Verify the partnership is reciprocal
+            const partnerOfficer = allOfficers.find(o => o.officerId === officer.partnerOfficerId);
+            if (partnerOfficer && partnerOfficer.isPartnership && partnerOfficer.partnerOfficerId === officer.officerId) {
+              partnershipMap.set(officer.officerId, officer.partnerOfficerId);
+              partnershipMap.set(officer.partnerOfficerId, officer.officerId);
+              console.log(`✅ Valid partnership: ${officer.name} ↔ ${partnerOfficer.name}`);
+            } else {
+              // If partnership is not reciprocal, clear it
+              console.warn(`❌ Non-reciprocal partnership found for officer ${officer.officerId}`);
+              officer.isPartnership = false;
+              officer.partnerOfficerId = null;
+            }
+          }
+        }
 
-// Second pass: process officers
-for (const officer of allOfficers) {
-  // Skip if this officer has already been processed as part of a partnership
-  if (processedOfficerIds.has(officer.officerId)) {
-    continue;
-  }
+        // Second pass: process officers
+        for (const officer of allOfficers) {
+          // Skip if this officer has already been processed as part of a partnership
+          if (processedOfficerIds.has(officer.officerId)) {
+            continue;
+          }
 
-  const partnerOfficerId = partnershipMap.get(officer.officerId);
-  
-  // If this officer is in a VALID partnership
-  if (partnerOfficerId && partnershipMap.get(partnerOfficerId) === officer.officerId) {
-    const partnerOfficer = allOfficers.find(o => o.officerId === partnerOfficerId);
-    
-    if (partnerOfficer) {
-      // Determine which officer should be the primary (non-PPO takes precedence)
-      let primaryOfficer = officer;
-      let secondaryOfficer = partnerOfficer;
-      
-      // If current officer is PPO and partner is not, make partner the primary
-      if (officer.isPPO && !partnerOfficer.isPPO) {
-        primaryOfficer = partnerOfficer;
-        secondaryOfficer = officer;
-      }
-      // If both are same type, use alphabetical order
-      else if (officer.isPPO === partnerOfficer.isPPO) {
-        primaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? officer : partnerOfficer;
-        secondaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? partnerOfficer : officer;
-      }
+          const partnerOfficerId = partnershipMap.get(officer.officerId);
+          
+          // If this officer is in a VALID partnership
+          if (partnerOfficerId && partnershipMap.get(partnerOfficerId) === officer.officerId) {
+            const partnerOfficer = allOfficers.find(o => o.officerId === partnerOfficerId);
+            
+            if (partnerOfficer) {
+              // Determine which officer should be the primary (non-PPO takes precedence)
+              let primaryOfficer = officer;
+              let secondaryOfficer = partnerOfficer;
+              
+              // If current officer is PPO and partner is not, make partner the primary
+              if (officer.isPPO && !partnerOfficer.isPPO) {
+                primaryOfficer = partnerOfficer;
+                secondaryOfficer = officer;
+              }
+              // If both are same type, use alphabetical order
+              else if (officer.isPPO === partnerOfficer.isPPO) {
+                primaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? officer : partnerOfficer;
+                secondaryOfficer = officer.name.localeCompare(partnerOfficer.name) < 0 ? partnerOfficer : officer;
+              }
 
+              // Create combined officer entry
+              const combinedOfficer = {
+                ...primaryOfficer,
+                isCombinedPartnership: true,
+                partnerData: {
+                  partnerOfficerId: secondaryOfficer.officerId,
+                  partnerName: secondaryOfficer.name,
+                  partnerBadge: secondaryOfficer.badge,
+                  partnerRank: secondaryOfficer.rank,
+                  partnerIsPPO: secondaryOfficer.isPPO,
+                  partnerPosition: secondaryOfficer.position,
+                  partnerUnitNumber: secondaryOfficer.unitNumber,
+                  partnerScheduleId: secondaryOfficer.scheduleId,
+                  partnerType: secondaryOfficer.type
+                },
+                // Preserve the partnerOfficerId in the main object for easy access
+                partnerOfficerId: secondaryOfficer.officerId,
+                // Also store the original partner ID for backup
+                originalPartnerOfficerId: secondaryOfficer.officerId,
+                // Use the primary officer's position and unit number, or combine if needed
+                position: primaryOfficer.position || secondaryOfficer.position,
+                unitNumber: primaryOfficer.unitNumber || secondaryOfficer.unitNumber,
+                // Combine notes if both have them
+                notes: primaryOfficer.notes || secondaryOfficer.notes ? 
+                  `${primaryOfficer.notes || ''}${primaryOfficer.notes && secondaryOfficer.notes ? ' / ' : ''}${secondaryOfficer.notes || ''}`.trim() 
+                  : null,
+                // Mark as partnership
+                isPartnership: true
+              };
 
-// Create combined officer entry
-const combinedOfficer = {
-  ...primaryOfficer,
-  isCombinedPartnership: true,
-  partnerData: {
-    partnerOfficerId: secondaryOfficer.officerId,
-    partnerName: secondaryOfficer.name,
-    partnerBadge: secondaryOfficer.badge,
-    partnerRank: secondaryOfficer.rank,
-    partnerIsPPO: secondaryOfficer.isPPO,
-    partnerPosition: secondaryOfficer.position,
-    partnerUnitNumber: secondaryOfficer.unitNumber,
-    partnerScheduleId: secondaryOfficer.scheduleId,
-    partnerType: secondaryOfficer.type
-  },
-  // Preserve the partnerOfficerId in the main object for easy access
-  partnerOfficerId: secondaryOfficer.officerId,
-  // Also store the original partner ID for backup
-  originalPartnerOfficerId: secondaryOfficer.officerId,
-  // Use the primary officer's position and unit number, or combine if needed
-  position: primaryOfficer.position || secondaryOfficer.position,
-  unitNumber: primaryOfficer.unitNumber || secondaryOfficer.unitNumber,
-  // Combine notes if both have them
-  notes: primaryOfficer.notes || secondaryOfficer.notes ? 
-    `${primaryOfficer.notes || ''}${primaryOfficer.notes && secondaryOfficer.notes ? ' / ' : ''}${secondaryOfficer.notes || ''}`.trim() 
-    : null,
-  // Mark as partnership
-  isPartnership: true
-};
+              processedOfficers.push(combinedOfficer);
+              // Mark both officers as processed
+              processedOfficerIds.add(primaryOfficer.officerId);
+              processedOfficerIds.add(secondaryOfficer.officerId);
+              
+              console.log(`🤝 Combined partnership: ${primaryOfficer.name} + ${secondaryOfficer.name}`);
+            } else {
+              // Partner not found, just add the officer individually
+              console.warn(`❌ Partner officer ${partnerOfficerId} not found for officer ${officer.officerId}`);
+              processedOfficers.push(officer);
+              processedOfficerIds.add(officer.officerId);
+            }
+          } else {
+            // Not in a valid partnership, add individually
+            processedOfficers.push(officer);
+            processedOfficerIds.add(officer.officerId);
+          }
+        }
 
-      processedOfficers.push(combinedOfficer);
-      // Mark both officers as processed
-      processedOfficerIds.add(primaryOfficer.officerId);
-      processedOfficerIds.add(secondaryOfficer.officerId);
-      
-      console.log(`🤝 Combined partnership: ${primaryOfficer.name} + ${secondaryOfficer.name}`);
-    } else {
-      // Partner not found, just add the officer individually
-      console.warn(`❌ Partner officer ${partnerOfficerId} not found for officer ${officer.officerId}`);
-      processedOfficers.push(officer);
-      processedOfficerIds.add(officer.officerId);
-    }
-  } else {
-    // Not in a valid partnership, add individually
-    processedOfficers.push(officer);
-    processedOfficerIds.add(officer.officerId);
-  }
-}
-
-console.log(`👥 Processed officers: ${processedOfficers.length} (from ${allOfficers.length} total)`);
-console.log(`🤝 Valid partnerships found: ${partnershipMap.size / 2}`);
+        console.log(`👥 Processed officers: ${processedOfficers.length} (from ${allOfficers.length} total)`);
+        console.log(`🤝 Valid partnerships found: ${partnershipMap.size / 2}`);
 
         console.log(`👥 Final officers for ${shift.name}:`, processedOfficers.length, processedOfficers.map(o => ({
           name: o.name,
@@ -624,7 +693,21 @@ console.log(`🤝 Valid partnerships found: ${partnershipMap.size / 2}`);
         };
       });
 
-      return scheduleByShift;
+      // NEW: Filter by shift if needed
+      let filteredSchedule = scheduleByShift;
+      if (filterShiftId && filterShiftId !== "all") {
+        filteredSchedule = scheduleByShift?.filter(
+          shiftData => shiftData.shift.id === filterShiftId
+        ) || [];
+        
+        console.log("🎯 Filtered schedule:", {
+          beforeFilter: scheduleByShift?.length,
+          afterFilter: filteredSchedule?.length,
+          filterShiftId
+        });
+      }
+
+      return filteredSchedule;
     },
   });
 
