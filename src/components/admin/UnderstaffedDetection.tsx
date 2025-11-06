@@ -83,12 +83,11 @@ const {
       const { data, error } = await supabase
         .from("vacancy_alerts")
         .insert({
-          date: shift.date,
           shift_type_id: shift.shift_type_id,
-          position_type: positionType,
-          reason: "Understaffed",
-          status: "open",
-          created_at: new Date().toISOString()
+          date: shift.date,
+          current_staffing: shift.current_staffing,
+          minimum_required: shift.minimum_required,
+          status: "open"
         })
         .select()
         .single();
@@ -132,8 +131,7 @@ const {
         type: "vacancy_alert",
         title: `Understaffed: ${shift.shift_types?.name}`,
         message: `${shift.shift_types?.name} on ${format(new Date(shift.date), "MMM d, yyyy")} needs ${shift.minimum_required - shift.current_staffing} more officer(s)`,
-        read: false,
-        created_at: new Date().toISOString()
+        read: false
       }));
 
       const { error: notifError } = await supabase

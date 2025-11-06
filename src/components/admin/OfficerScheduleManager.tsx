@@ -138,11 +138,11 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   const { data: defaultAssignments, isLoading: defaultAssignmentsLoading } = useQuery({
     queryKey: ["officer-default-assignments", officer.id],
     queryFn: async () => {
-      const { data, error } = (await supabase
+      const { data, error } = await supabase
         .from("officer_default_assignments")
         .select("*")
         .eq("officer_id", officer.id)
-        .order("start_date", { ascending: false })) as any;
+        .order("start_date", { ascending: false });
 
       if (error) throw error;
       
@@ -334,13 +334,13 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       end?: string;
     }) => {
       // First, end any existing active assignments that overlap with the new one
-      const { error: endPreviousError } = (await supabase
+      const { error: endPreviousError } = await supabase
         .from("officer_default_assignments")
         .update({ 
           end_date: data.start 
-        } as any)
+        })
         .eq("officer_id", officer.id)
-       .or(`end_date.is.null,end_date.gte.${data.start}`)) as any;
+       .or(`end_date.is.null,end_date.gte.${data.start}`);
        // .lt("start_date", data.start); // That started before the new assignment
 
       if (endPreviousError) {
@@ -349,7 +349,7 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
       }
 
       // Second, create the new default assignment
-      const { data: assignment, error: assignmentError } = (await supabase
+      const { data: assignment, error: assignmentError } = await supabase
         .from("officer_default_assignments")
         .insert({
           officer_id: officer.id,
@@ -357,9 +357,9 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
           position_name: data.assignedPosition !== "none" ? data.assignedPosition : null,
           start_date: data.start,
           end_date: data.end || null,
-        } as any)
+        })
         .select()
-        .single()) as any;
+        .single();
 
       if (assignmentError) throw assignmentError;
 
@@ -414,10 +414,10 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
         end_date?: string | null;
       } 
     }) => {
-      const { error } = (await supabase
+      const { error } = await supabase
         .from("officer_default_assignments")
-        .update(updates as any)
-        .eq("id", assignmentId)) as any;
+        .update(updates)
+        .eq("id", assignmentId);
 
       if (error) throw error;
     },
@@ -435,10 +435,10 @@ export const OfficerScheduleManager = ({ officer, open, onOpenChange }: OfficerS
   // Delete default assignment mutation
   const deleteDefaultAssignmentMutation = useMutation({
     mutationFn: async (assignmentId: string) => {
-      const { error } = (await supabase
+      const { error } = await supabase
         .from("officer_default_assignments")
         .delete()
-        .eq("id", assignmentId)) as any;
+        .eq("id", assignmentId);
 
       if (error) throw error;
     },
