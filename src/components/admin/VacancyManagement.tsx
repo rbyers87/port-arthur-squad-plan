@@ -1291,8 +1291,6 @@ const sendAlertMutation = useMutation({
           )}
         </CardContent>
       </Card>
-    </div>
-  );
 
 
       {/* Custom Message Dialog for Understaffed Detection */}
