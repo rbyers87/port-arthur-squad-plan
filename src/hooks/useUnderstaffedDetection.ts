@@ -2,8 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { getScheduleData } from "@/components/schedule/DailyScheduleView"; 
-
+import { getScheduleData } from "@/components/schedule/DailyScheduleView"; // Corrected path
 
 export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
   return useQuery({
@@ -33,12 +32,17 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
             continue;
           }
 
-          // Use the getScheduleData function from DailyScheduleView
+          console.log("📊 Minimum staffing requirements:", minimumStaffing);
+
+          // Use the getScheduleData function from DailyScheduleView with correct path
           const scheduleData = await getScheduleData(date, selectedShiftId);
           
           if (!scheduleData || scheduleData.length === 0) {
+            console.log(`❌ No schedule data found for ${dateStr}`);
             continue;
           }
+
+          console.log(`📋 Schedule data for ${dateStr}:`, scheduleData.length, "shifts");
 
           // Check each shift for understaffing
           for (const shiftData of scheduleData) {
@@ -54,11 +58,23 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
             const minSupervisors = minStaff?.minimum_supervisors || 1;
             const minOfficers = minStaff?.minimum_officers || 8;
 
+            console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
+            console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
+            console.log(`👥 Current staffing: ${shiftData.currentSupervisors} supervisors, ${shiftData.currentOfficers} officers`);
+
             const supervisorsUnderstaffed = shiftData.currentSupervisors < minSupervisors;
             const officersUnderstaffed = shiftData.currentOfficers < minOfficers;
             const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
 
             if (isUnderstaffed) {
+              console.log("🚨 UNDERSTAFFED SHIFT FOUND:", {
+                date: dateStr,
+                shift: shift.name,
+                supervisors: `${shiftData.currentSupervisors}/${minSupervisors}`,
+                officers: `${shiftData.currentOfficers}/${minOfficers}`,
+                dayOfWeek
+              });
+
               const shiftAlertData = {
                 date: dateStr,
                 shift_type_id: shift.id,
@@ -79,7 +95,10 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
                 isOfficersUnderstaffed: officersUnderstaffed
               };
 
+              console.log("📊 Storing understaffed shift data:", shiftAlertData);
               allUnderstaffedShifts.push(shiftAlertData);
+            } else {
+              console.log("✅ Shift is properly staffed");
             }
           }
         } catch (dayError) {
@@ -88,7 +107,12 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
         }
       }
 
+      console.log("🎯 Total understaffed shifts found:", allUnderstaffedShifts.length);
       return allUnderstaffedShifts;
-    },
-  });
-};
+
+    } catch (err) {
+      console.error("❌ Error in understaffed detection:", err);
+      throw err;
+    }
+  },
+});
