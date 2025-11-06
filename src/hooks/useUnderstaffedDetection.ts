@@ -62,38 +62,42 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
             console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
             console.log(`👥 Current staffing: ${shiftData.currentSupervisors} supervisors, ${shiftData.currentOfficers} officers`);
 
-            const supervisorsUnderstaffed = shiftData.currentSupervisors < minSupervisors;
-            const officersUnderstaffed = shiftData.currentOfficers < minOfficers;
-            const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
+// In useUnderstaffedDetection.ts - ensure supervisor detection is working
+const supervisorsUnderstaffed = shiftData.currentSupervisors < minSupervisors;
+const officersUnderstaffed = shiftData.currentOfficers < minOfficers;
 
-            if (isUnderstaffed) {
-              console.log("🚨 UNDERSTAFFED SHIFT FOUND:", {
-                date: dateStr,
-                shift: shift.name,
-                supervisors: `${shiftData.currentSupervisors}/${minSupervisors}`,
-                officers: `${shiftData.currentOfficers}/${minOfficers}`,
-                dayOfWeek
-              });
+if (isUnderstaffed) {
+  let positionType = "";
+  if (supervisorsUnderstaffed && officersUnderstaffed) {
+    positionType = `${minSupervisors - shiftData.currentSupervisors} Supervisor(s), ${minOfficers - shiftData.currentOfficers} Officer(s)`;
+  } else if (supervisorsUnderstaffed) {
+    positionType = `${minSupervisors - shiftData.currentSupervisors} Supervisor(s)`;
+  } else {
+    positionType = `${minOfficers - shiftData.currentOfficers} Officer(s)`;
+  }
 
-              const shiftAlertData = {
-                date: dateStr,
-                shift_type_id: shift.id,
-                shift_types: {
-                  id: shift.id,
-                  name: shift.name,
-                  start_time: shift.start_time,
-                  end_time: shift.end_time
-                },
-                current_staffing: shiftData.currentSupervisors + shiftData.currentOfficers,
-                minimum_required: minSupervisors + minOfficers,
-                current_supervisors: shiftData.currentSupervisors,
-                current_officers: shiftData.currentOfficers,
-                min_supervisors: minSupervisors,
-                min_officers: minOfficers,
-                day_of_week: dayOfWeek,
-                isSupervisorsUnderstaffed: supervisorsUnderstaffed,
-                isOfficersUnderstaffed: officersUnderstaffed
-              };
+  const shiftAlertData = {
+    date: dateStr,
+    shift_type_id: shift.id,
+    shift_types: {
+      id: shift.id,
+      name: shift.name,
+      start_time: shift.start_time,
+      end_time: shift.end_time
+    },
+    current_staffing: shiftData.currentSupervisors + shiftData.currentOfficers,
+    minimum_required: minSupervisors + minOfficers,
+    current_supervisors: shiftData.currentSupervisors,
+    current_officers: shiftData.currentOfficers,
+    min_supervisors: minSupervisors,
+    min_officers: minOfficers,
+    day_of_week: dayOfWeek,
+    isSupervisorsUnderstaffed: supervisorsUnderstaffed,
+    isOfficersUnderstaffed: officersUnderstaffed,
+    position_type: positionType // Include this in the alert data
+  };
+  // ... rest of your code
+}
 
               console.log("📊 Storing understaffed shift data:", shiftAlertData);
               allUnderstaffedShifts.push(shiftAlertData);
