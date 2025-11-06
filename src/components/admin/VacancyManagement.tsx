@@ -1226,8 +1226,7 @@ const sendAlertMutation = useMutation({
               </DialogContent>
             </Dialog>
           </div>
-          ); // <- final closing of the component's return
-          }; 
+  
 
           
         </CardHeader>
@@ -1298,78 +1297,82 @@ const sendAlertMutation = useMutation({
 
 
       {/* Custom Message Dialog for Understaffed Detection */}
-      <Dialog open={showCustomMessageDialog} onOpenChange={setShowCustomMessageDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Custom Message</DialogTitle>
-            <DialogDescription>
-              Add a custom message for the vacancy alert for{" "}
-              {selectedShiftForCustomMessage?.shift_types?.name} on{" "}
-              {selectedShiftForCustomMessage && format(new Date(selectedShiftForCustomMessage.date), "EEEE, MMM d, yyyy")}
-            </DialogDescription>
-          </DialogHeader>
+    <Dialog open={showCustomMessageDialog} onOpenChange={setShowCustomMessageDialog}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Custom Message</DialogTitle>
+          <DialogDescription>
+            Add a custom message for the vacancy alert for{" "}
+            {selectedShiftForCustomMessage?.shift_types?.name} on{" "}
+            {selectedShiftForCustomMessage &&
+              format(new Date(selectedShiftForCustomMessage.date), "EEEE, MMM d, yyyy")}
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="space-y-4">
-            {/* Shift Info Summary */}
-            {selectedShiftForCustomMessage && (
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm font-medium">
-                  {selectedShiftForCustomMessage.shift_types?.name} • {format(new Date(selectedShiftForCustomMessage.date), "MMM d, yyyy")}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Staffing: {selectedShiftForCustomMessage.current_staffing} / {selectedShiftForCustomMessage.minimum_required} • 
-                  Needs {selectedShiftForCustomMessage.minimum_required - selectedShiftForCustomMessage.current_staffing} more officers
-                </p>
-              </div>
-            )}
-
-            {/* Custom Message Textarea */}
-            <div className="space-y-2">
-              <Label htmlFor="detection-custom-message">Custom Message (Optional)</Label>
-              <textarea
-                id="detection-custom-message"
-                placeholder="Add a custom message for this vacancy alert (e.g., 'Urgent coverage needed for special event', 'Mandatory overtime available', etc.)"
-                value={detectionCustomMessage}
-                onChange={(e) => setDetectionCustomMessage(e.target.value)}
-                className="w-full min-h-[100px] p-3 border rounded-md text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
-                maxLength={500}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Leave blank to use default message</span>
-                <span>{detectionCustomMessage.length}/500 characters</span>
-              </div>
+        <div className="space-y-4">
+          {/* Shift Info Summary */}
+          {selectedShiftForCustomMessage && (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm font-medium">
+                {selectedShiftForCustomMessage.shift_types?.name} •{" "}
+                {format(new Date(selectedShiftForCustomMessage.date), "MMM d, yyyy")}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Staffing: {selectedShiftForCustomMessage.current_staffing} /{" "}
+                {selectedShiftForCustomMessage.minimum_required} •
+                Needs {selectedShiftForCustomMessage.minimum_required - selectedShiftForCustomMessage.current_staffing} more officers
+              </p>
             </div>
+          )}
 
-            {/* Preview of Default Message */}
-            {!detectionCustomMessage.trim() && (
-              <div className="p-2 bg-blue-50 border border-blue-200 rounded">
-                <p className="text-xs text-blue-700 font-medium">Default message that will be used:</p>
-                <p className="text-xs text-blue-600 mt-1">
-                  Urgent: {selectedShiftForCustomMessage?.minimum_required - selectedShiftForCustomMessage?.current_staffing} more officers needed for {selectedShiftForCustomMessage?.shift_types?.name} shift on {selectedShiftForCustomMessage && format(new Date(selectedShiftForCustomMessage.date), "MMM d")}
-                </p>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowCustomMessageDialog(false)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleConfirmDetectionAlert}
-                disabled={createAlertMutation.isPending}
-                className="flex-1"
-              >
-                {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
-              </Button>
+          {/* Custom Message Textarea */}
+          <div className="space-y-2">
+            <Label htmlFor="detection-custom-message">Custom Message (Optional)</Label>
+            <textarea
+              id="detection-custom-message"
+              placeholder="Add a custom message for this vacancy alert (e.g., 'Urgent coverage needed for special event', 'Mandatory overtime available', etc.)"
+              value={detectionCustomMessage}
+              onChange={(e) => setDetectionCustomMessage(e.target.value)}
+              className="w-full min-h-[100px] p-3 border rounded-md text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+              maxLength={500}
+            />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Leave blank to use default message</span>
+              <span>{detectionCustomMessage.length}/500 characters</span>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-};
+
+          {/* Preview of Default Message */}
+          {!detectionCustomMessage.trim() && (
+            <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-xs text-blue-700 font-medium">Default message that will be used:</p>
+              <p className="text-xs text-blue-600 mt-1">
+                Urgent: {selectedShiftForCustomMessage?.minimum_required - selectedShiftForCustomMessage?.current_staffing} more officers needed for {selectedShiftForCustomMessage?.shift_types?.name} shift on {selectedShiftForCustomMessage && format(new Date(selectedShiftForCustomMessage.date), "MMM d")}
+              </p>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowCustomMessageDialog(false)}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmDetectionAlert}
+              disabled={createAlertMutation.isPending}
+              className="flex-1"
+            >
+              {createAlertMutation.isPending ? "Creating..." : "Create Alert"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+  </div>
+); // <- final closing of the component's return
+};  // <- end of component
