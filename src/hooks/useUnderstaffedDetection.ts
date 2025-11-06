@@ -2,7 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { getScheduleData } from "@/components/schedule/DailyScheduleView"; // Corrected path
+import { getScheduleData } from "@/components/schedule/DailyScheduleView";
 
 export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
   return useQuery({
@@ -109,10 +109,6 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
 
       console.log("🎯 Total understaffed shifts found:", allUnderstaffedShifts.length);
       return allUnderstaffedShifts;
-
-    } catch (err) {
-      console.error("❌ Error in understaffed detection:", err);
-      throw err;
-    }
-  },
-});
+    },
+  });
+};
