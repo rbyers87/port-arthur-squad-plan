@@ -1,11 +1,18 @@
 import React from 'react';
 
-function MobileNavigation({ activeTab, onTabChange }) {
+interface MobileNavigationProps {
+  activeTab: string;
+  onTabChange: (tab: string) => void;
+}
+
+const MobileNavigation: React.FC<MobileNavigationProps> = ({ activeTab, onTabChange }) => {
   const tabs = [
     { id: 'daily', label: 'Daily', icon: '📅' },
     { id: 'weekly', label: 'Weekly', icon: '📋' },
     { id: 'staff', label: 'Staff', icon: '👥' },
     { id: 'timeoff', label: 'Time Off', icon: '⏰' },
+    { id: 'pto', label: 'PTO', icon: '🏖️' },
+    { id: 'vacancies', label: 'Vacancies', icon: '📝' },
   ];
 
   return (
@@ -17,11 +24,11 @@ function MobileNavigation({ activeTab, onTabChange }) {
           onClick={() => onTabChange(tab.id)}
         >
           <span className="mobile-tab-icon">{tab.icon}</span>
-          <span>{tab.label}</span>
+          <span className="mobile-tab-label">{tab.label}</span>
         </button>
       ))}
     </div>
   );
-}
+};
 
 export default MobileNavigation;
