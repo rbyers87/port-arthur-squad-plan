@@ -42,7 +42,7 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
             continue;
           }
 
-          console.log(`📋 Schedule data for ${dateStr}:`, scheduleData.length, "shifts");
+          console.log(`📋 Schedule data for ${dateStr}:`, scheduleData);
 
           // Check each shift for understaffing
           for (const shiftData of scheduleData) {
@@ -61,8 +61,9 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
             console.log(`\n🔍 Checking shift: ${shift.name} (${shift.start_time} - ${shift.end_time})`);
             console.log(`📋 Min requirements: ${minSupervisors} supervisors, ${minOfficers} officers`);
             console.log(`👥 Current staffing: ${shiftData.currentSupervisors} supervisors, ${shiftData.currentOfficers} officers`);
+            console.log(`👤 Assigned officers data:`, shiftData.officers);
 
-            // Check if understaffed - ADD THIS MISSING VARIABLE
+            // Check if understaffed
             const supervisorsUnderstaffed = shiftData.currentSupervisors < minSupervisors;
             const officersUnderstaffed = shiftData.currentOfficers < minOfficers;
             const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
@@ -76,6 +77,21 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
               } else {
                 positionType = `${minOfficers - shiftData.currentOfficers} Officer(s)`;
               }
+
+              // Fix the assigned officers mapping
+              const assignedOfficers = Array.isArray(shiftData.officers) ? shiftData.officers.map((officer: any) => {
+                // Handle different possible data structures
+                const fullName = officer.full_name || officer.name || officer.profiles?.full_name || "Unknown";
+                const isSupervisor = officer.is_supervisor || officer.profiles?.is_supervisor || false;
+                const badgeNumber = officer.badge_number || officer.profiles?.badge_number || "N/A";
+                
+                return {
+                  name: fullName,
+                  position: isSupervisor ? "Supervisor" : "Officer",
+                  isSupervisor: isSupervisor,
+                  badge: badgeNumber
+                };
+              }) : [];
 
               const shiftAlertData = {
                 date: dateStr,
@@ -96,11 +112,7 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
                 isSupervisorsUnderstaffed: supervisorsUnderstaffed,
                 isOfficersUnderstaffed: officersUnderstaffed,
                 position_type: positionType,
-                assigned_officers: shiftData.officers?.map((officer: any) => ({
-                  name: officer.full_name || "Unknown",
-                  position: officer.is_supervisor ? "Supervisor" : "Officer",
-                  isSupervisor: officer.is_supervisor || false
-                })) || []
+                assigned_officers: assignedOfficers
               };
 
               console.log("📊 Storing understaffed shift data:", shiftAlertData);
@@ -118,7 +130,7 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
       console.log("🎯 Total understaffed shifts found:", allUnderstaffedShifts.length);
       return allUnderstaffedShifts;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 };
