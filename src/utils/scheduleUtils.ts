@@ -83,20 +83,6 @@ export const calculateStaffingCounts = (
   return { supervisorCount, officerCount };
 };
 
-/**
- * Minimum staffing requirements by day
- */
-export const MINIMUM_STAFFING = {
-  SUN: 8,
-  MON: 8,
-  TUE: 8,
-  WED: 8,
-  THU: 8,
-  FRI: 9,
-  SAT: 9
-} as const;
-
-/**
- * Minimum supervisors required
- */
-export const MINIMUM_SUPERVISORS = 1;
+// REMOVED: Hardcoded minimum staffing values since we use the database table
+// export const MINIMUM_STAFFING = { ... };
+// export const MINIMUM_SUPERVISORS = 1;
