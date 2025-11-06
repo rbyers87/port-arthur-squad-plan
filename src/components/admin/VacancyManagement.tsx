@@ -78,7 +78,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     queryFn: async () => {
       console.log("🔄 Fetching vacancy alerts...");
       
-      // Fetch vacancy alerts with proper join
       const { data: alertsData, error } = await supabase
         .from("vacancy_alerts")
         .select(`
@@ -104,13 +103,11 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     gcTime: 5 * 60 * 1000,
   });
 
-  // FIXED: Updated responses query to handle multiple relationships
   const { data: responses, refetch: refetchResponses } = useQuery({
     queryKey: ["vacancy-responses-admin"],
     queryFn: async () => {
       console.log("🔄 Fetching officer responses...");
       
-      // Use separate queries to avoid relationship conflicts
       const { data: responsesData, error: responsesError } = await supabase
         .from("vacancy_responses")
         .select(`
@@ -139,7 +136,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         return [];
       }
 
-      // Get alert IDs (use whichever column has data)
       const alertIds = responsesData
         .map(r => r.alert_id || r.vacancy_alert_id)
         .filter(Boolean);
@@ -152,7 +148,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         }));
       }
 
-      // Fetch alert details separately to avoid relationship conflicts
       const { data: alertsData, error: alertsError } = await supabase
         .from("vacancy_alerts")
         .select(`
@@ -167,14 +162,12 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
 
       if (alertsError) {
         console.error("Error fetching alerts:", alertsError);
-        // Return responses without alert data if there's an error
         return responsesData.map(response => ({
           ...response,
           vacancy_alerts: null
         }));
       }
 
-      // Combine data
       const combinedData = responsesData.map(response => {
         const alertId = response.alert_id || response.vacancy_alert_id;
         const alert = alertsData?.find(a => a.id === alertId);
@@ -190,10 +183,8 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     },
   });
 
-  // Function to add officer to shift as an extra assignment - MATCHES SCHEDULER EXACTLY
   const addOfficerToShift = async (responseId: string) => {
     try {
-      // Get the response details with alert information - use separate queries to avoid relationship conflicts
       const { data: response, error: responseError } = await supabase
         .from("vacancy_responses")
         .select(`
@@ -216,7 +207,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         return;
       }
 
-      // Get alert details separately
       const alertId = response.alert_id || response.vacancy_alert_id;
       if (!alertId) {
         console.error("No alert ID found in response");
@@ -252,16 +242,15 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         date: alertData.date
       });
 
-      // EXACTLY match your scheduler's "Add Officer" function
       const { error: exceptionError } = await supabase
         .from("schedule_exceptions")
         .insert({
           officer_id: response.officer_id,
           shift_type_id: alertData.shift_type_id,
           date: alertData.date,
-          is_off: false, // Working shift (not PTO)
-          position_name: "Extra Shift", // Same as your scheduler
-          unit_number: null, // Can be set later by supervisor if needed
+          is_off: false,
+          position_name: "Extra Shift",
+          unit_number: null,
           notes: `Approved vacancy request - ID: ${responseId}`,
           created_by: userId,
           custom_start_time: null,
@@ -275,7 +264,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
 
       console.log("Successfully added officer to shift as extra assignment");
 
-      // Optional: Send a confirmation notification
       await sendShiftAssignmentNotification(response.officer_id, alertData);
 
     } catch (error) {
@@ -284,7 +272,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     }
   };
 
-  // Optional: Send notification about the shift assignment
   const sendShiftAssignmentNotification = async (officerId: string, alert: any) => {
     try {
       const shiftName = alert.shift_types?.name || "Unknown Shift";
@@ -305,7 +292,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     }
   };
 
-  // Send response notification to officer
   const sendResponseNotification = async (response: any, status: string, rejectionReason?: string) => {
     try {
       const officerId = response.officer_id;
@@ -342,7 +328,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     }
   };
 
-  // Mutation for approving/denying responses - with automatic shift assignment
   const updateResponseMutation = useMutation({
     mutationFn: async ({ 
       responseId, 
@@ -353,7 +338,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
       status: string; 
       rejectionReason?: string;
     }) => {
-      // Map UI status to database values
       const dbStatus = status === "approved" ? "accepted" : "rejected";
 
       const updateData: any = {
@@ -378,12 +362,10 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         throw error;
       }
 
-      // If approved, create a schedule exception to add the officer to the shift
       if (status === "approved") {
         await addOfficerToShift(responseId);
       }
 
-      // Send notification to officer (use our original status for user-friendly messaging)
       const response = responses?.find(r => r.id === responseId);
       if (response) {
         await sendResponseNotification(response, status, rejectionReason);
@@ -401,7 +383,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     },
   });
 
-  // Use the centralized understaffed detection hook
   const { 
     data: understaffedShifts, 
     isLoading: understaffedLoading, 
@@ -430,17 +411,14 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     toast.success("Data refreshed");
   };
 
-  // Use the new hook for creating vacancy alerts
   const createAlertMutation = useCreateVacancyAlert();
 
-  // Add this function to handle manual alert creation
   const handleCreateManualAlert = () => {
     if (!selectedDate || !selectedShift) {
       toast.error("Please select date and shift");
       return;
     }
 
-    // Determine position type based on needs
     let positionType = "";
     if (parseInt(minimumRequired) > 0) {
       positionType = `Need ${minimumRequired} officer(s)`;
@@ -452,7 +430,7 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
       current_staffing: 0,
       minimum_required: parseInt(minimumRequired),
       custom_message: customMessage,
-      position_type: positionType, // Make sure this includes supervisor info if needed
+      position_type: positionType,
       manual_notification_sent: true,
     }, {
       onSuccess: () => {
@@ -489,7 +467,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         timestamp: new Date().toISOString()
       });
 
-      // Only send notifications if there's a custom message
       if (!alertData.custom_message) {
         console.log("No custom message - skipping notifications");
         
@@ -505,7 +482,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         return;
       }
 
-      // Get all active officers with their notification preferences
       const { data: officers, error: officersError } = await supabase
         .from("profiles")
         .select("id, email, phone, notification_preferences")
@@ -521,13 +497,11 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
       const emailPromises = [];
       const textPromises = [];
 
-      // Use ONLY the custom message - no default message
       const alertMessage = alertData.custom_message;
       const emailSubject = `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types?.name}`;
       
       console.log("🔍 DEBUG - Sending message:", alertMessage);
 
-      // Send notifications to each officer based on their preferences
       for (const officer of officers || []) {
         const preferences = officer.notification_preferences || { receiveEmails: true, receiveTexts: true };
         
@@ -542,7 +516,7 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
               body: JSON.stringify({
                 to: officer.email,
                 subject: emailSubject,
-                message: alertMessage, // Only custom message
+                message: alertMessage,
                 alertId: alertData.alertId,
                 customMessage: alertData.custom_message
               }),
@@ -562,7 +536,7 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
               },
               body: JSON.stringify({
                 to: officer.phone,
-                message: alertMessage, // Only custom message
+                message: alertMessage,
                 customMessage: alertData.custom_message
               }),
             }).catch(err => {
@@ -604,10 +578,8 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
 
   const handleCreateAlertFromDetection = (shift: any) => {
     console.log("Opening custom message dialog for shift:", shift);
-    
-    // Store the shift and show custom message dialog
     setSelectedShiftForCustomMessage(shift);
-    setDetectionCustomMessage(""); // Reset any previous message
+    setDetectionCustomMessage("");
     setShowCustomMessageDialog(true);
   };
   
@@ -617,7 +589,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
       return;
     }
 
-    // Create default message if custom message is empty
     const finalMessage = detectionCustomMessage.trim() || 
       `Urgent: ${selectedShiftForCustomMessage.minimum_required - selectedShiftForCustomMessage.current_staffing} more officers needed for ${selectedShiftForCustomMessage.shift_types?.name} shift on ${format(new Date(selectedShiftForCustomMessage.date), "MMM d")}`;
 
@@ -647,7 +618,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
       return;
     }
 
-    // Create alerts with default messages
     shiftsWithoutAlerts.forEach(shift => {
       const defaultMessage = `Urgent: ${shift.minimum_required - shift.current_staffing} more officers needed for ${shift.shift_types?.name} shift on ${format(new Date(shift.date), "MMM d")}`;
       
@@ -679,7 +649,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     });
   };
 
-  // Status helper functions - KEEP THESE IN VACANCYMANAGEMENT ONLY
   const getStatusVariant = (status: string) => {
     switch (status) {
       case "interested":
@@ -736,7 +705,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
           </Button>
         </div>
 
-        {/* Show only existing alerts for officers - no create functionality */}
         <Card>
           <CardHeader>
             <CardTitle>Current Vacancy Alerts</CardTitle>
@@ -771,7 +739,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
                             Staffing: {alert.current_staffing} / {alert.minimum_required}
                           </p>
                           
-                          {/* ADD POSITION TYPE DISPLAY HERE */}
                           {alert.position_type && (
                             <div className="mt-2">
                               <Badge variant="outline" className="bg-blue-50 text-blue-700">
@@ -821,7 +788,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
 
   return (
     <div className="space-y-6">
-      {/* Refresh Button */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold">Vacancy Management</h2>
@@ -835,7 +801,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         </Button>
       </div>
 
-      {/* Officer Responses with Approval Workflow */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -891,7 +856,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
                         )}
                       </div>
 
-                      {/* Action Buttons for Supervisors */}
                       {response.status === "interested" && (
                         <div className="flex flex-col gap-2 ml-4">
                           <Button
@@ -966,7 +930,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         </CardContent>
       </Card>
 
-      {/* Automatic Understaffed Detection */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -1035,16 +998,7 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
           ) : (
             <div className="space-y-4">
               {understaffedShifts.map((shift, index) => {
-                console.log("🔄 RENDERING SHIFT - ACTUAL DATA:", {
-                  rawDate: shift.date,
-                  formattedDate: format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy"),
-                  shiftName: shift.shift_types?.name,
-                  supervisors: shift.current_supervisors,
-                  officers: shift.current_officers
-                });
-                
                 const alertExists = isAlertCreated(shift);
-                
                 const shiftName = shift.shift_types?.name || `Shift ID: ${shift.shift_type_id}`;
                 const shiftTime = shift.shift_types 
                   ? `${shift.shift_types.start_time} - ${shift.shift_types.end_time}`
@@ -1068,7 +1022,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
                             <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
                             <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
                           </p>
-                          {/* ADD POSITION TYPE HERE */}
                           {shift.position_type && (
                             <p className="text-gray-600 mt-1">
                               <strong>Positions Needed:</strong> {shift.position_type}
@@ -1131,7 +1084,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         </CardContent>
       </Card>
 
-      {/* Manual Alert Creation */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -1262,7 +1214,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
                         <p className="text-sm text-muted-foreground mt-1">
                           Staffing: {alert.current_staffing} / {alert.minimum_required}
                         </p>
-                        {/* Add custom message display */}
                         {alert.custom_message && (
                           <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
                             <p className="text-sm text-blue-800">{alert.custom_message}</p>
@@ -1299,7 +1250,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
         </CardContent>
       </Card>
 
-      {/* Custom Message Dialog for Understaffed Detection */}
       <Dialog open={showCustomMessageDialog} onOpenChange={setShowCustomMessageDialog}>
         <DialogContent>
           <DialogHeader>
@@ -1313,7 +1263,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Shift Info Summary */}
             {selectedShiftForCustomMessage && (
               <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-sm font-medium">
@@ -1328,7 +1277,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
               </div>
             )}
 
-            {/* Custom Message Textarea */}
             <div className="space-y-2">
               <Label htmlFor="detection-custom-message">Custom Message (Optional)</Label>
               <textarea
@@ -1345,7 +1293,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
               </div>
             </div>
 
-            {/* Preview of Default Message */}
             {!detectionCustomMessage.trim() && (
               <div className="p-2 bg-blue-50 border border-blue-200 rounded">
                 <p className="text-xs text-blue-700 font-medium">Default message that will be used:</p>
@@ -1355,7 +1302,6 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="flex gap-2 pt-2">
               <Button
                 variant="outline"
