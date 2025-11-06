@@ -85,6 +85,8 @@ export const calculateStaffingCounts = (
 
 /**
  * Minimum staffing requirements by day
+
+ Seems to be loading the default of evenings for all shifts?
  */
 export const MINIMUM_STAFFING = {
   SUN: 8,
