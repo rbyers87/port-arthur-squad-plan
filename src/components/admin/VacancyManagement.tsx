@@ -751,42 +751,66 @@ const sendAlertMutation = useMutation({
               <p className="text-sm text-muted-foreground">No vacancy alerts at this time.</p>
             ) : (
               <div className="space-y-4">
-                {alerts.map((alert) => {
-                  const shiftName = alert.shift_types?.name || `Shift ID: ${alert.shift_type_id}`;
-                  const shiftTime = alert.shift_types 
-                    ? `${alert.shift_types.start_time} - ${alert.shift_types.end_time}`
-                    : "Time not available";
+{alerts.map((alert) => {
+  const shiftName = alert.shift_types?.name || `Shift ID: ${alert.shift_type_id}`;
+  const shiftTime = alert.shift_types 
+    ? `${alert.shift_types.start_time} - ${alert.shift_types.end_time}`
+    : "Time not available";
 
-                  return (
-                    <div key={alert.id} className="p-4 border rounded-lg space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <p className="font-medium">{shiftName}</p>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
-                          </p>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Staffing: {alert.current_staffing} / {alert.minimum_required}
-                          </p>
-                          {alert.custom_message && (
-                            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
-                              <p className="text-sm text-blue-800">{alert.custom_message}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+  return (
+    <div key={alert.id} className="p-4 border rounded-lg space-y-2">
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="font-medium">{shiftName}</p>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {format(new Date(alert.date), "EEEE, MMM d, yyyy")} • {shiftTime}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Staffing: {alert.current_staffing} / {alert.minimum_required}
+          </p>
+          
+          {/* ADD POSITION TYPE DISPLAY HERE */}
+          {alert.position_type && (
+            <div className="mt-2">
+              <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                {alert.position_type} needed
+              </Badge>
+            </div>
+          )}
+          
+          {alert.custom_message && (
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-sm text-blue-800">{alert.custom_message}</p>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-2 ml-4">
+          <span
+            className={cn(
+              "text-xs px-2 py-1 rounded",
+              alert.status === "open"
+                ? "bg-green-500/10 text-green-700"
+                : "bg-gray-500/10 text-gray-700"
             )}
-          </CardContent>
-        </Card>
+          >
+            {alert.status}
+          </span>
+          {alert.status === "open" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => closeAlertMutation.mutate(alert.id)}
+            >
+              Close Alert
+            </Button>
+          )}
+        </div>
       </div>
-    );
-  }
+    </div>
+  );
+})}
 
   return (
     <div className="space-y-6">
@@ -1019,30 +1043,36 @@ const sendAlertMutation = useMutation({
                   ? `${shift.shift_types.start_time} - ${shift.shift_types.end_time}`
                   : "Time not available";
 
-                return (
-                  <div
-                    key={`${shift.date}-${shift.shift_type_id}-${index}`}
-                    className="p-4 border rounded-lg space-y-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <p className="font-medium">{shiftName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy")} • {shiftTime}
-                        </p>
-                        
-                        <div className="bg-gray-100 p-2 rounded text-xs mt-2">
-                          <p className="text-gray-600">
-                            <strong>Staffing:</strong> {shift.current_staffing}/{shift.minimum_required} |
-                            <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
-                            <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
-                          </p>
-                          <p className="text-gray-500 mt-1">
-                            <strong>Assigned:</strong> {shift.assigned_officers?.map(o => 
-                              `${o.name} (${o.position || 'No position'} - ${o.isSupervisor ? 'Supervisor' : 'Officer'})`
-                            ).join(', ') || 'None'}
-                          </p>
-                        </div>
+  return (
+    <div
+      key={`${shift.date}-${shift.shift_type_id}-${index}`}
+      className="p-4 border rounded-lg space-y-3"
+    >
+      <div className="flex items-start justify-between">
+        <div className="space-y-1">
+          <p className="font-medium">{shiftName}</p>
+          <p className="text-sm text-muted-foreground">
+            {format(new Date(shift.date + 'T12:00:00'), "EEEE, MMM d, yyyy")} • {shiftTime}
+          </p>
+          
+          <div className="bg-gray-100 p-2 rounded text-xs mt-2">
+            <p className="text-gray-600">
+              <strong>Staffing:</strong> {shift.current_staffing}/{shift.minimum_required} |
+              <strong> Supervisors:</strong> {shift.current_supervisors}/{shift.min_supervisors} |
+              <strong> Officers:</strong> {shift.current_officers}/{shift.min_officers}
+            </p>
+            {/* ADD POSITION TYPE HERE */}
+            {shift.position_type && (
+              <p className="text-gray-600 mt-1">
+                <strong>Positions Needed:</strong> {shift.position_type}
+              </p>
+            )}
+            <p className="text-gray-500 mt-1">
+              <strong>Assigned:</strong> {shift.assigned_officers?.map(o => 
+                `${o.name} (${o.position || 'No position'} - ${o.isSupervisor ? 'Supervisor' : 'Officer'})`
+              ).join(', ') || 'None'}
+            </p>
+          </div>
 
                         <div className="flex items-center gap-2 mt-2">
                           <Badge variant="destructive">
