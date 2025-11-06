@@ -932,8 +932,9 @@ const WeeklySchedule = ({
           </div>
         </div>
 
-        <div className="border rounded-lg overflow-hidden">
-          <div className="grid grid-cols-9 bg-muted/50 border-b">
+        <div className="mobile-scroll overflow-x-auto">
+          <div className="border rounded-lg overflow-hidden min-w-[900px]">
+            <div className="grid grid-cols-9 bg-muted/50 border-b">
             <div className="p-2 font-semibold border-r">Empl#</div>
             <div className="p-2 font-semibold border-r">NAME</div>
             {weekDays.map(({ dateStr, dayName, formattedDate, isToday, dayOfWeek }) => {
@@ -1177,6 +1178,7 @@ const WeeklySchedule = ({
               ))}
             </div>
           )}
+        </div>
         </div>
       </div>
     );

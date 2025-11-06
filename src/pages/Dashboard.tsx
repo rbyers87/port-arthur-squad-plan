@@ -286,19 +286,19 @@ const Dashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10">
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <img 
               src={logoBase64} 
               alt="Port Arthur PD Logo" 
-              className="w-16 h-16 object-contain"
+              className="w-12 h-12 md:w-16 md:h-16 object-contain flex-shrink-0"
             />
-            <div>
-              <h1 className="text-xl font-bold">Port Arthur PD</h1>
-              <p className="text-sm text-muted-foreground">Shift Scheduler</p>
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-xl font-bold truncate">Port Arthur PD</h1>
+              <p className="text-xs md:text-sm text-muted-foreground truncate">Shift Scheduler</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
             {/* Notifications Bell */}
             <div className="relative">
               <Button 
@@ -318,7 +318,7 @@ const Dashboard = () => {
               
               {/* Notifications Dropdown */}
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-card border rounded-lg shadow-lg z-20">
+                <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-card border rounded-lg shadow-lg z-20">
                   <div className="p-3 border-b flex justify-between items-center">
                     <p className="font-semibold">Notifications ({notifications?.length || 0})</p>
                     <Button
@@ -370,12 +370,12 @@ const Dashboard = () => {
               )}
             </div>
             
-            <div className="text-right">
+            <div className="text-right hidden sm:block">
               <p className="font-medium">{profile?.full_name || user?.email}</p>
               <p className="text-sm text-muted-foreground capitalize">{primaryRole}</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={handleSignOut}>
-              <LogOut className="h-5 w-5" />
+            <Button variant="ghost" size="icon" onClick={handleSignOut} title="Logout">
+              <LogOut className="h-4 w-4 md:h-5 md:w-5" />
             </Button>
           </div>
         </div>
@@ -492,13 +492,37 @@ const Dashboard = () => {
         {/* Rest of your tabs content remains the same */}
         {isAdminOrSupervisor ? (
           <Tabs defaultValue="daily" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-6">
-              <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
-              <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
-              <TabsTrigger value="officers">Officers</TabsTrigger>
-              <TabsTrigger value="vacancies">Vacancies</TabsTrigger>
-              <TabsTrigger value="staff">Staff</TabsTrigger>
-              <TabsTrigger value="requests">Time Off</TabsTrigger>
+            <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-6 gap-1">
+              <TabsTrigger value="daily" className="flex-shrink-0 whitespace-nowrap">
+                <Calendar className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Daily Schedule</span>
+                <span className="md:hidden">Daily</span>
+              </TabsTrigger>
+              <TabsTrigger value="schedule" className="flex-shrink-0 whitespace-nowrap">
+                <Calendar className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Weekly Schedule</span>
+                <span className="md:hidden">Weekly</span>
+              </TabsTrigger>
+              <TabsTrigger value="officers" className="flex-shrink-0 whitespace-nowrap">
+                <Users className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Officers</span>
+                <span className="md:hidden">Officers</span>
+              </TabsTrigger>
+              <TabsTrigger value="vacancies" className="flex-shrink-0 whitespace-nowrap">
+                <AlertTriangle className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Vacancies</span>
+                <span className="md:hidden">Vacancies</span>
+              </TabsTrigger>
+              <TabsTrigger value="staff" className="flex-shrink-0 whitespace-nowrap">
+                <Users className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Staff</span>
+                <span className="md:hidden">Staff</span>
+              </TabsTrigger>
+              <TabsTrigger value="requests" className="flex-shrink-0 whitespace-nowrap">
+                <Clock className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Time Off</span>
+                <span className="md:hidden">Time Off</span>
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="daily" className="space-y-6">
@@ -530,11 +554,27 @@ const Dashboard = () => {
           </Tabs>
         ) : (
           <Tabs defaultValue="daily" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="daily">Daily Schedule</TabsTrigger>
-              <TabsTrigger value="schedule">Weekly Schedule</TabsTrigger>
-              <TabsTrigger value="vacancies">Vacancy Alerts</TabsTrigger>
-              <TabsTrigger value="requests">Time Off</TabsTrigger>
+            <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-4 gap-1">
+              <TabsTrigger value="daily" className="flex-shrink-0 whitespace-nowrap">
+                <Calendar className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Daily Schedule</span>
+                <span className="md:hidden">Daily</span>
+              </TabsTrigger>
+              <TabsTrigger value="schedule" className="flex-shrink-0 whitespace-nowrap">
+                <Calendar className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Weekly Schedule</span>
+                <span className="md:hidden">Weekly</span>
+              </TabsTrigger>
+              <TabsTrigger value="vacancies" className="flex-shrink-0 whitespace-nowrap">
+                <AlertTriangle className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Vacancy Alerts</span>
+                <span className="md:hidden">Alerts</span>
+              </TabsTrigger>
+              <TabsTrigger value="requests" className="flex-shrink-0 whitespace-nowrap">
+                <Clock className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Time Off</span>
+                <span className="md:hidden">Time Off</span>
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="daily" className="space-y-6">
