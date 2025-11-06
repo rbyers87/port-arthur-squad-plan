@@ -475,13 +475,16 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
 
 const sendAlertMutation = useMutation({
   mutationFn: async (alertData: any) => {
-    console.log("Sending alerts for:", alertData);
+    console.log("🔍 DEBUG - Starting sendAlertMutation:", {
+      alertId: alertData.alertId,
+      custom_message: alertData.custom_message,
+      timestamp: new Date().toISOString()
+    });
 
     // Only send notifications if there's a custom message
     if (!alertData.custom_message) {
       console.log("No custom message - skipping notifications");
       
-      // Still mark as sent but don't actually send notifications
       const { error } = await supabase
         .from("vacancy_alerts")
         .update({ 
@@ -505,26 +508,23 @@ const sendAlertMutation = useMutation({
       throw officersError;
     }
 
-    console.log(`Found ${officers?.length || 0} active officers, sending custom message`);
+    console.log(`🔍 DEBUG - Found ${officers?.length || 0} active officers`);
 
     const emailPromises = [];
     const textPromises = [];
 
-    // Use only the custom message - remove any default message concatenation
+    // Use ONLY the custom message - no default message
     const alertMessage = alertData.custom_message;
     const emailSubject = `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types?.name}`;
     
-    const emailBody = alertData.custom_message;
-
-    const textMessage = alertData.custom_message;
+    console.log("🔍 DEBUG - Sending message:", alertMessage);
 
     // Send notifications to each officer based on their preferences
     for (const officer of officers || []) {
-      // Use default preferences if none exist
       const preferences = officer.notification_preferences || { receiveEmails: true, receiveTexts: true };
       
-      // Send email if enabled and officer has email
       if (preferences.receiveEmails !== false && officer.email) {
+        console.log(`🔍 DEBUG - Sending email to: ${officer.email}`);
         emailPromises.push(
           fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
             method: 'POST',
@@ -534,9 +534,9 @@ const sendAlertMutation = useMutation({
             body: JSON.stringify({
               to: officer.email,
               subject: emailSubject,
-              message: emailBody,
+              message: alertMessage, // Only custom message
               alertId: alertData.alertId,
-              customMessage: alertData.custom_message // Add this to identify it's custom
+              customMessage: alertData.custom_message
             }),
           }).catch(err => {
             console.error(`Failed to send email to ${officer.email}:`, err);
@@ -544,8 +544,8 @@ const sendAlertMutation = useMutation({
         );
       }
 
-      // Send text if enabled and officer has phone
       if (preferences.receiveTexts !== false && officer.phone) {
+        console.log(`🔍 DEBUG - Sending text to: ${officer.phone}`);
         textPromises.push(
           fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
             method: 'POST',
@@ -554,8 +554,8 @@ const sendAlertMutation = useMutation({
             },
             body: JSON.stringify({
               to: officer.phone,
-              message: textMessage,
-              customMessage: alertData.custom_message // Add this to identify it's custom
+              message: alertMessage, // Only custom message
+              customMessage: alertData.custom_message
             }),
           }).catch(err => {
             console.error(`Failed to send text to ${officer.phone}:`, err);
@@ -564,10 +564,8 @@ const sendAlertMutation = useMutation({
       }
     }
 
-    // Wait for all notifications to be sent
     await Promise.all([...emailPromises, ...textPromises]);
     
-    // Update alert status to indicate notification was sent
     const { error } = await supabase
       .from("vacancy_alerts")
       .update({ 
