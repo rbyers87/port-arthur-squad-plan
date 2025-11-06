@@ -63,27 +63,22 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
             console.log(`👥 Current staffing: ${shiftData.currentSupervisors} supervisors, ${shiftData.currentOfficers} officers`);
             console.log(`👤 Assigned officers data:`, shiftData.officers);
 
-            // Use the original counts from getScheduleData (they were working correctly)
-            const currentSupervisors = shiftData.currentSupervisors;
-            const currentOfficers = shiftData.currentOfficers;
-            const currentStaffing = currentSupervisors + currentOfficers;
-
-            // Check if understaffed using original counts
-            const supervisorsUnderstaffed = currentSupervisors < minSupervisors;
-            const officersUnderstaffed = currentOfficers < minOfficers;
+            // Check if understaffed
+            const supervisorsUnderstaffed = shiftData.currentSupervisors < minSupervisors;
+            const officersUnderstaffed = shiftData.currentOfficers < minOfficers;
             const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
 
             if (isUnderstaffed) {
               let positionType = "";
               if (supervisorsUnderstaffed && officersUnderstaffed) {
-                positionType = `${minSupervisors - currentSupervisors} Supervisor(s), ${minOfficers - currentOfficers} Officer(s)`;
+                positionType = `${minSupervisors - shiftData.currentSupervisors} Supervisor(s), ${minOfficers - shiftData.currentOfficers} Officer(s)`;
               } else if (supervisorsUnderstaffed) {
-                positionType = `${minSupervisors - currentSupervisors} Supervisor(s)`;
+                positionType = `${minSupervisors - shiftData.currentSupervisors} Supervisor(s)`;
               } else {
-                positionType = `${minOfficers - currentOfficers} Officer(s)`;
+                positionType = `${minOfficers - shiftData.currentOfficers} Officer(s)`;
               }
 
-              // Fix the assigned officers mapping - just for display, don't recalculate counts
+              // Fix the assigned officers mapping
               const assignedOfficers = Array.isArray(shiftData.officers) ? shiftData.officers.map((officer: any) => {
                 // Handle different possible data structures
                 const fullName = officer.full_name || officer.name || officer.profiles?.full_name || "Unknown";
@@ -107,10 +102,10 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
                   start_time: shift.start_time,
                   end_time: shift.end_time
                 },
-                current_staffing: currentStaffing,
+                current_staffing: shiftData.currentSupervisors + shiftData.currentOfficers,
                 minimum_required: minSupervisors + minOfficers,
-                current_supervisors: currentSupervisors,
-                current_officers: currentOfficers,
+                current_supervisors: shiftData.currentSupervisors,
+                current_officers: shiftData.currentOfficers,
                 min_supervisors: minSupervisors,
                 min_officers: minOfficers,
                 day_of_week: dayOfWeek,
