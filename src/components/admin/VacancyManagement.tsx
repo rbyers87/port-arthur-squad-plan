@@ -1226,6 +1226,10 @@ const sendAlertMutation = useMutation({
               </DialogContent>
             </Dialog>
           </div>
+          ); // <- final closing of the component's return
+          }; 
+
+          
         </CardHeader>
         <CardContent>
           {alertsLoading ? (
