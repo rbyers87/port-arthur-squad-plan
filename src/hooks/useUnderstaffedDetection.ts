@@ -63,39 +63,12 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
             console.log(`👥 Current staffing: ${shiftData.currentSupervisors} supervisors, ${shiftData.currentOfficers} officers`);
             console.log(`👤 Assigned officers data:`, shiftData.officers);
 
-            // FIX: Let's recalculate supervisor/officer counts from the actual officer data
-            let actualSupervisors = 0;
-            let actualOfficers = 0;
-            
-            const assignedOfficers = Array.isArray(shiftData.officers) ? shiftData.officers.map((officer: any) => {
-              // Handle different possible data structures
-              const fullName = officer.full_name || officer.name || officer.profiles?.full_name || "Unknown";
-              const isSupervisor = officer.is_supervisor || officer.profiles?.is_supervisor || false;
-              const badgeNumber = officer.badge_number || officer.profiles?.badge_number || "N/A";
-              
-              // Count supervisors and officers based on actual data
-              if (isSupervisor) {
-                actualSupervisors++;
-              } else {
-                actualOfficers++;
-              }
-              
-              return {
-                name: fullName,
-                position: isSupervisor ? "Supervisor" : "Officer",
-                isSupervisor: isSupervisor,
-                badge: badgeNumber
-              };
-            }) : [];
-
-            // Use the recalculated counts instead of relying on shiftData counts
-            const currentSupervisors = actualSupervisors;
-            const currentOfficers = actualOfficers;
+            // Use the original counts from getScheduleData (they were working correctly)
+            const currentSupervisors = shiftData.currentSupervisors;
+            const currentOfficers = shiftData.currentOfficers;
             const currentStaffing = currentSupervisors + currentOfficers;
 
-            console.log(`🔍 RECALCULATED - Supervisors: ${currentSupervisors}, Officers: ${currentOfficers}`);
-
-            // Check if understaffed using recalculated counts
+            // Check if understaffed using original counts
             const supervisorsUnderstaffed = currentSupervisors < minSupervisors;
             const officersUnderstaffed = currentOfficers < minOfficers;
             const isUnderstaffed = supervisorsUnderstaffed || officersUnderstaffed;
@@ -109,6 +82,21 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
               } else {
                 positionType = `${minOfficers - currentOfficers} Officer(s)`;
               }
+
+              // Fix the assigned officers mapping - just for display, don't recalculate counts
+              const assignedOfficers = Array.isArray(shiftData.officers) ? shiftData.officers.map((officer: any) => {
+                // Handle different possible data structures
+                const fullName = officer.full_name || officer.name || officer.profiles?.full_name || "Unknown";
+                const isSupervisor = officer.is_supervisor || officer.profiles?.is_supervisor || false;
+                const badgeNumber = officer.badge_number || officer.profiles?.badge_number || "N/A";
+                
+                return {
+                  name: fullName,
+                  position: isSupervisor ? "Supervisor" : "Officer",
+                  isSupervisor: isSupervisor,
+                  badge: badgeNumber
+                };
+              }) : [];
 
               const shiftAlertData = {
                 date: dateStr,
