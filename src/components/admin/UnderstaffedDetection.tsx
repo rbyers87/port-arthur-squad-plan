@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Mail, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
-import { PREDEFINED_POSITIONS, RANK_ORDER } from "@/constants/positions";
+import { getScheduleData } from "./DailyScheduleView";
 
 export const UnderstaffedDetection = () => {
   const queryClient = useQueryClient();
@@ -29,6 +29,25 @@ export const UnderstaffedDetection = () => {
     },
   });
 
+  // Get existing vacancy alerts to check which ones already exist
+  const { data: existingAlerts } = useQuery({
+    queryKey: ["existing-vacancy-alerts"],
+    queryFn: async () => {
+      const today = new Date();
+      const sevenDaysFromNow = new Date();
+      sevenDaysFromNow.setDate(today.getDate() + 7);
+
+      const { data, error } = await supabase
+        .from("vacancy_alerts")
+        .select("*")
+        .gte("date", format(today, "yyyy-MM-dd"))
+        .lte("date", format(sevenDaysFromNow, "yyyy-MM-dd"));
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const { 
     data: understaffedShifts, 
     isLoading, 
@@ -42,7 +61,7 @@ export const UnderstaffedDetection = () => {
       try {
         const allUnderstaffedShifts = [];
         const today = new Date();
-        console.log(`🔍 Scanning 7 days starting from ${format(today, "yyyy-MM-dd")}`);
+        console.log(`📅 Scanning 7 days starting from ${format(today, "yyyy-MM-dd")}`);
 
         // Check each date in the next 7 days
         for (let i = 0; i < 7; i++) {
@@ -62,13 +81,13 @@ export const UnderstaffedDetection = () => {
             
             if (minError) {
               console.error(`❌ Error getting minimum staffing for ${dateStr}:`, minError);
-              continue; // Skip this day but continue with others
+              continue;
             }
 
             console.log("📊 Minimum staffing requirements:", minimumStaffing);
 
-            // Use the updated approach to get staffing data
-            const scheduleData = await getScheduleDataForUnderstaffing(date, selectedShiftId);
+            // Use the getScheduleData function from DailyScheduleView
+            const scheduleData = await getScheduleData(date, selectedShiftId);
             
             if (!scheduleData || scheduleData.length === 0) {
               console.log("❌ No schedule data found for", dateStr);
@@ -127,8 +146,8 @@ export const UnderstaffedDetection = () => {
                   isSupervisorsUnderstaffed: supervisorsUnderstaffed,
                   isOfficersUnderstaffed: officersUnderstaffed,
                   assigned_officers: [
-                    ...shiftData.supervisors.map(s => s.name),
-                    ...shiftData.officers.map(o => o.name)
+                    ...shiftData.supervisors.map((s: any) => s.name),
+                    ...shiftData.officers.map((o: any) => o.name)
                   ]
                 };
 
@@ -140,7 +159,6 @@ export const UnderstaffedDetection = () => {
             }
           } catch (dayError) {
             console.error(`❌ Error processing date ${dateStr}:`, dayError);
-            // Continue with next day instead of failing entirely
             continue;
           }
         }
@@ -155,8 +173,155 @@ export const UnderstaffedDetection = () => {
     },
   });
 
-  // ... rest of the component remains the same as previous version
-  // (createAlertMutation, sendAlertMutation, refreshMutation, etc.)
+  // Create vacancy alert mutation
+  const createAlertMutation = useMutation({
+    mutationFn: async (shift: any) => {
+      // Calculate how many positions are needed
+      const supervisorsNeeded = shift.isSupervisorsUnderstaffed 
+        ? shift.min_supervisors - shift.current_supervisors 
+        : 0;
+      const officersNeeded = shift.isOfficersUnderstaffed 
+        ? shift.min_officers - shift.current_officers 
+        : 0;
+
+      // Determine position type
+      let positionType = "";
+      if (supervisorsNeeded > 0 && officersNeeded > 0) {
+        positionType = `${supervisorsNeeded} Supervisor(s), ${officersNeeded} Officer(s)`;
+      } else if (supervisorsNeeded > 0) {
+        positionType = `${supervisorsNeeded} Supervisor(s)`;
+      } else {
+        positionType = `${officersNeeded} Officer(s)`;
+      }
+
+      const { data, error } = await supabase
+        .from("vacancy_alerts")
+        .insert({
+          date: shift.date,
+          shift_type_id: shift.shift_type_id,
+          position_type: positionType,
+          reason: "Understaffed",
+          status: "open",
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data, shift) => {
+      toast.success(`Alert created for ${shift.shift_types?.name} on ${format(new Date(shift.date), "MMM d")}`);
+      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to create alert");
+    }
+  });
+
+  // Send notification mutation
+  const sendAlertMutation = useMutation({
+    mutationFn: async (shift: any) => {
+      // Find the existing alert
+      const alert = existingAlerts?.find(
+        (a: any) => a.date === shift.date && a.shift_type_id === shift.shift_type_id
+      );
+
+      if (!alert) {
+        throw new Error("Alert not found. Please create the alert first.");
+      }
+
+      // Get all supervisors and admins to notify
+      const { data: usersToNotify, error: usersError } = await supabase
+        .from("profiles")
+        .select("id")
+        .or("role.eq.supervisor,role.eq.admin");
+
+      if (usersError) throw usersError;
+
+      // Create notifications for each user
+      const notifications = usersToNotify.map((user: any) => ({
+        user_id: user.id,
+        type: "vacancy_alert",
+        title: `Understaffed: ${shift.shift_types?.name}`,
+        message: `${shift.shift_types?.name} on ${format(new Date(shift.date), "MMM d, yyyy")} needs ${shift.minimum_required - shift.current_staffing} more officer(s)`,
+        read: false,
+        created_at: new Date().toISOString()
+      }));
+
+      const { error: notifError } = await supabase
+        .from("notifications")
+        .insert(notifications);
+
+      if (notifError) throw notifError;
+
+      // Update alert status
+      const { error: updateError } = await supabase
+        .from("vacancy_alerts")
+        .update({ 
+          status: "notified",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", alert.id);
+
+      if (updateError) throw updateError;
+
+      return alert;
+    },
+    onSuccess: (data, shift) => {
+      toast.success(`Notifications sent for ${shift.shift_types?.name} on ${format(new Date(shift.date), "MMM d")}`);
+      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to send notifications");
+    }
+  });
+
+  // Check if alert is already created
+  const isAlertCreated = (shift: any) => {
+    return existingAlerts?.some(
+      (alert: any) => alert.date === shift.date && alert.shift_type_id === shift.shift_type_id
+    );
+  };
+
+  // Handle creating a single alert
+  const handleCreateAlert = (shift: any) => {
+    createAlertMutation.mutate(shift);
+  };
+
+  // Handle sending a single alert
+  const handleSendAlert = (shift: any) => {
+    sendAlertMutation.mutate(shift);
+  };
+
+  // Handle creating all alerts
+  const handleCreateAllAlerts = () => {
+    if (!understaffedShifts || understaffedShifts.length === 0) return;
+
+    const shiftsToCreate = understaffedShifts.filter(shift => !isAlertCreated(shift));
+    
+    if (shiftsToCreate.length === 0) {
+      toast.info("All alerts have already been created");
+      return;
+    }
+
+    let successCount = 0;
+    const totalCount = shiftsToCreate.length;
+
+    shiftsToCreate.forEach((shift) => {
+      createAlertMutation.mutate(shift, {
+        onSuccess: () => {
+          successCount++;
+          if (successCount === totalCount) {
+            toast.success(`Created ${successCount} alert(s) successfully`);
+          }
+        }
+      });
+    });
+  };
 
   return (
     <Card>
@@ -168,7 +333,7 @@ export const UnderstaffedDetection = () => {
               Automatic Understaffed Shift Detection
             </CardTitle>
             <CardDescription>
-              Detects understaffing based on actual assigned positions in the daily schedule
+              Detects understaffing based on minimum staffing requirements from the database
             </CardDescription>
           </div>
           <div className="flex gap-2">
@@ -183,7 +348,7 @@ export const UnderstaffedDetection = () => {
             <Button
               variant="outline"
               onClick={handleCreateAllAlerts}
-              disabled={!understaffedShifts?.length}
+              disabled={!understaffedShifts?.length || createAlertMutation.isPending}
             >
               <Plus className="h-4 w-4 mr-2" />
               Create All Alerts
@@ -211,7 +376,21 @@ export const UnderstaffedDetection = () => {
           </Select>
         </div>
 
-        {!understaffedShifts || understaffedShifts.length === 0 ? (
+        {isLoading && (
+          <div className="text-center py-8">
+            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Scanning for understaffed shifts...</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="text-center py-8">
+            <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
+            <p className="text-sm text-destructive">Error loading understaffed shifts</p>
+          </div>
+        )}
+
+        {!isLoading && !error && (!understaffedShifts || understaffedShifts.length === 0) && (
           <div className="text-center py-8">
             <p className="text-sm text-muted-foreground">
               No understaffed shifts found in the next 7 days.
@@ -220,7 +399,9 @@ export const UnderstaffedDetection = () => {
               Check browser console for detailed scan results.
             </p>
           </div>
-        ) : (
+        )}
+
+        {!isLoading && !error && understaffedShifts && understaffedShifts.length > 0 && (
           <div className="space-y-4">
             {understaffedShifts.map((shift, index) => {
               const alertExists = isAlertCreated(shift);
@@ -250,7 +431,7 @@ export const UnderstaffedDetection = () => {
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2 mt-2">
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
                         <Badge variant="destructive">
                           Total: {shift.current_staffing}/{shift.minimum_required}
                         </Badge>
@@ -287,7 +468,7 @@ export const UnderstaffedDetection = () => {
                           disabled={sendAlertMutation.isPending}
                         >
                           <Mail className="h-3 w-3 mr-1" />
-                          Send Alert
+                          Send Notifications
                         </Button>
                       )}
                     </div>
@@ -301,10 +482,3 @@ export const UnderstaffedDetection = () => {
     </Card>
   );
 };
-
-// SIMPLIFIED version that reuses the getScheduleData function from DailyScheduleView
-async function getScheduleDataForUnderstaffing(selectedDate: Date, filterShiftId: string = "all") {
-  // Import the working function from DailyScheduleView
-  const { getScheduleData } = await import('./DailyScheduleView');
-  return getScheduleData(selectedDate, filterShiftId);
-}
