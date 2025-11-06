@@ -1372,7 +1372,7 @@ const sendAlertMutation = useMutation({
         </div>
       </DialogContent>
     </Dialog>
-
   </div>
-); // <- final closing of the component's return
-};  // <- end of component
+);
+};
+
