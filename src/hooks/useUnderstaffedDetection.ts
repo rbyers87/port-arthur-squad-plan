@@ -2,6 +2,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { getScheduleData } from "@/components/schedule/DailyScheduleView"; 
+
 
 export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
   return useQuery({
@@ -31,7 +33,7 @@ export const useUnderstaffedDetection = (selectedShiftId: string = "all") => {
             continue;
           }
 
-          // Get schedule data using the same function as DailyScheduleView
+          // Use the getScheduleData function from DailyScheduleView
           const scheduleData = await getScheduleData(date, selectedShiftId);
           
           if (!scheduleData || scheduleData.length === 0) {
