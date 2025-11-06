@@ -401,84 +401,26 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
     },
   });
 
-  // Get status badge variant
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "interested":
-        return "outline";
-      case "accepted":
-        return "default";
-      case "rejected":
-        return "destructive";
-      default:
-        return "outline";
-    }
-  };
+  // Use the centralized understaffed detection hook
+  const { 
+    data: understaffedShifts, 
+    isLoading: understaffedLoading, 
+    error: understaffedError,
+    refetch: refetchUnderstaffed 
+  } = useUnderstaffedDetection(selectedShiftId);
 
-  // Get status display text
-  const getStatusDisplay = (status: string) => {
-    switch (status) {
-      case "interested":
-        return "Pending";
-      case "accepted":
-        return "Approved";
-      case "rejected":
-        return "Denied";
-      default:
-        return status;
-    }
-  };
+  const { data: existingAlerts } = useQuery({
+    queryKey: ["existing-vacancy-alerts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("vacancy_alerts")
+        .select("*")
+        .eq("status", "open");
 
-  // Get status icon
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "interested":
-        return <Clock className="h-3 w-3" />;
-      case "accepted":
-        return <Check className="h-3 w-3" />;
-      case "rejected":
-        return <X className="h-3 w-3" />;
-      default:
-        return <Clock className="h-3 w-3" />;
-    }
-  };
-
-// ... all your other code remains the same ...
-
-// Get status icon
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case "interested":
-      return <Clock className="h-3 w-3" />;
-    case "accepted":
-      return <Check className="h-3 w-3" />;
-    case "rejected":
-      return <X className="h-3 w-3" />;
-    default:
-      return <Clock className="h-3 w-3" />;
-  }
-};
-
-// Use the centralized understaffed detection hook
-const { 
-  data: understaffedShifts, 
-  isLoading: understaffedLoading, 
-  error: understaffedError,
-  refetch: refetchUnderstaffed 
-} = useUnderstaffedDetection(selectedShiftId);
-
-const { data: existingAlerts } = useQuery({
-  queryKey: ["existing-vacancy-alerts"],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from("vacancy_alerts")
-      .select("*")
-      .eq("status", "open");
-
-    if (error) throw error;
-    return data;
-  },
-});
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const handleRefreshAll = () => {
     refetchAlerts();
@@ -727,6 +669,46 @@ const { data: existingAlerts } = useQuery({
       ...shift,
       alertId: alert.id
     });
+  };
+
+  // Status helper functions - KEEP THESE IN VACANCYMANAGEMENT ONLY
+  const getStatusVariant = (status: string) => {
+    switch (status) {
+      case "interested":
+        return "outline";
+      case "accepted":
+        return "default";
+      case "rejected":
+        return "destructive";
+      default:
+        return "outline";
+    }
+  };
+
+  const getStatusDisplay = (status: string) => {
+    switch (status) {
+      case "interested":
+        return "Pending";
+      case "accepted":
+        return "Approved";
+      case "rejected":
+        return "Denied";
+      default:
+        return status;
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "interested":
+        return <Clock className="h-3 w-3" />;
+      case "accepted":
+        return <Check className="h-3 w-3" />;
+      case "rejected":
+        return <X className="h-3 w-3" />;
+      default:
+        return <Clock className="h-3 w-3" />;
+    }
   };
 
   // If this is officer view, hide all create alert functionality
