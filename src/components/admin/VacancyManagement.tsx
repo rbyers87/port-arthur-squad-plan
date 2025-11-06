@@ -1369,5 +1369,6 @@ const sendAlertMutation = useMutation({
         </DialogContent>
       </Dialog>
     </div>
+      </div>
   );
 };
