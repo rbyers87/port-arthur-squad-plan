@@ -434,28 +434,36 @@ export const VacancyManagement = ({ isOfficerView = false, userId }: VacancyMana
   const createAlertMutation = useCreateVacancyAlert();
 
   // Add this function to handle manual alert creation
-  const handleCreateManualAlert = () => {
-    if (!selectedDate || !selectedShift) {
-      toast.error("Please select date and shift");
-      return;
-    }
+const handleCreateManualAlert = () => {
+  if (!selectedDate || !selectedShift) {
+    toast.error("Please select date and shift");
+    return;
+  }
 
-    createAlertMutation.mutate({
-      shift_type_id: selectedShift,
-      date: format(selectedDate, "yyyy-MM-dd"),
-      current_staffing: 0,
-      minimum_required: parseInt(minimumRequired),
-      custom_message: customMessage // Add custom message
-    }, {
-      onSuccess: () => {
-        setDialogOpen(false);
-        setSelectedDate(undefined);
-        setSelectedShift(undefined);
-        setMinimumRequired("2");
-        setCustomMessage(""); // Reset custom message
-      }
-    });
-  };
+  // Determine position type based on needs
+  let positionType = "";
+  if (parseInt(minimumRequired) > 0) {
+    positionType = `Need ${minimumRequired} officer(s)`;
+  }
+
+  createAlertMutation.mutate({
+    shift_type_id: selectedShift,
+    date: format(selectedDate, "yyyy-MM-dd"),
+    current_staffing: 0,
+    minimum_required: parseInt(minimumRequired),
+    custom_message: customMessage,
+    position_type: positionType, // Make sure this includes supervisor info if needed
+    manual_notification_sent: true,
+  }, {
+    onSuccess: () => {
+      setDialogOpen(false);
+      setSelectedDate(undefined);
+      setSelectedShift(undefined);
+      setMinimumRequired("2");
+      setCustomMessage("");
+    }
+  });
+};
 
   const closeAlertMutation = useMutation({
     mutationFn: async (alertId: string) => {
