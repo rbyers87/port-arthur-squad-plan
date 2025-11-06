@@ -35,19 +35,19 @@ export const VacancyAlerts = ({ userId, isAdminOrSupervisor }: VacancyAlertsProp
   });
 
   // Fetch user responses - include rejection_reason
-const { data: userResponses, refetch: refetchResponses } = useQuery({
-  queryKey: ["vacancy-responses", userId],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from("vacancy_responses")
-      .select("alert_id, status, rejection_reason, vacancy_alert_id")
-      .eq("officer_id", userId);
+  const { data: userResponses, refetch: refetchResponses } = useQuery({
+    queryKey: ["vacancy-responses", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("vacancy_responses")
+        .select("alert_id, status, rejection_reason, vacancy_alert_id")
+        .eq("officer_id", userId);
 
-    if (error) throw error;
-    return data;
-  },
-  enabled: !!userId && !isAdminOrSupervisor,
-});
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!userId && !isAdminOrSupervisor,
+  });
 
   // Fetch notifications for the current user
   const { data: notifications } = useQuery({
@@ -73,42 +73,42 @@ const { data: userResponses, refetch: refetchResponses } = useQuery({
     enabled: !!userId,
   });
 
-// Mutation for responding to vacancies - with better state management
-const respondMutation = useMutation({
-  mutationFn: async ({ alertId, status }: { alertId: string; status: string }) => {
-    console.log("Submitting response for alert:", alertId, "status:", status);
-    
-    const { error } = await supabase.from("vacancy_responses").insert({
-      vacancy_alert_id: alertId,
-      officer_id: userId,
-      status: status,
-    });
+  // Mutation for responding to vacancies - with better state management
+  const respondMutation = useMutation({
+    mutationFn: async ({ alertId, status }: { alertId: string; status: string }) => {
+      console.log("Submitting response for alert:", alertId, "status:", status);
+      
+      const { error } = await supabase.from("vacancy_responses").insert({
+        vacancy_alert_id: alertId,
+        officer_id: userId,
+        status: status,
+      });
 
-    if (error) {
-      console.error("Supabase error:", error);
-      throw error;
-    }
-  },
-  onSuccess: (_, variables) => {
-    // Invalidate and refetch the specific queries
-    queryClient.invalidateQueries({ queryKey: ["vacancy-responses", userId] });
-    queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] });
-    
-    // Also refetch the current data to ensure UI updates
-    refetchResponses?.();
-    
-    toast.success("Response submitted successfully");
-  },
-  onError: (error) => {
-    console.error("Response error:", error);
-    
-    if (error.code === '23505') {
-      toast.error("You have already submitted a response for this vacancy alert");
-    } else {
-      toast.error("Failed to submit response: " + error.message);
-    }
-  },
-});
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate and refetch the specific queries
+      queryClient.invalidateQueries({ queryKey: ["vacancy-responses", userId] });
+      queryClient.invalidateQueries({ queryKey: ["vacancy-responses-admin"] });
+      
+      // Also refetch the current data to ensure UI updates
+      refetchResponses?.();
+      
+      toast.success("Response submitted successfully");
+    },
+    onError: (error: any) => {
+      console.error("Response error:", error);
+      
+      if (error.code === '23505') {
+        toast.error("You have already submitted a response for this vacancy alert");
+      } else {
+        toast.error("Failed to submit response: " + error.message);
+      }
+    },
+  });
 
   // Mutation for marking notifications as read
   const markAsReadMutation = useMutation({
@@ -125,9 +125,9 @@ const respondMutation = useMutation({
     },
   });
 
-const getUserResponse = (alertId: string) => {
-  return userResponses?.find((r) => r.alert_id === alertId || r.vacancy_alert_id === alertId);
-};
+  const getUserResponse = (alertId: string) => {
+    return userResponses?.find((r) => r.alert_id === alertId || r.vacancy_alert_id === alertId);
+  };
 
   return (
     <div className="space-y-6">
@@ -279,17 +279,17 @@ const getUserResponse = (alertId: string) => {
                           </div>
                         ) : (
                           <Button
-  size="sm"
-  onClick={() =>
-    respondMutation.mutate({
-      alertId: alert.id,
-      status: "interested",
-    })
-  }
-  disabled={respondMutation.isPending || isStaffed || !!userResponse}
->
-  {respondMutation.isPending ? "Submitting..." : "I'm Available"}
-</Button>
+                            size="sm"
+                            onClick={() =>
+                              respondMutation.mutate({
+                                alertId: alert.id,
+                                status: "interested",
+                              })
+                            }
+                            disabled={respondMutation.isPending || isStaffed || !!userResponse}
+                          >
+                            {respondMutation.isPending ? "Submitting..." : "I'm Available"}
+                          </Button>
                         )}
                       </div>
                     )}
