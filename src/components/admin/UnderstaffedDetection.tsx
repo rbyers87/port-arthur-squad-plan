@@ -155,8 +155,204 @@ export const UnderstaffedDetection = () => {
     },
   });
 
-  // ... rest of the component remains the same as previous version
-  // (createAlertMutation, sendAlertMutation, refreshMutation, etc.)
+  const { data: existingAlerts } = useQuery({
+    queryKey: ["existing-vacancy-alerts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("vacancy_alerts")
+        .select("*")
+        .eq("status", "open");
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const createAlertMutation = useMutation({
+    mutationFn: async (shiftData: any) => {
+      console.log("🔍 Creating alert for:", {
+        shift_type_id: shiftData.shift_type_id,
+        shift_name: shiftData.shift_types?.name,
+        date: shiftData.date
+      });
+
+      // Check if alert already exists
+      const existingAlert = existingAlerts?.find(alert => 
+        alert.date === shiftData.date && 
+        alert.shift_type_id === shiftData.shift_type_id
+      );
+
+      if (existingAlert) {
+        console.log("⚠️ Alert already exists");
+        throw new Error("Alert already exists for this shift");
+      }
+
+      const { data, error } = await supabase
+        .from("vacancy_alerts")
+        .insert({
+          date: shiftData.date,
+          shift_type_id: shiftData.shift_type_id,
+          current_staffing: shiftData.current_staffing,
+          minimum_required: shiftData.minimum_required,
+          status: "open",
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["all-vacancy-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      toast.success("Vacancy alert created");
+    },
+    onError: (error) => {
+      toast.error("Failed to create alert: " + error.message);
+    },
+  });
+
+  const sendAlertMutation = useMutation({
+    mutationFn: async (alertData: any) => {
+      // Get all officers who have text notifications enabled
+      const { data: officers, error: officersError } = await supabase
+        .from("profiles")
+        .select("id, email, phone, notification_preferences")
+        .eq("notification_preferences->>receiveTexts", "true");
+
+      if (officersError) throw officersError;
+
+      // FIXED: Cast to any[] to avoid TypeScript errors
+      const officersArray = officers as any[];
+
+      // Send email notifications to all officers
+      const emailPromises = officersArray?.map(async (officer) => {
+        return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-vacancy-alert', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            to: officer.email,
+            subject: `Vacancy Alert - ${format(new Date(alertData.date), "MMM d, yyyy")} - ${alertData.shift_types.name}`,
+            message: `A shift vacancy has been identified:\n\nDate: ${format(new Date(alertData.date), "EEEE, MMM d, yyyy")}\nShift: ${alertData.shift_types.name} (${alertData.shift_types.start_time} - ${alertData.shift_types.end_time})\nCurrent Staffing: ${alertData.current_staffing} / ${alertData.minimum_required}\n\nPlease sign up if available.`,
+            alertId: alertData.alertId
+          }),
+        });
+      }) || [];
+
+      // Send text notifications to officers with phone numbers and text preferences
+      const textPromises = officersArray
+        ?.filter(officer => officer.phone && officer.notification_preferences?.receiveTexts)
+        .map(async (officer) => {
+          return fetch('https://ywghefarrcwbnraqyfgk.supabase.co/functions/v1/send-text-alert', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: officer.phone,
+              message: `Vacancy Alert: ${format(new Date(alertData.date), "MMM d")} - ${alertData.shift_types.name}. Current: ${alertData.current_staffing}/${alertData.minimum_required}. Sign up if available.`
+            }),
+          });
+        }) || [];
+
+      await Promise.all([...emailPromises, ...textPromises]);
+      
+      console.log("✅ Alerts sent successfully");
+
+    },
+    onSuccess: () => {
+      toast.success("Alerts sent successfully to all officers");
+      queryClient.invalidateQueries({ queryKey: ["existing-vacancy-alerts"] });
+    },
+    onError: (error) => {
+      toast.error("Failed to send alerts: " + error.message);
+    },
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: async () => {
+      await refetch();
+    },
+    onSuccess: () => {
+      toast.success("Rescanned for understaffed shifts");
+    },
+    onError: (error) => {
+      toast.error("Failed to refresh: " + error.message);
+    },
+  });
+
+  const isAlertCreated = (shift: any) => {
+    return existingAlerts?.some(alert => 
+      alert.date === shift.date && 
+      alert.shift_type_id === shift.shift_type_id
+    );
+  };
+
+  const handleCreateAlert = (shift: any) => {
+    createAlertMutation.mutate(shift);
+  };
+
+  const handleCreateAllAlerts = () => {
+    if (!understaffedShifts) return;
+
+    const shiftsWithoutAlerts = understaffedShifts.filter(shift => !isAlertCreated(shift));
+    
+    shiftsWithoutAlerts.forEach(shift => {
+      createAlertMutation.mutate(shift);
+    });
+
+    if (shiftsWithoutAlerts.length === 0) {
+      toast.info("All understaffed shifts already have alerts");
+    } else {
+      toast.success(`Created ${shiftsWithoutAlerts.length} alerts`);
+    }
+  };
+
+  const handleSendAlert = (shift: any) => {
+    const alert = existingAlerts?.find(a => 
+      a.date === shift.date && a.shift_type_id === shift.shift_type_id
+    );
+
+    if (!alert) {
+      toast.error("Please create an alert first");
+      return;
+    }
+
+    sendAlertMutation.mutate({
+      ...shift,
+      alertId: alert.id
+    });
+  };
+
+  const handleRefresh = () => {
+    refreshMutation.mutate();
+  };
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center text-red-600">
+            Error loading understaffed shifts: {error.message}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center">Scanning for understaffed shifts...</div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -174,16 +370,16 @@ export const UnderstaffedDetection = () => {
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => refetch()}
-              disabled={isLoading}
+              onClick={handleRefresh}
+              disabled={refreshMutation.isPending}
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshMutation.isPending ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
             <Button
               variant="outline"
               onClick={handleCreateAllAlerts}
-              disabled={!understaffedShifts?.length}
+              disabled={createAlertMutation.isPending || !understaffedShifts?.length}
             >
               <Plus className="h-4 w-4 mr-2" />
               Create All Alerts
