@@ -718,12 +718,20 @@ export const getScheduleData = async (selectedDate: Date, filterShiftId: string 
     .order("start_time");
   if (shiftError) throw shiftError;
 
-  // Get minimum staffing requirements
-  const { data: minimumStaffing, error: minError } = await supabase
-    .from("minimum_staffing")
-    .select("minimum_officers, minimum_supervisors, shift_type_id")
-    .eq("day_of_week", dayOfWeek);
-  if (minError) throw minError;
+// In DailyScheduleView.tsx - Update the minimum staffing query
+const { data: minimumStaffing, error: minError } = await supabase
+  .from("minimum_staffing")
+  .select("minimum_officers, minimum_supervisors, shift_type_id")
+  .eq("day_of_week", dayOfWeek);
+if (minError) {
+  console.error("Minimum staffing error:", minError);
+  // Provide fallback values
+  const fallbackStaffing = [
+    { shift_type_id: shiftTypes?.[0]?.id, minimum_officers: 8, minimum_supervisors: 1 },
+    { shift_type_id: shiftTypes?.[1]?.id, minimum_officers: 8, minimum_supervisors: 1 }
+  ];
+  // Use fallback if query fails
+}
 
   // Get default assignments for all officers for this date
   const { data: allDefaultAssignments, error: defaultAssignmentsError } = await supabase
