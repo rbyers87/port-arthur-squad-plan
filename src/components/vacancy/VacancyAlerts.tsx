@@ -40,7 +40,7 @@ const { data: userResponses, refetch: refetchResponses } = useQuery({
   queryFn: async () => {
     const { data, error } = await supabase
       .from("vacancy_responses")
-      .select("alert_id, status, rejection_reason")
+      .select("alert_id, status, rejection_reason, vacancy_alert_id")
       .eq("officer_id", userId);
 
     if (error) throw error;
@@ -125,9 +125,9 @@ const respondMutation = useMutation({
     },
   });
 
-  const getUserResponse = (alertId: string) => {
-    return userResponses?.find((r) => r.alert_id === alertId);
-  };
+const getUserResponse = (alertId: string) => {
+  return userResponses?.find((r) => r.alert_id === alertId || r.vacancy_alert_id === alertId);
+};
 
   return (
     <div className="space-y-6">
