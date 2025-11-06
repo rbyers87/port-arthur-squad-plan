@@ -1375,4 +1375,3 @@ const sendAlertMutation = useMutation({
   </div>
 );
 };
-
