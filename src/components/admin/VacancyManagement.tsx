@@ -1279,7 +1279,7 @@ const sendAlertMutation = useMutation({
                             variant="outline"
                             onClick={() => closeAlertMutation.mutate(alert.id)}
                           >
-                            Close Alert
+                           Close Alert
                           </Button>
                         )}
                       </div>
@@ -1291,6 +1291,9 @@ const sendAlertMutation = useMutation({
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
 
       {/* Custom Message Dialog for Understaffed Detection */}
       <Dialog open={showCustomMessageDialog} onOpenChange={setShowCustomMessageDialog}>
