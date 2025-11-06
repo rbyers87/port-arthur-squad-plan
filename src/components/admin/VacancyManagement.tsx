@@ -1293,7 +1293,7 @@ const sendAlertMutation = useMutation({
       </Card>
     </div>
   );
-}
+
 
       {/* Custom Message Dialog for Understaffed Detection */}
       <Dialog open={showCustomMessageDialog} onOpenChange={setShowCustomMessageDialog}>
