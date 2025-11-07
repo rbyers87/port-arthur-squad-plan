@@ -539,7 +539,7 @@ const Dashboard = () => {
                 <TabsTrigger value="daily" className="flex-shrink-0 whitespace-nowrap">
                   <Calendar className="h-4 w-4 md:mr-2" />
                   <span className="hidden md:inline">Riding List</span>  
-                  <span className="md:hidden">Daily</span>           // Weekly Schedule
+                  <span className="md:hidden">Daily</span>        
                 </TabsTrigger>
                 <TabsTrigger value="schedule" className="flex-shrink-0 whitespace-nowrap">
                   <Calendar className="h-4 w-4 md:mr-2" />
