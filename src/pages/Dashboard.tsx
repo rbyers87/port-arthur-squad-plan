@@ -530,13 +530,15 @@ const Dashboard = () => {
         )}
 
         {/* Desktop Navigation */}
+//Daily Schedule is retitled Riding List, Weekly Schedule is retitled The Book
+        
         {!isMobile && (
           isAdminOrSupervisor ? (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
               <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-6 gap-1">
                 <TabsTrigger value="daily" className="flex-shrink-0 whitespace-nowrap">
                   <Calendar className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Riding List</span>  //Daily Schedule
+                  <span className="hidden md:inline">Riding List</span>  
                   <span className="md:hidden">Daily</span>           // Weekly Schedule
                 </TabsTrigger>
                 <TabsTrigger value="schedule" className="flex-shrink-0 whitespace-nowrap">
