@@ -1,19 +1,24 @@
 import React from 'react';
 
-interface MobileNavigationProps {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
-}
-
-const MobileNavigation: React.FC<MobileNavigationProps> = ({ activeTab, onTabChange }) => {
-  const tabs = [
+const MobileNavigation = ({ activeTab, onTabChange, isAdminOrSupervisor }) => {
+  // Define tabs based on user role
+  const adminTabs = [
     { id: 'daily', label: 'Daily', icon: '📅' },
-    { id: 'weekly', label: 'Weekly', icon: '📋' },
-    { id: 'staff', label: 'Staff', icon: '👥' },
-    { id: 'timeoff', label: 'Time Off', icon: '⏰' },
-    { id: 'pto', label: 'PTO', icon: '🏖️' },
-    { id: 'vacancies', label: 'Vacancies', icon: '📝' },
+    { id: 'schedule', label: 'Weekly', icon: '📋' },
+    { id: 'officers', label: 'Officers', icon: '👥' },
+    { id: 'vacancies', label: 'Vacancies', icon: '⚠️' },
+    { id: 'staff', label: 'Staff', icon: '👤' },
+    { id: 'requests', label: 'Time Off', icon: '⏰' }
   ];
+
+  const officerTabs = [
+    { id: 'daily', label: 'Daily', icon: '📅' },
+    { id: 'schedule', label: 'Weekly', icon: '📋' },
+    { id: 'vacancies', label: 'Alerts', icon: '⚠️' },
+    { id: 'requests', label: 'Time Off', icon: '⏰' }
+  ];
+
+  const tabs = isAdminOrSupervisor ? adminTabs : officerTabs;
 
   return (
     <div className="mobile-bottom-nav">
