@@ -5,8 +5,8 @@
 
 #root {
   width: 100%;
-  margin: 0 auto;
-  padding: 1rem;
+  margin: 0;
+  padding: 0;
   text-align: left;
 }
 
@@ -64,17 +64,22 @@ table {
   justify-content: space-around;
   padding: 8px 0;
   z-index: 1000;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
 }
 
 .mobile-tab {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px;
+  padding: 8px 4px;
   min-height: 44px;
-  font-size: 12px;
+  font-size: 11px;
   text-decoration: none;
   color: #666;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex: 1;
 }
 
 .mobile-tab.active {
@@ -82,8 +87,12 @@ table {
 }
 
 .mobile-tab-icon {
-  font-size: 20px;
+  font-size: 18px;
   margin-bottom: 2px;
+}
+
+.mobile-tab-label {
+  font-size: 11px;
 }
 
 /* Adjust main content for bottom nav */
@@ -117,12 +126,14 @@ table {
 /* ===== TABLET STYLES (768px - 1023px) ===== */
 @media (min-width: 768px) {
   #root {
-    max-width: 768px;
-    padding: 1.5rem;
+    max-width: 100%;
+    padding: 1rem;
   }
   
   .container {
     padding: 15px;
+    max-width: 768px;
+    margin: 0 auto;
   }
   
   /* Show desktop nav, hide mobile nav */
@@ -151,12 +162,14 @@ table {
 /* ===== DESKTOP STYLES (1024px +) ===== */
 @media (min-width: 1024px) {
   #root {
-    max-width: 1280px;
-    padding: 2rem;
+    max-width: 100%;
+    padding: 1rem;
   }
   
   .container {
     padding: 20px;
+    max-width: 1280px;
+    margin: 0 auto;
   }
   
   .logo {
@@ -182,5 +195,42 @@ table {
 @media (prefers-reduced-motion: no-preference) {
   a:nth-of-type(2) .logo {
     animation: logo-spin infinite 20s linear;
+  }
+}
+
+/* Additional mobile fixes for better touch experience */
+@media (max-width: 768px) {
+  body {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  
+  /* Ensure tables are scrollable */
+  .table-container {
+    margin: 0 -10px;
+    padding: 0 10px;
+  }
+  
+  /* Better touch targets for all interactive elements */
+  .btn, button, [role="button"] {
+    min-height: 44px;
+    padding: 12px 16px;
+  }
+  
+  /* Prevent horizontal overflow */
+  .container, .main-container {
+    overflow-x: hidden;
+  }
+}
+
+/* Desktop-specific styles for tabs */
+@media (min-width: 769px) {
+  .tabs-list {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .tabs-trigger {
+    padding: 8px 16px;
   }
 }
