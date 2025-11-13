@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <script>
+      // GitHub Pages SPA fallback
+      const path = window.location.pathname;
+      const segments = path.split('/').filter(segment => segment);
+      
+      // If we're in the scheduler subpath
+      if (segments[0] === 'scheduler') {
+        // Store the current path and redirect to index.html
+        sessionStorage.setItem('redirectPath', path);
+        window.location.href = '/scheduler/index.html';
+      } else {
+        // Not in scheduler path, redirect to base
+        window.location.href = '/scheduler/';
+      }
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to application...</p>
+  </body>
+</html>
