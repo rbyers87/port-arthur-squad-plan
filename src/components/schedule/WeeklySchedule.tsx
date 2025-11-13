@@ -183,56 +183,83 @@ const WeeklySchedule = ({
     navigate(`/daily-schedule?date=${dateStr}&shift=${selectedShiftId}`);
   };
 
-  // Handle PDF export - OPTIMIZED VERSION
-  const handleExportPDF = async () => {
-    if (!dateRange?.from || !dateRange?.to) {
-      toast.error("Please select a date range");
-      return;
-    }
+// UPDATED handleExportPDF function for WeeklySchedule.tsx
+// Replace your existing handleExportPDF function with this:
 
-    if (!selectedShiftId) {
-      toast.error("Please select a shift");
-      return;
-    }
+const handleExportPDF = async () => {
+  if (!dateRange?.from || !dateRange?.to) {
+    toast.error("Please select a date range");
+    return;
+  }
 
-    try {
-      toast.info("Generating PDF export...");
-      
-      // Dynamically import the PDF export hook to avoid loading it on initial page load
+  if (!selectedShiftId) {
+    toast.error("Please select a shift");
+    return;
+  }
+
+  try {
+    toast.info("Generating PDF export...");
+    
+    const startDate = dateRange.from;
+    const endDate = dateRange.to;
+    
+    const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date => 
+      format(date, "yyyy-MM-dd")
+    );
+
+    // Fetch schedule data for the date range
+    const scheduleDataResponse = await fetchScheduleDataForRange(startDate, endDate, dates);
+    
+    const shiftName = shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Unknown Shift";
+    
+    // Use the appropriate export hook based on active view
+    if (activeView === "weekly") {
+      // Dynamically import the weekly PDF export hook
       const { useWeeklyPDFExport } = await import("@/hooks/useWeeklyPDFExport");
       const { exportWeeklyPDF } = useWeeklyPDFExport();
-      
-      // Fetch data for the selected date range
-      const startDate = dateRange.from;
-      const endDate = dateRange.to;
-      
-      const dates = eachDayOfInterval({ start: startDate, end: endDate }).map(date => 
-        format(date, "yyyy-MM-dd")
-      );
-
-      // Fetch schedule data for the date range
-      const scheduleData = await fetchScheduleDataForRange(startDate, endDate, dates);
-      
-      const shiftName = shiftTypes?.find(s => s.id === selectedShiftId)?.name || "Unknown Shift";
       
       const result = await exportWeeklyPDF({
         startDate,
         endDate,
         shiftName,
-        scheduleData: scheduleData.dailySchedules || []
+        scheduleData: scheduleDataResponse.dailySchedules || [],
+        viewType: "weekly",
+        minimumStaffing: schedules?.minimumStaffing, // Pass minimum staffing
+        selectedShiftId
       });
 
       if (result.success) {
-        toast.success("PDF exported successfully");
+        toast.success("Weekly PDF exported successfully");
         setExportDialogOpen(false);
       } else {
-        toast.error("Failed to export PDF");
+        toast.error("Failed to export weekly PDF");
       }
-    } catch (error) {
-      console.error("Export error:", error);
-      toast.error("Error generating PDF export");
+    } else {
+      // Monthly view - use the monthly export hook
+      const { useMonthlyPDFExport } = await import("@/hooks/useMonthlyPDFExport");
+      const { exportMonthlyPDF } = useMonthlyPDFExport();
+      
+      const result = await exportMonthlyPDF({
+        month: startDate, // For monthly, we use the start of the range as the month
+        shiftName,
+        scheduleData: scheduleDataResponse.dailySchedules || [],
+        minimumStaffing: schedules?.minimumStaffing,
+        selectedShiftId
+      });
+
+      if (result.success) {
+        toast.success("Monthly PDF exported successfully");
+        setExportDialogOpen(false);
+      } else {
+        toast.error("Failed to export monthly PDF");
+      }
     }
-  };
+  } catch (error) {
+    console.error("Export error:", error);
+    toast.error("Error generating PDF export");
+  }
+};
+
 
   // Function to fetch schedule data for a date range - FIXED VERSION
   const fetchScheduleDataForRange = async (startDate: Date, endDate: Date, dates: string[]) => {
@@ -1407,24 +1434,18 @@ const WeeklySchedule = ({
             </CardTitle>
             <div className="flex items-center gap-3">
               {isAdminOrSupervisor && (
-                <>
-                  <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
-                    <SelectTrigger className="w-64">
-                      <SelectValue placeholder="Select Shift" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {shiftTypes?.map((shift) => (
-                        <SelectItem key={shift.id} value={shift.id}>
-                          {shift.name} ({shift.start_time} - {shift.end_time})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={() => setDialogOpen(true)} size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Schedule
-                  </Button>
-                </>
+                <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder="Select Shift" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {shiftTypes?.map((shift) => (
+                      <SelectItem key={shift.id} value={shift.id}>
+                        {shift.name} ({shift.start_time} - {shift.end_time})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
               <Button onClick={() => setExportDialogOpen(true)} size="sm" variant="outline">
                 <Download className="h-4 w-4 mr-2" />

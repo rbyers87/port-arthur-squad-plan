@@ -1,6 +1,6 @@
 import React from 'react';
 
-const MobileNavigation = ({ activeTab, onTabChange, isAdminOrSupervisor }) => {
+const MobileNavigation = ({ activeTab, onTabChange, isAdminOrSupervisor, isAdmin }) => {
   // Define tabs based on user role
   const adminTabs = [
     { id: 'daily', label: 'Daily', icon: '📅' },
@@ -8,17 +8,24 @@ const MobileNavigation = ({ activeTab, onTabChange, isAdminOrSupervisor }) => {
     { id: 'officers', label: 'Officers', icon: '👥' },
     { id: 'vacancies', label: 'Vacancies', icon: '⚠️' },
     { id: 'staff', label: 'Staff', icon: '👤' },
-    { id: 'requests', label: 'Time Off', icon: '⏰' }
+    { id: 'settings', label: 'Settings', icon: '⚙️' }
+  ];
+
+  const supervisorTabs = [
+    { id: 'daily', label: 'Daily', icon: '📅' },
+    { id: 'schedule', label: 'Weekly', icon: '📋' },
+    { id: 'officers', label: 'Officers', icon: '👥' },
+    { id: 'vacancies', label: 'Vacancies', icon: '⚠️' },
+    { id: 'staff', label: 'Staff', icon: '👤' }
   ];
 
   const officerTabs = [
     { id: 'daily', label: 'Daily', icon: '📅' },
-    { id: 'schedule', label: 'Weekly', icon: '📋' },
-    { id: 'vacancies', label: 'Alerts', icon: '⚠️' },
-    { id: 'requests', label: 'Time Off', icon: '⏰' }
+    { id: 'schedule', label: 'Weekly', icon: '📋' }
   ];
 
-  const tabs = isAdminOrSupervisor ? adminTabs : officerTabs;
+  // Use isAdmin and isAdminOrSupervisor to determine tabs
+  const tabs = isAdmin ? adminTabs : (isAdminOrSupervisor ? supervisorTabs : officerTabs);
 
   return (
     <div className="mobile-bottom-nav">
